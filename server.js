@@ -37,7 +37,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // );
 
 const corsOptions = {
-  origin: ['http://localhost:5173', 'http://localhost:3000'], // Frontend URLs
+  origin: ['http://localhost:5173', 'https://gaonconnect.in', 'http://localhost:3000',], // Frontend URLs
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
