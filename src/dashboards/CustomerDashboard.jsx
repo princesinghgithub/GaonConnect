@@ -55,7 +55,7 @@ const CustomerDashboard = () => {
 
       {/* <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} /> */}
 
-      <div className="container mx-auto px-4 py-6">
+      <div className="container mx-auto px-4 py-6 pt-24">
         {activeTab === 'customer' && (
           <CustomerTab
             services={SERVICES}
