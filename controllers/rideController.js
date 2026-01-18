@@ -430,7 +430,7 @@ exports.getRideHistoryCustomer = async (req, res) => {
 //   }
 // };
 
-
+// 18-01-2024
 
 exports.acceptRide = async (req, res) => {
   try {
@@ -483,6 +483,65 @@ exports.acceptRide = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+// exports.acceptRide = async (req, res) => {
+//   try {
+//     // 🔐 Logged-in driver (provider)
+//     const provider = await Provider.findOne({ user: req.user.id });
+
+//     if (!provider) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "Unauthorized driver"
+//       });
+//     }
+
+//     const { rideId } = req.body;
+
+//     // 🚕 Ride must be in searching state
+//     const ride = await Ride.findOne({
+//       _id: rideId,
+//       status: "searching"
+//     });
+
+//     if (!ride) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Ride not available or already accepted"
+//       });
+//     }
+
+//     // ✅ Accept ride
+//     ride.provider = provider._id;   // 🔥 VERY IMPORTANT
+//     ride.status = "accepted";
+//     await ride.save();
+
+//     // 📡 Notify user via socket
+//     const io = getIO();
+//     io.to(`user_${ride.user.toString()}`).emit("rideAccepted", {
+//       rideId: ride._id,
+//       providerId: provider._id
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Ride accepted successfully",
+//       data: ride
+//     });
+
+//   } catch (error) {
+//     console.error("Accept Ride Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error"
+//     });
+//   }
+// };
+
 
 /**
  * REJECT RIDE (DRIVER)
@@ -550,10 +609,9 @@ exports.rejectRide = async (req, res) => {
 
 exports.updateRideStatus = async (req, res) => {
   try {
-    // 🔐 Check logged-in driver
-    const driver = await Driver.findOne({ user: req.user.id });
+    const provider = await Provider.findOne({ user: req.user.id });
 
-    if (!driver) {
+    if (!provider) {
       return res.status(403).json({
         success: false,
         message: "Unauthorized driver"
@@ -571,19 +629,44 @@ exports.updateRideStatus = async (req, res) => {
       });
     }
 
-    // 🔐 Ensure same driver
-    if (!ride.driver || ride.driver.toString() !== driver._id.toString()) {
+    // 🔐 Same driver check
+    if (!ride.provider || ride.provider.toString() !== provider._id.toString()) {
       return res.status(403).json({
         success: false,
         message: "Unauthorized driver for this ride"
       });
     }
 
-    // ✅ Update status
-    ride.status = status; // requested | arrived | started | completed
+    // ⛔ Final states protection
+    if (["completed", "cancelled"].includes(ride.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Ride already ${ride.status}`
+      });
+    }
+
+    // 🔁 Allowed transitions
+    const allowedTransitions = {
+      searching: ["accepted", "cancelled"],
+      accepted: ["arrived", "cancelled"],
+      arrived: ["started", "cancelled"],
+      started: ["completed"]
+    };
+
+    const nextStatuses = allowedTransitions[ride.status] || [];
+
+    if (!nextStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status change from ${ride.status} to ${status}`
+      });
+    }
+
+    // ✅ Update
+    ride.status = status;
     await ride.save();
 
-    // 📡 Notify user via socket
+    // 📡 Socket notify user
     const io = getIO();
     io.to(`user_${ride.user}`).emit("rideStatusUpdate", {
       rideId: ride._id,
@@ -592,7 +675,7 @@ exports.updateRideStatus = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Ride status updated",
+      message: "Ride status updated successfully",
       data: ride
     });
 
@@ -600,10 +683,11 @@ exports.updateRideStatus = async (req, res) => {
     console.error("Update Ride Status Error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: "Internal server error"
     });
   }
 };
+
 
 
 
