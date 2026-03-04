@@ -226,52 +226,7 @@ const handleSendOTP = async (e) => {
   /* =====================
      VERIFY OTP
   ====================== */
-  const handleVerifyOTP = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (otp.length !== 6) {
-      setError('Enter valid 6-digit OTP');
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      const res = await authAPI.verifyOTP(phone, otp);
-
-      /**
-       * Expected response:
-       * {
-       *  success: true,
-       *  token: "...",
-       *  user: {...}
-       * }
-       */
-
-      // First update auth context
-      onLoginSuccess(res.data.user, res.data.token);
-
-      // Then navigate based on role
-      const userRole = res.data.user.role;
-      
-      if (userRole === 'customer') {
-        navigate('/customer');
-      } else if (userRole === 'provider') {
-        navigate('/driver');
-      } else if (userRole === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/');
-      }
-
-    } catch (err) {
-      setError(err.response?.data?.message || 'Invalid OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+ 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">

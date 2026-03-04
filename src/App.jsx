@@ -162,6 +162,7 @@ import { DriverProvider } from './context/Drivercontext';
 import BookRide from './tabs/BookRide';
 import RideTracking from './components/RideTracking';
 import GaonConnectLanding from './GaonConnect/Gaonconnectlanding'
+import WhatsAppFloat from "./components/pages/WhatsAppFloat";
 
 const AuthScreens = () => {
   const { login } = useAuth();
@@ -298,7 +299,9 @@ function App() {
             />
           </Routes>
         </DriverProvider>
+          <WhatsAppFloat /> 
       </RideProvider>
+     
     </AuthProvider>
   );
 }
