@@ -1493,54 +1493,150 @@ exports.getProviderById = async (req, res) => {
 
 
 // Register Provider
+// exports.registerProvider = async (req, res) => {
+//   try {
+//     const {
+//       vehicleType,
+//       vehicleNumber,
+//       vehicleModel,
+//       vehicleColor,
+//       licenseNumber,
+//       rcNumber
+//     } = req.body;
+
+//     const exists = await Provider.findOne({ user: req.user.id });
+//     if (exists)
+//       return res.status(400).json({ success: false, message: 'Already registered' });
+
+//     const vehicleExists = await Provider.findOne({
+//       'vehicle.number': vehicleNumber.toUpperCase()
+//     });
+
+//     if (vehicleExists)
+//       return res.status(400).json({ success: false, message: 'Vehicle already registered' });
+
+//     const provider = await Provider.create({
+//       user: req.user.id,
+//       vehicle: {
+//         type: vehicleType,
+//         number: vehicleNumber.toUpperCase(),
+//         model: vehicleModel,
+//         color: vehicleColor
+//       },
+//       documents: {
+//         license: { number: licenseNumber },
+//         rc: { number: rcNumber }
+//       },
+//       status: 'offline',
+//       isOnline: false
+//     });
+
+//     await User.findByIdAndUpdate(req.user.id, { role: 'provider' });
+
+//     res.status(201).json({
+//       success: true,
+//       message: 'Provider registered successfully',
+//       provider
+//     });
+
+//   } catch (err) {
+//     res.status(500).json({ success: false, message: err.message });
+//   }
+// };
+
+
 exports.registerProvider = async (req, res) => {
   try {
     const {
-      vehicleType,
-      vehicleNumber,
-      vehicleModel,
-      vehicleColor,
-      licenseNumber,
-      rcNumber
+      name, email, phone, city,
+      vehicleType, vehicleNumber, vehicleModel, vehicleColor,
+      licenseNumber, rcNumber
     } = req.body;
 
-    const exists = await Provider.findOne({ user: req.user.id });
-    if (exists)
-      return res.status(400).json({ success: false, message: 'Already registered' });
+    // ── Validation ──────────────────────────────────────────────
+    if (!name || !email || !phone) {
+      return res.status(400).json({ success: false, message: 'Naam, email aur phone required hai' });
+    }
+    if (!vehicleType || !vehicleNumber) {
+      return res.status(400).json({ success: false, message: 'Vehicle type aur number required hai' });
+    }
 
-    const vehicleExists = await Provider.findOne({
-      'vehicle.number': vehicleNumber.toUpperCase()
+    // ── Duplicate User check ─────────────────────────────────────
+    const existingUser = await User.findOne({ $or: [{ email: email.toLowerCase() }, { phone }] });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'Is email ya phone se pehle se account hai' });
+    }
+
+    // ── Duplicate Vehicle check ──────────────────────────────────
+    const existingVehicle = await Provider.findOne({ 'vehicle.number': vehicleNumber.trim().toUpperCase() });
+    if (existingVehicle) {
+      return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
+    }
+
+    // ── File paths (req.files se aate hain docUpload.fields se) ──
+    const profilePhoto = req.files?.profilePhoto?.[0]?.path || '';
+    const licensePhoto = req.files?.licensePhoto?.[0]?.path || '';
+    const rcPhoto      = req.files?.rcPhoto?.[0]?.path      || '';
+
+    // ── Step 1: User banao ───────────────────────────────────────
+    const user = await User.create({
+      name:  name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      city:  city || '',
+      role:  'provider',
     });
 
-    if (vehicleExists)
-      return res.status(400).json({ success: false, message: 'Vehicle already registered' });
-
+    // ── Step 2: Provider banao — Provider model ke exact fields ──
     const provider = await Provider.create({
-      user: req.user.id,
+      user: user._id,
+
       vehicle: {
-        type: vehicleType,
-        number: vehicleNumber.toUpperCase(),
-        model: vehicleModel,
-        color: vehicleColor
+        type:   vehicleType,
+        number: vehicleNumber.trim().toUpperCase(),
+        model:  vehicleModel  || '',
+        color:  vehicleColor  || '',
       },
+
       documents: {
-        license: { number: licenseNumber },
-        rc: { number: rcNumber }
+        photo:   profilePhoto,                          // driver ki selfie
+        license: {
+          number: licenseNumber || '',
+          photo:  licensePhoto,
+        },
+        rc: {
+          number: rcNumber || '',
+          photo:  rcPhoto,
+        },
       },
-      status: 'offline',
-      isOnline: false
+
+      isApproved: false,
+      isOnline:   false,
+      status:     'offline',
     });
 
-    await User.findByIdAndUpdate(req.user.id, { role: 'provider' });
+    console.log(`✅ New provider registered: ${email}`);
 
     res.status(201).json({
       success: true,
-      message: 'Provider registered successfully',
-      provider
+      message: 'Registration ho gayi! Admin approve karega — phir login kar sakte ho.',
+      data: {
+        providerId: provider._id,
+        name:       user.name,
+        email:      user.email,
+      }
     });
 
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+  } catch (error) {
+    console.error('Register Provider Error:', error);
+
+    // MongoDB duplicate key
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] || 'field';
+      return res.status(400).json({ success: false, message: `${field} already registered hai` });
+    }
+
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
@@ -1598,37 +1694,6 @@ exports.toggleDuty = async (req, res) => {
 };
 
 
-// Update Location
-// exports.updateProviderLocation = async (req, res) => {
-//   try {
-//     let { lat, lng, address } = req.body;
-
-//     lat = parseFloat(lat);
-//     lng = parseFloat(lng);
-
-//     if (isNaN(lat) || isNaN(lng))
-//       return res.status(400).json({ success: false, message: 'Invalid lat/lng' });
-
-//     const provider = await Provider.findOne({ user: req.user.id });
-
-//     if (!provider)
-//       return res.status(404).json({ success: false, message: 'Provider not found' });
-
-//     provider.currentLocation = {
-//       type: 'Point',
-//       coordinates: [lng, lat],
-//       address,
-//       updatedAt: new Date()
-//     };
-
-//     await provider.save();
-
-//     res.json({ success: true, message: 'Location updated' });
-
-//   } catch (err) {
-//     res.status(500).json({ success: false, message: err.message });
-//   }
-// };
 
 exports.updateProviderLocation = async (req, res) => {
   const { lat, lng } = req.body;

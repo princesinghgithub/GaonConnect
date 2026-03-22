@@ -1,14 +1,12 @@
-
-
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const http = require("http");
 const connectDB = require("./config/db");
 const { initSocket } = require("./socket");
-const path = require('path');
-const adminRoutes = require('./routes/admin')
-const locationRoutes = require('./routes/location');
+const path = require("path");
+const adminRoutes = require("./routes/admin");
+const locationRoutes = require("./routes/location");
 
 // Load env
 dotenv.config();
@@ -25,7 +23,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // 🔥 CORS ALWAYS FIRST
 // app.use(
 //   cors({
@@ -37,13 +35,16 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // );
 
 const corsOptions = {
-  origin: ['http://localhost:5173', 'https://gaonconnect.in', 'http://localhost:3000',], // Frontend URLs
+  origin: [
+    "http://localhost:5173",
+    "https://gaonconnect.in",
+    "http://localhost:3000",
+  ], // Frontend URLs
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
-
 
 app.use(cors(corsOptions));
 // 🔥 BODY PARSERS
@@ -53,15 +54,15 @@ app.use(express.urlencoded({ extended: true }));
 // 🔥 STATIC UPLOADS
 app.use("/uploads", express.static("uploads"));
 
-
 // 🔥 ROUTES
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/provider", require("./routes/provider"));
+app.use("/api/create", require("./routes/ride"));
 app.use("/api/ride", require("./routes/ride"));
+app.use("/api/rides", require("./routes/ride"));
 app.use("/api/wallet", require("./routes/wallet"));
-app.use('/api/admin', adminRoutes);
-app.use('/api/location', locationRoutes);
-
+app.use("/api/admin", adminRoutes);
+app.use("/api/location", locationRoutes);
 
 // HEALTH CHECK
 app.get("/", (req, res) => {
@@ -78,13 +79,14 @@ app.use((err, req, res, next) => {
   res.status(500).json({
     success: false,
     message: "Server Error",
-    error:
-      process.env.NODE_ENV === "development" ? err.message : undefined,
+    error: process.env.NODE_ENV === "development" ? err.message : undefined,
   });
 });
 
 // ⭐ Initialize Socket.io
 initSocket(server);
+const { startScheduledRideJob } = require("./jobs/scheduledRideJob");
+startScheduledRideJob();
 
 // START SERVER
 const PORT = process.env.PORT || 5000;

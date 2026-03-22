@@ -1,91 +1,228 @@
-const Ride = require('../models/Ride');
-const Provider = require('../models/Provider');
-const User = require('../models/User');
-const { calculateFare } = require('../utils/fareCalculator');
+const Ride = require("../models/Ride");
+const Provider = require("../models/Provider");
+const User = require("../models/User");
+const { calculateFare } = require("../utils/fareCalculator");
 const { getIO } = require("../socket");
 const Razorpay = require("razorpay");
 
+// exports.createRide = async (req, res) => {
+//   try {
+//     console.log('=== CREATE RIDE HIT ===');
+//     console.log('BODY:', JSON.stringify(req.body));
+//     console.log('USER:', req.user?.id);
+
+//     const {
+//       pickup,
+//       dropoff,
+//       vehicleType,
+//       distance,
+//       estimatedFare,
+//       estimatedDuration,
+//       paymentMethod = 'cash'
+//     } = req.body;
+
+//     if (!pickup || !dropoff || !vehicleType) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'Pickup, drop location and vehicle type are required'
+//       });
+//     }
+
+//     const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
+//     // 🟢 SAFE distance handling
+//     const finalDistance =
+//       typeof distance === 'object' ? distance.value : distance;
+
+//     const finalDuration =
+//       estimatedDuration ||
+//       (distance?.duration?.value ?? null);
+
+//     const ride = await Ride.create({
+//       customer: req.user.id,
+//       pickup: {
+//         address: pickup.addressLine2 || pickup.address,
+//         coordinates: {
+//           latitude: pickup.location?.latitude || pickup.latitude,
+//           longitude: pickup.location?.longitude || pickup.longitude
+//         }
+//       },
+//       drop: {
+//         address: dropoff.addressLine2 || dropoff.address,
+//         coordinates: {
+//           latitude: dropoff.location?.latitude || dropoff.latitude,
+//           longitude: dropoff.location?.longitude || dropoff.longitude
+//         }
+//       },
+//       vehicleType,
+//       distance: finalDistance,
+//       estimatedDuration: finalDuration,
+//       fare: estimatedFare,
+//       paymentMethod,
+//       otp,
+//       status: 'searching',
+//       requestTime: new Date()
+//     });
+
+//     // 🔔 IMPORTANT: send provider count (debug help)
+//     const providerCount = await Provider.countDocuments({
+//       isOnline: true,
+//       isApproved: true,
+//       status: 'available',
+//       'vehicle.type': vehicleType
+//     });
+
+//     return res.status(201).json({
+//       success: true,
+//       message: providerCount
+//         ? 'Searching nearby drivers'
+//         : 'No provider available',
+//       data: {
+//         ride,
+//         providerCount
+//       }
+//     });
+
+//   } catch (error) {
+//     console.error('Create Ride Error:', error);
+//     return res.status(500).json({
+//       success: false,
+//       message: 'Error creating ride request',
+//       error: error.message
+//     });
+//   }
+// };
+
 exports.createRide = async (req, res) => {
   try {
+    console.log("=== CREATE RIDE HIT ===");
+    console.log("BODY:", JSON.stringify(req.body));
+    console.log("USER:", req.user?.id);
+
     const {
       pickup,
+      drop,
       dropoff,
       vehicleType,
       distance,
       estimatedFare,
+      fare,
       estimatedDuration,
-      paymentMethod = 'cash'
+      paymentMethod = "cash",
+      bookingType = "instant",
+      scheduledAt = null,
+      scheduledNote = "",
     } = req.body;
 
-    if (!pickup || !dropoff || !vehicleType) {
+    // drop ya dropoff dono accept karo
+    const dropLocation = drop || dropoff;
+
+    if (!pickup || !dropLocation || !vehicleType) {
       return res.status(400).json({
         success: false,
-        message: 'Pickup, drop location and vehicle type are required'
+        message: "Pickup, drop aur vehicle type required hai",
       });
     }
 
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
-
-    // 🟢 SAFE distance handling
+    const finalFare = fare || estimatedFare || 0;
     const finalDistance =
-      typeof distance === 'object' ? distance.value : distance;
-
-    const finalDuration =
-      estimatedDuration ||
-      (distance?.duration?.value ?? null);
+      typeof distance === "object" ? distance.value : distance || 0;
+    const finalDuration = estimatedDuration || 30;
 
     const ride = await Ride.create({
       customer: req.user.id,
       pickup: {
-        address: pickup.addressLine2 || pickup.address,
+        address: pickup.address || pickup.addressLine2,
         coordinates: {
-          latitude: pickup.location?.latitude || pickup.latitude,
-          longitude: pickup.location?.longitude || pickup.longitude
-        }
+          latitude: pickup.latitude || pickup.location?.latitude,
+          longitude: pickup.longitude || pickup.location?.longitude,
+        },
       },
       drop: {
-        address: dropoff.addressLine2 || dropoff.address,
+        address: dropLocation.address || dropLocation.addressLine2,
         coordinates: {
-          latitude: dropoff.location?.latitude || dropoff.latitude,
-          longitude: dropoff.location?.longitude || dropoff.longitude
-        }
+          latitude: dropLocation.latitude || dropLocation.location?.latitude,
+          longitude: dropLocation.longitude || dropLocation.location?.longitude,
+        },
       },
       vehicleType,
       distance: finalDistance,
       estimatedDuration: finalDuration,
-      fare: estimatedFare,
+      fare: finalFare,
       paymentMethod,
       otp,
-      status: 'searching',
-      requestTime: new Date()
+      status: bookingType === "scheduled" ? "scheduled" : "searching",
+      requestTime: new Date(),
+      bookingType,
+      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      scheduledNote: scheduledNote || "",
     });
 
-    // 🔔 IMPORTANT: send provider count (debug help)
-    const providerCount = await Provider.countDocuments({
+    console.log("✅ Ride created:", ride._id, "| OTP:", otp);
+
+    // ── SOCKET: Online drivers ko newRideRequest bhejo ────────────
+    if (bookingType === "scheduled") {
+      return res.status(201).json({
+        success: true,
+        message: "Pre-booking ho gayi! Driver ko time pe notify kiya jayega.",
+        data: { ride, providerCount: 0 },
+      });
+    }
+    const io = getIO();
+
+    const availableDrivers = await Provider.find({
       isOnline: true,
       isApproved: true,
-      status: 'available',
-      'vehicle.type': vehicleType
+      status: "available",
+      "vehicle.type": vehicleType,
+    }).populate("user", "name phone");
+
+    console.log(
+      `📡 Online drivers for [${vehicleType}]:`,
+      availableDrivers.length,
+    );
+
+    const customerUser = await User.findById(req.user.id).select("name phone");
+
+    const ridePayload = {
+      rideId: ride._id,
+      customerName: customerUser?.name || "Customer",
+      customerPhone: customerUser?.phone || "",
+      pickup: {
+        address: ride.pickup.address,
+        latitude: ride.pickup.coordinates.latitude,
+        longitude: ride.pickup.coordinates.longitude,
+      },
+      drop: {
+        address: ride.drop.address,
+        latitude: ride.drop.coordinates.latitude,
+        longitude: ride.drop.coordinates.longitude,
+      },
+      fare: finalFare,
+      distance: finalDistance,
+      vehicleType,
+      paymentMethod,
+    };
+
+    // Har available driver ko personally send karo
+    availableDrivers.forEach((driver) => {
+      console.log(
+        `🔔 Ride sent to driver: ${driver.user?.name} | room: driver_${driver._id}`,
+      );
+      io.to(`driver_${driver._id}`).emit("newRideRequest", ridePayload);
     });
 
     return res.status(201).json({
       success: true,
-      message: providerCount
-        ? 'Searching nearby drivers'
-        : 'No provider available',
-      data: {
-        ride,
-        providerCount
-      }
+      message: availableDrivers.length
+        ? `${availableDrivers.length} drivers ko request bheji`
+        : "Koi driver available nahi",
+      data: { ride, providerCount: availableDrivers.length },
     });
-
   } catch (error) {
-    console.error('Create Ride Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error creating ride request',
-      error: error.message
-    });
+    console.error("Create Ride Error:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -95,19 +232,19 @@ exports.createRide = async (req, res) => {
 exports.getRideById = async (req, res) => {
   try {
     const ride = await Ride.findById(req.params.id)
-      .populate('customer', 'name phone profilePhoto')
+      .populate("customer", "name phone profilePhoto")
       .populate({
-        path: 'provider',
+        path: "provider",
         populate: {
-          path: 'user',
-          select: 'name phone profilePhoto'
-        }
+          path: "user",
+          select: "name phone profilePhoto",
+        },
       });
 
     if (!ride) {
       return res.status(404).json({
         success: false,
-        message: 'Ride not found'
+        message: "Ride not found",
       });
     }
 
@@ -116,15 +253,14 @@ exports.getRideById = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: ride // ✅ Wrapped in 'data' key
+      data: ride, // ✅ Wrapped in 'data' key
     });
-
   } catch (error) {
-    console.error('Get Ride Error:', error);
+    console.error("Get Ride Error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Error fetching ride',
-      error: error.message
+      message: "Error fetching ride",
+      error: error.message,
     });
   }
 };
@@ -136,29 +272,28 @@ exports.getCurrentRideCustomer = async (req, res) => {
   try {
     const ride = await Ride.findOne({
       customer: req.user.id,
-      status: { $in: ['searching', 'accepted', 'arrived', 'started'] }
+      status: { $in: ["searching", "accepted", "arrived", "started"] },
     })
-    .populate({
-      path: 'provider',
-      populate: {
-        path: 'user',
-        select: 'name phone profilePhoto'
-      }
-    })
-    .sort({ createdAt: -1 });
+      .populate({
+        path: "provider",
+        populate: {
+          path: "user",
+          select: "name phone profilePhoto",
+        },
+      })
+      .sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
       data: ride, // ✅ Changed from 'ride' to 'data'
-      message: ride ? 'Active ride found' : 'No active ride'
+      message: ride ? "Active ride found" : "No active ride",
     });
-
   } catch (error) {
-    console.error('Get Current Ride Error:', error);
+    console.error("Get Current Ride Error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Error fetching current ride',
-      error: error.message
+      message: "Error fetching current ride",
+      error: error.message,
     });
   }
 };
@@ -200,9 +335,6 @@ exports.getCurrentRideCustomer = async (req, res) => {
 //   }
 // };
 
-
-
-
 exports.getCurrentRideDriver = async (req, res) => {
   try {
     const provider = await Provider.findOne({ user: req.user.id });
@@ -210,14 +342,14 @@ exports.getCurrentRideDriver = async (req, res) => {
     if (!provider) {
       return res.status(404).json({
         success: false,
-        message: "Provider not found"
+        message: "Provider not found",
       });
     }
 
     // 1️⃣ Accepted / Ongoing Ride
     let ride = await Ride.findOne({
       provider: provider._id,
-      status: { $in: ["accepted", "arrived", "started"] }
+      status: { $in: ["accepted", "arrived", "started"] },
     })
       .populate("customer", "name phone profilePhoto")
       .sort({ createdAt: -1 });
@@ -226,11 +358,8 @@ exports.getCurrentRideDriver = async (req, res) => {
     if (!ride && provider.isOnline === true) {
       ride = await Ride.findOne({
         status: "searching",
-        $or: [
-          { provider: { $exists: false } },
-          { provider: null }
-        ],
-        vehicleType: provider.vehicle.type
+        $or: [{ provider: { $exists: false } }, { provider: null }],
+        vehicleType: provider.vehicle.type,
       })
         .populate("customer", "name phone profilePhoto")
         .sort({ createdAt: 1 });
@@ -239,18 +368,16 @@ exports.getCurrentRideDriver = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: ride,
-      message: ride ? "Ride available" : "No active ride"
+      message: ride ? "Ride available" : "No active ride",
     });
-
   } catch (error) {
     console.error("Get Current Ride Driver Error:", error);
     return res.status(500).json({
       success: false,
-      message: "Error fetching current ride"
+      message: "Error fetching current ride",
     });
   }
 };
-
 
 /**
  * CANCEL RIDE (CUSTOMER/DRIVER)
@@ -264,13 +391,13 @@ exports.cancelRide = async (req, res) => {
     if (!ride) {
       return res.status(404).json({
         success: false,
-        message: 'Ride not found'
+        message: "Ride not found",
       });
     }
 
     // Check authorization
     const isCustomer = ride.customer.toString() === req.user.id;
-    
+
     let isDriver = false;
     if (ride.provider) {
       const provider = await Provider.findById(ride.provider);
@@ -280,20 +407,20 @@ exports.cancelRide = async (req, res) => {
     if (!isCustomer && !isDriver) {
       return res.status(403).json({
         success: false,
-        message: 'Unauthorized'
+        message: "Unauthorized",
       });
     }
 
-    if (['completed', 'cancelled'].includes(ride.status)) {
+    if (["completed", "cancelled"].includes(ride.status)) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot cancel completed or already cancelled ride'
+        message: "Cannot cancel completed or already cancelled ride",
       });
     }
 
-    ride.status = 'cancelled';
-    ride.cancelledBy = isCustomer ? 'customer' : 'driver';
-    ride.cancellationReason = reason || 'Not specified';
+    ride.status = "cancelled";
+    ride.cancelledBy = isCustomer ? "customer" : "driver";
+    ride.cancellationReason = reason || "Not specified";
     ride.cancelledAt = new Date();
 
     await ride.save();
@@ -302,7 +429,7 @@ exports.cancelRide = async (req, res) => {
     if (ride.provider) {
       const provider = await Provider.findById(ride.provider);
       if (provider) {
-        provider.status = 'available';
+        provider.status = "available";
         provider.stats.cancelledTrips += 1;
         await provider.save();
       }
@@ -310,16 +437,15 @@ exports.cancelRide = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Ride cancelled successfully',
-      data: ride
+      message: "Ride cancelled successfully",
+      data: ride,
     });
-
   } catch (error) {
-    console.error('Cancel Ride Error:', error);
+    console.error("Cancel Ride Error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Error cancelling ride',
-      error: error.message
+      message: "Error cancelling ride",
+      error: error.message,
     });
   }
 };
@@ -332,18 +458,18 @@ exports.getRideHistoryCustomer = async (req, res) => {
     const { page = 1, limit = 20, status } = req.query;
 
     const query = { customer: req.user.id };
-    
+
     if (status) {
       query.status = status;
     }
 
     const rides = await Ride.find(query)
       .populate({
-        path: 'provider',
+        path: "provider",
         populate: {
-          path: 'user',
-          select: 'name phone'
-        }
+          path: "user",
+          select: "name phone",
+        },
       })
       .sort({ createdAt: -1 })
       .limit(limit * 1)
@@ -356,22 +482,17 @@ exports.getRideHistoryCustomer = async (req, res) => {
       data: rides,
       totalPages: Math.ceil(count / limit),
       currentPage: page,
-      total: count
+      total: count,
     });
-
   } catch (error) {
-    console.error('Get Ride History Error:', error);
+    console.error("Get Ride History Error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Error fetching ride history',
-      error: error.message
+      message: "Error fetching ride history",
+      error: error.message,
     });
   }
 };
-
-
-
-
 
 // exports.acceptRide = async (req, res) => {
 //   try {
@@ -439,7 +560,7 @@ exports.acceptRide = async (req, res) => {
     if (!provider) {
       return res.status(403).json({
         success: false,
-        message: "Unauthorized driver"
+        message: "Unauthorized driver",
       });
     }
 
@@ -447,13 +568,13 @@ exports.acceptRide = async (req, res) => {
 
     const ride = await Ride.findOne({
       _id: rideId,
-      status: "searching"
+      status: "searching",
     });
 
     if (!ride) {
       return res.status(404).json({
         success: false,
-        message: "Ride not available"
+        message: "Ride not available",
       });
     }
 
@@ -466,27 +587,22 @@ exports.acceptRide = async (req, res) => {
     const io = getIO();
     io.to(`user_${ride.customer}`).emit("rideAccepted", {
       rideId: ride._id,
-      driverId: provider._id
+      driverId: provider._id,
     });
 
     return res.status(200).json({
       success: true,
       message: "Ride accepted",
-      data: ride
+      data: ride,
     });
-
   } catch (err) {
     console.error("Accept Ride Error:", err);
     return res.status(500).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 };
-
-
-
-
 
 // exports.acceptRide = async (req, res) => {
 //   try {
@@ -542,7 +658,6 @@ exports.acceptRide = async (req, res) => {
 //   }
 // };
 
-
 /**
  * REJECT RIDE (DRIVER)
  */
@@ -558,8 +673,6 @@ exports.acceptRide = async (req, res) => {
 //     return res.status(500).json({ success: false, message: error.message });
 //   }
 // };
-
-
 
 exports.rejectRide = async (req, res) => {
   try {
@@ -596,7 +709,6 @@ exports.rejectRide = async (req, res) => {
       success: true,
       message: "Ride rejected",
     });
-
   } catch (error) {
     console.error("Reject Ride Error:", error.message);
     return res.status(500).json({
@@ -606,7 +718,6 @@ exports.rejectRide = async (req, res) => {
   }
 };
 
-
 exports.updateRideStatus = async (req, res) => {
   try {
     const provider = await Provider.findOne({ user: req.user.id });
@@ -614,7 +725,7 @@ exports.updateRideStatus = async (req, res) => {
     if (!provider) {
       return res.status(403).json({
         success: false,
-        message: "Unauthorized driver"
+        message: "Unauthorized driver",
       });
     }
 
@@ -625,15 +736,18 @@ exports.updateRideStatus = async (req, res) => {
     if (!ride) {
       return res.status(404).json({
         success: false,
-        message: "Ride not found"
+        message: "Ride not found",
       });
     }
 
     // 🔐 Same driver check
-    if (!ride.provider || ride.provider.toString() !== provider._id.toString()) {
+    if (
+      !ride.provider ||
+      ride.provider.toString() !== provider._id.toString()
+    ) {
       return res.status(403).json({
         success: false,
-        message: "Unauthorized driver for this ride"
+        message: "Unauthorized driver for this ride",
       });
     }
 
@@ -641,7 +755,7 @@ exports.updateRideStatus = async (req, res) => {
     if (["completed", "cancelled"].includes(ride.status)) {
       return res.status(400).json({
         success: false,
-        message: `Ride already ${ride.status}`
+        message: `Ride already ${ride.status}`,
       });
     }
 
@@ -650,7 +764,7 @@ exports.updateRideStatus = async (req, res) => {
       searching: ["accepted", "cancelled"],
       accepted: ["arrived", "cancelled"],
       arrived: ["started", "cancelled"],
-      started: ["completed"]
+      started: ["completed"],
     };
 
     const nextStatuses = allowedTransitions[ride.status] || [];
@@ -658,7 +772,7 @@ exports.updateRideStatus = async (req, res) => {
     if (!nextStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: `Invalid status change from ${ride.status} to ${status}`
+        message: `Invalid status change from ${ride.status} to ${status}`,
       });
     }
 
@@ -670,28 +784,22 @@ exports.updateRideStatus = async (req, res) => {
     const io = getIO();
     io.to(`user_${ride.user}`).emit("rideStatusUpdate", {
       rideId: ride._id,
-      status
+      status,
     });
 
     return res.status(200).json({
       success: true,
       message: "Ride status updated successfully",
-      data: ride
+      data: ride,
     });
-
   } catch (error) {
     console.error("Update Ride Status Error:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error"
+      message: "Internal server error",
     });
   }
 };
-
-
-
-
-
 
 /**
  * VERIFY OTP AND START RIDE
@@ -709,42 +817,82 @@ exports.updateRideStatus = async (req, res) => {
 //   }
 // };
 
+// exports.verifyOTPAndStart = async (req, res) => {
+//   try {
+//     const { rideId, otp } = req.body;
 
+//     if (!rideId || !otp) {
+//       return res.status(400).json({ success: false, message: "rideId and OTP are required" });
+//     }
 
+//     // 1. Fetch ride from DB
+//     const ride = await Ride.findById(rideId);
+//     if (!ride) {
+//       return res.status(404).json({ success: false, message: "Ride not found" });
+//     }
+
+//     // 2. Verify OTP
+//     if (ride.otp !== otp) {
+//       return res.status(401).json({ success: false, message: "Invalid OTP" });
+//     }
+
+//     // 3. Update ride status
+//     ride.status = "started";
+//     ride.startedAt = new Date();
+//     await ride.save();
+
+//     // 4. Respond success
+//     return res.status(200).json({ success: true, message: "Ride started successfully", ride });
+
+//   } catch (error) {
+//     console.error("Verify OTP Error:", error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
 
 exports.verifyOTPAndStart = async (req, res) => {
   try {
     const { rideId, otp } = req.body;
 
     if (!rideId || !otp) {
-      return res.status(400).json({ success: false, message: "rideId and OTP are required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "rideId and OTP are required" });
     }
 
-    // 1. Fetch ride from DB
     const ride = await Ride.findById(rideId);
     if (!ride) {
-      return res.status(404).json({ success: false, message: "Ride not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Ride not found" });
     }
 
-    // 2. Verify OTP
+    // ✅ Yeh line add karo
+    if (ride.status !== "arrived") {
+      return res.status(400).json({
+        success: false,
+        message: `Pehle 'Pickup Pe Pahunch Gaya' dabao`,
+      });
+    }
+
     if (ride.otp !== otp) {
       return res.status(401).json({ success: false, message: "Invalid OTP" });
     }
 
-    // 3. Update ride status
     ride.status = "started";
     ride.startedAt = new Date();
     await ride.save();
 
-    // 4. Respond success
-    return res.status(200).json({ success: true, message: "Ride started successfully", ride });
-
+    return res.status(200).json({
+      success: true,
+      message: "Ride started successfully",
+      data: ride,
+    });
   } catch (error) {
     console.error("Verify OTP Error:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 /**
  * GET RIDE HISTORY (DRIVER)
  */
@@ -763,8 +911,8 @@ exports.getRideHistoryDriver = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
-      .populate('user', 'name phone email') // show customer info
-      .populate('driver', 'name phone vehicleNumber'); // optional
+      .populate("user", "name phone email") // show customer info
+      .populate("driver", "name phone vehicleNumber"); // optional
 
     const total = await Ride.countDocuments(query);
 
@@ -773,16 +921,13 @@ exports.getRideHistoryDriver = async (req, res) => {
       data: rides,
       currentPage: pageNum,
       totalPages: Math.ceil(total / limitNum),
-      total
+      total,
     });
-
   } catch (error) {
-    console.error('Get Ride History Driver Error:', error);
+    console.error("Get Ride History Driver Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
-
 
 // exports.getSearchingRides = async (req, res) => {
 //   try {
@@ -804,32 +949,59 @@ exports.getRideHistoryDriver = async (req, res) => {
 //   }
 // };
 
-
-
 exports.getSearchingRides = async (req, res) => {
   try {
-    if (req.user.role !== 'provider') {
+    if (req.user.role !== "provider") {
       return res.status(403).json({
         success: false,
-        message: 'Only drivers allowed'
+        message: "Only drivers allowed",
       });
     }
 
     const rides = await Ride.find({
-      status: 'searching',
-      provider: null
+      status: "searching",
+      provider: null,
     }).sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
-      data: rides
+      data: rides,
     });
-
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 };
 
+
+// upcomming ride  
+exports.getScheduledRidesDriver = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider) {
+      return res.status(404).json({ success: false, message: 'Provider not found' });
+    }
+
+    const now = new Date();
+
+    // Aane wali scheduled rides — same vehicle type, abhi tak kisi ne accept nahi ki
+    const rides = await Ride.find({
+      bookingType:   'scheduled',
+      status:        'scheduled',
+      vehicleType:   provider.vehicle.type,
+      scheduledAt:   { $gte: now },
+    })
+    .populate('customer', 'name phone')
+    .sort({ scheduledAt: 1 }) // Sabse pehle wali ride pehle
+    .limit(20);
+
+    return res.status(200).json({
+      success: true,
+      data: rides,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
