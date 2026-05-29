@@ -1,6 +1,6 @@
-// src/components/admin/Payments/PaymentsList.jsx
 import React, { useState } from 'react';
 import { usePayments } from '../../hooks/useAdmin';
+import { adminAPI } from '../../services/api';
 import { toast } from 'react-hot-toast';
 import { FaDownload, FaMoneyBillWave, FaCreditCard, FaCheckCircle } from 'react-icons/fa';
 

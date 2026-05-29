@@ -1,6 +1,6 @@
 // src/components/admin/Analytics/Analytics.jsx
 import React, { useState, useEffect } from 'react';
-import { adminAPI } from '../../../services/api';
+import { adminAPI } from '../../services/api';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,

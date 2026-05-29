@@ -469,9 +469,18 @@ export const adminAPI = {
   // ===== SETTINGS =====
   getSettings: () => api.get("/admin/settings"),
   updateSettings: (data) => api.put("/admin/settings", data),
-  updatePricing: (vehicleType, pricing) =>
-    api.put("/admin/pricing", { vehicleType, pricing }),
   getSystemConfig: () => api.get("/admin/config"),
+
+  // ===== PRICING =====
+  getPricing: () => api.get("/admin/pricing"),
+  updateVehiclePricing: (vehicleType, baseFare, perKmRate, minimumFare) =>
+    api.put("/admin/pricing", { vehicleType, baseFare, perKmRate, minimumFare }),
+  updateSurge: (enabled, multiplier, reason) =>
+    api.put("/admin/pricing", {
+      surge: { highDemand: { enabled, ...(enabled && { multiplier, reason }) } },
+    }),
+  updateCommission: (percentage) =>
+    api.put("/admin/pricing", { commission: { percentage } }),
 
   // ===== REPORTS & ANALYTICS =====
   getAnalytics: (period = "week") =>

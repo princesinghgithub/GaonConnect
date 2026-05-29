@@ -1,871 +1,320 @@
-// // src/components/admin/Drivers/DriversList.jsx
-// import React, { useState } from 'react';
-// import { useDrivers } from '../../hooks/useAdmin';
-// import { FaCheck, FaTimes, FaBan, FaUnlock, FaTrash, FaEye } from 'react-icons/fa';
-// import Modal from '../components/common/Modal';  // ✅ CORRECT PATH
-// import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useDrivers } from "../../hooks/useAdmin";
+import { FaCheck, FaTimes, FaBan, FaUnlock, FaTrash, FaEye, FaSearch } from "react-icons/fa";
+import Modal from "../components/common/Modal";
 
-// const StatusBadge = ({ status }) => {
-//   const getStatusColor = (status) => {
-//     switch (status) {
-//       case 'approved':
-//         return 'bg-green-100 text-green-800';
-//       case 'pending':
-//         return 'bg-yellow-100 text-yellow-800';
-//       case 'rejected':
-//         return 'bg-red-100 text-red-800';
-//       default:
-//         return 'bg-gray-100 text-gray-800';
-//     }
-//   };
-
-//   return (
-//     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(status)}`}>
-//       {status || 'N/A'}
-//     </span>
-//   );
-// };
-
-// const DriversList = () => {
-//   const [page, setPage] = useState(1);
-//   const [status, setStatus] = useState('');
-//   const [search, setSearch] = useState('');
-//   const [selectedDriver, setSelectedDriver] = useState(null);
-//   const [showRejectModal, setShowRejectModal] = useState(false);
-//   const [showBlockModal, setShowBlockModal] = useState(false);
-//   const [rejectReason, setRejectReason] = useState('');
-//   const [blockReason, setBlockReason] = useState('');
-
-//   const navigate = useNavigate();
-
-//   const {
-//     drivers,
-//     pagination,
-//     loading,
-//     error,
-//     approveDriver,
-//     rejectDriver,
-//     blockDriver,
-//     unblockDriver,
-//     deleteDriver,
-//   } = useDrivers(page, 20, status, search);
-
-//   const handleApprove = async (driverId) => {
-//     if (window.confirm('Are you sure you want to approve this driver?')) {
-//       await approveDriver(driverId);
-//     }
-//   };
-
-//   const handleReject = async () => {
-//     if (!rejectReason.trim()) {
-//       alert('Please provide a reason for rejection');
-//       return;
-//     }
-//     await rejectDriver(selectedDriver._id, rejectReason);
-//     setShowRejectModal(false);
-//     setRejectReason('');
-//   };
-
-//   const handleBlock = async () => {
-//     if (!blockReason.trim()) {
-//       alert('Please provide a reason for blocking');
-//       return;
-//     }
-//     await blockDriver(selectedDriver._id, blockReason);
-//     setShowBlockModal(false);
-//     setBlockReason('');
-//   };
-
-//   const handleUnblock = async (driverId) => {
-//     if (window.confirm('Are you sure you want to unblock this driver?')) {
-//       await unblockDriver(driverId);
-//     }
-//   };
-
-//   const handleDelete = async (driverId) => {
-//     if (window.confirm('Are you sure you want to delete this driver? This action cannot be undone.')) {
-//       await deleteDriver(driverId);
-//     }
-//   };
-
-//   if (loading && drivers.length === 0) {
-//     return (
-//       <div className="flex items-center justify-center h-96">
-//         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <div className="p-6 space-y-6">
-//       <div className="flex justify-between items-center">
-//         <h1 className="text-3xl font-bold">Drivers Management</h1>
-//       </div>
-
-//       {/* Filters */}
-//       <div className="bg-white rounded-lg shadow p-4">
-//         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-//           <input
-//             type="text"
-//             placeholder="Search by name, email, or phone..."
-//             className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-//             value={search}
-//             onChange={(e) => setSearch(e.target.value)}
-//           />
-//           <select
-//             className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-//             value={status}
-//             onChange={(e) => setStatus(e.target.value)}
-//           >
-//             <option value="">All Status</option>
-//             <option value="pending">Pending</option>
-//             <option value="approved">Approved</option>
-//             <option value="rejected">Rejected</option>
-//           </select>
-//         </div>
-//       </div>
-
-//       {/* Drivers Table */}
-//       <div className="bg-white rounded-lg shadow overflow-hidden">
-//         <div className="overflow-x-auto">
-//           <table className="min-w-full divide-y divide-gray-200">
-//             <thead className="bg-gray-50">
-//               <tr>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-//                   Driver Info
-//                 </th>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-//                   Contact
-//                 </th>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-//                   Vehicle
-//                 </th>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-//                   Status
-//                 </th>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-//                   Rating
-//                 </th>
-//                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-//                   Actions
-//                 </th>
-//               </tr>
-//             </thead>
-//             <tbody className="bg-white divide-y divide-gray-200">
-//               {drivers.map((driver) => {
-//                 // Handle rating from your data structure
-//                 const rating = driver?.rating?.average 
-//                   ? Number(driver.rating.average).toFixed(1)
-//                   : 'N/A';
-
-//                 // Get user info (since driver has user reference)
-//                 const userName = driver?.user?.name || 'N/A';
-//                 const userEmail = driver?.user?.email || 'N/A';
-//                 const userPhone = driver?.user?.phone || 'N/A';
-
-//                 // Get vehicle info
-//                 const vehicleType = driver?.vehicle?.type || 'N/A';
-//                 const vehicleNumber = driver?.vehicle?.number || 'N/A';
-
-//                 return (
-//                   <tr key={driver._id} className="hover:bg-gray-50">
-//                     <td className="px-6 py-4 whitespace-nowrap">
-//                       <div className="flex items-center">
-//                         <img
-//                           className="h-10 w-10 rounded-full"
-//                           src={driver.profileImage || '/default-avatar.png'}
-//                           alt={userName}
-//                           onError={(e) => {
-//                             e.target.src = '/default-avatar.png';
-//                           }}
-//                         />
-//                         <div className="ml-4">
-//                           <div className="text-sm font-medium text-gray-900">
-//                             {userName}
-//                           </div>
-//                           <div className="text-sm text-gray-500">
-//                             ID: {driver._id.slice(-8)}
-//                           </div>
-//                         </div>
-//                       </div>
-//                     </td>
-
-//                     <td className="px-6 py-4 whitespace-nowrap">
-//                       <div className="text-sm text-gray-900">{userEmail}</div>
-//                       <div className="text-sm text-gray-500">{userPhone}</div>
-//                     </td>
-
-//                     <td className="px-6 py-4 whitespace-nowrap">
-//                       <div className="text-sm text-gray-900 capitalize">
-//                         {vehicleType}
-//                       </div>
-//                       <div className="text-sm text-gray-500">{vehicleNumber}</div>
-//                     </td>
-
-//                     <td className="px-6 py-4 whitespace-nowrap">
-//                       <StatusBadge status={driver.status} />
-//                       {driver.isBlocked && (
-//                         <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
-//                           Blocked
-//                         </span>
-//                       )}
-//                     </td>
-
-//                     <td className="px-6 py-4 whitespace-nowrap">
-//                       <div className="flex items-center">
-//                         <span className="text-yellow-500">★</span>
-//                         <span className="ml-1 text-sm text-gray-900">
-//                           {rating}
-//                         </span>
-//                       </div>
-//                     </td>
-
-//                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-//                       <div className="flex space-x-2">
-//                         <button
-//                           onClick={() => navigate(`/admin/drivers/${driver._id}`)}
-//                           className="text-blue-600 hover:text-blue-900"
-//                           title="View Details"
-//                         >
-//                           <FaEye />
-//                         </button>
-
-//                         {(!driver.isApproved || driver.status === 'pending') && (
-//                           <>
-//                             <button
-//                               onClick={() => handleApprove(driver._id)}
-//                               className="text-green-600 hover:text-green-900"
-//                               title="Approve"
-//                             >
-//                               <FaCheck />
-//                             </button>
-//                             <button
-//                               onClick={() => {
-//                                 setSelectedDriver(driver);
-//                                 setShowRejectModal(true);
-//                               }}
-//                               className="text-red-600 hover:text-red-900"
-//                               title="Reject"
-//                             >
-//                               <FaTimes />
-//                             </button>
-//                           </>
-//                         )}
-
-//                         {driver.isApproved && !driver.isBlocked && (
-//                           <button
-//                             onClick={() => {
-//                               setSelectedDriver(driver);
-//                               setShowBlockModal(true);
-//                             }}
-//                             className="text-orange-600 hover:text-orange-900"
-//                             title="Block"
-//                           >
-//                             <FaBan />
-//                           </button>
-//                         )}
-
-//                         {driver.isBlocked && (
-//                           <button
-//                             onClick={() => handleUnblock(driver._id)}
-//                             className="text-green-600 hover:text-green-900"
-//                             title="Unblock"
-//                           >
-//                             <FaUnlock />
-//                           </button>
-//                         )}
-
-//                         <button
-//                           onClick={() => handleDelete(driver._id)}
-//                           className="text-red-600 hover:text-red-900"
-//                           title="Delete"
-//                         >
-//                           <FaTrash />
-//                         </button>
-//                       </div>
-//                     </td>
-//                   </tr>
-//                 );
-//               })}
-//             </tbody>
-//           </table>
-//         </div>
-
-//         {/* Pagination */}
-//         <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-//           <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-//             <div>
-//               <p className="text-sm text-gray-700">
-//                 Showing <span className="font-medium">{(page - 1) * 20 + 1}</span> to{' '}
-//                 <span className="font-medium">
-//                   {Math.min(page * 20, pagination?.total || 0)}
-//                 </span>{' '}
-//                 of <span className="font-medium">{pagination?.total || 0}</span> results
-//               </p>
-//             </div>
-//             <div>
-//               <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-//                 <button
-//                   onClick={() => setPage(page - 1)}
-//                   disabled={page === 1}
-//                   className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-//                 >
-//                   Previous
-//                 </button>
-//                 {[...Array(pagination?.totalPages || 1)].map((_, i) => (
-//                   <button
-//                     key={i}
-//                     onClick={() => setPage(i + 1)}
-//                     className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-//                       page === i + 1
-//                         ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-//                         : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-//                     }`}
-//                   >
-//                     {i + 1}
-//                   </button>
-//                 ))}
-//                 <button
-//                   onClick={() => setPage(page + 1)}
-//                   disabled={page === pagination?.totalPages}
-//                   className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-//                 >
-//                   Next
-//                 </button>
-//               </nav>
-//             </div>
-//           </div>
-//         </div>
-//       </div>
-
-//       {/* Reject Modal */}
-//       {showRejectModal && (
-//         <Modal
-//           title="Reject Driver"
-//           onClose={() => {
-//             setShowRejectModal(false);
-//             setRejectReason('');
-//           }}
-//         >
-//           <div className="space-y-4">
-//             <p>
-//               Rejecting driver: <strong>{selectedDriver?.user?.name}</strong>
-//             </p>
-//             <textarea
-//               className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-//               rows="4"
-//               placeholder="Enter reason for rejection..."
-//               value={rejectReason}
-//               onChange={(e) => setRejectReason(e.target.value)}
-//             />
-//             <div className="flex justify-end space-x-2">
-//               <button
-//                 onClick={() => setShowRejectModal(false)}
-//                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
-//               >
-//                 Cancel
-//               </button>
-//               <button
-//                 onClick={handleReject}
-//                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-//               >
-//                 Reject
-//               </button>
-//             </div>
-//           </div>
-//         </Modal>
-//       )}
-
-//       {/* Block Modal */}
-//       {showBlockModal && (
-//         <Modal
-//           title="Block Driver"
-//           onClose={() => {
-//             setShowBlockModal(false);
-//             setBlockReason('');
-//           }}
-//         >
-//           <div className="space-y-4">
-//             <p>
-//               Blocking driver: <strong>{selectedDriver?.user?.name}</strong>
-//             </p>
-//             <textarea
-//               className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-//               rows="4"
-//               placeholder="Enter reason for blocking..."
-//               value={blockReason}
-//               onChange={(e) => setBlockReason(e.target.value)}
-//             />
-//             <div className="flex justify-end space-x-2">
-//               <button
-//                 onClick={() => setShowBlockModal(false)}
-//                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
-//               >
-//                 Cancel
-//               </button>
-//               <button
-//                 onClick={handleBlock}
-//                 className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-//               >
-//                 Block
-//               </button>
-//             </div>
-//           </div>
-//         </Modal>
-//       )}
-//     </div>
-//   );
-// };
-
-// export default DriversList;
-
-
-
-
-// src/components/admin/Drivers/DriversList.jsx
-import React, { useState } from 'react';
-import { useDrivers } from '../../hooks/useAdmin';
-import { FaCheck, FaTimes, FaBan, FaUnlock, FaTrash, FaEye } from 'react-icons/fa';
-import Modal from '../components/common/Modal';
-
-const StatusBadge = ({ status }) => {
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'approved':
-      case 'online':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-      case 'offline':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'rejected':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  return (
-    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(status)}`}>
-      {status || 'N/A'}
-    </span>
-  );
+const STATUS_COLORS = {
+  approved: "bg-green-100 text-green-800",
+  online:   "bg-emerald-100 text-emerald-800",
+  pending:  "bg-yellow-100 text-yellow-800",
+  offline:  "bg-gray-100 text-gray-600",
+  rejected: "bg-red-100 text-red-800",
+  blocked:  "bg-orange-100 text-orange-800",
 };
 
-const DriversList = ({ onViewDriver }) => {  
-  const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
-  const [search, setSearch] = useState('');
-  const [selectedDriver, setSelectedDriver] = useState(null);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [showBlockModal, setShowBlockModal] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [blockReason, setBlockReason] = useState('');
-  const [showViewModal, setShowViewModal] = useState(false);
-const [viewDriver, setViewDriver] = useState(null);
+const StatusBadge = ({ status }) => (
+  <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${STATUS_COLORS[status] || "bg-gray-100 text-gray-600"}`}>
+    {status || "N/A"}
+  </span>
+);
 
-  // ❌ REMOVE useNavigate - not needed for state-based navigation
-  // const navigate = useNavigate();
+const VEHICLE_ICONS = { auto: "🛺", bike: "🏍", car: "🚗", tractor: "🚜" };
 
-  const {
-    drivers,
-    pagination,
-    loading,
-    error,
-    approveDriver,
-    rejectDriver,
-    blockDriver,
-    unblockDriver,
-    deleteDriver,
-  } = useDrivers(page, 20, status, search);
+const Drivers = () => {
+  const [page, setPage]               = useState(1);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch]           = useState("");
+  const [searchInput, setSearchInput] = useState("");
 
-  const handleApprove = async (driverId) => {
-    if (window.confirm('Are you sure you want to approve this driver?')) {
-      await approveDriver(driverId);
-    }
+  const [modal, setModal]             = useState(null); // null | 'view' | 'reject' | 'block'
+  const [selected, setSelected]       = useState(null);
+  const [reason, setReason]           = useState("");
+
+  const { drivers, pagination, loading, approveDriver, rejectDriver, blockDriver, unblockDriver, deleteDriver } =
+    useDrivers(page, 20, statusFilter, search);
+
+  const openModal = (type, driver) => { setSelected(driver); setModal(type); setReason(""); };
+  const closeModal = () => { setModal(null); setSelected(null); setReason(""); };
+
+  const handleApprove = async (id) => {
+    if (!window.confirm("Approve this driver?")) return;
+    await approveDriver(id);
   };
 
   const handleReject = async () => {
-    if (!rejectReason.trim()) {
-      alert('Please provide a reason for rejection');
-      return;
-    }
-    await rejectDriver(selectedDriver._id, rejectReason);
-    setShowRejectModal(false);
-    setRejectReason('');
+    if (!reason.trim()) { alert("Reason required"); return; }
+    await rejectDriver(selected._id, reason);
+    closeModal();
   };
 
   const handleBlock = async () => {
-    if (!blockReason.trim()) {
-      alert('Please provide a reason for blocking');
-      return;
-    }
-    await blockDriver(selectedDriver._id, blockReason);
-    setShowBlockModal(false);
-    setBlockReason('');
+    if (!reason.trim()) { alert("Reason required"); return; }
+    await blockDriver(selected._id, reason);
+    closeModal();
   };
 
-  const handleUnblock = async (driverId) => {
-    if (window.confirm('Are you sure you want to unblock this driver?')) {
-      await unblockDriver(driverId);
-    }
+  const handleUnblock = async (id) => {
+    if (!window.confirm("Unblock this driver?")) return;
+    await unblockDriver(id);
   };
 
-  const handleDelete = async (driverId) => {
-    if (window.confirm('Are you sure you want to delete this driver? This action cannot be undone.')) {
-      await deleteDriver(driverId);
-    }
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete permanently? This cannot be undone.")) return;
+    await deleteDriver(id);
   };
 
-  if (loading && drivers.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  const handleSearch = (e) => {
+    e.preventDefault();
+    setSearch(searchInput);
+    setPage(1);
+  };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Drivers Management</h1>
-      </div>
+    <div className="space-y-5">
+      <h1 className="text-2xl font-bold text-gray-800">Drivers Management</h1>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="bg-white rounded-xl shadow p-4 flex flex-wrap gap-3 items-center">
+        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-52">
           <input
             type="text"
-            placeholder="Search by name, email, or phone..."
-            className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name / phone..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
-          <select
-            className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="offline">Offline</option>
-            <option value="online">Online</option>
-          </select>
-        </div>
+          <button type="submit" className="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600">
+            <FaSearch />
+          </button>
+        </form>
+
+        <select
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+        >
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="online">Online</option>
+          <option value="offline">Offline</option>
+        </select>
+
+        <button
+          onClick={() => { setSearch(""); setSearchInput(""); setStatusFilter(""); setPage(1); }}
+          className="px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+        >
+          Clear
+        </button>
       </div>
 
-      {/* Drivers Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Driver Info
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Vehicle
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Rating
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Stats
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {drivers.map((driver) => {
-                // Handle rating from your data structure
-                const rating = driver?.rating?.average 
-                  ? Number(driver.rating.average).toFixed(1)
-                  : 'N/A';
-
-                // Get vehicle info
-                const vehicleType = driver?.vehicle?.type || 'N/A';
-                const vehicleNumber = driver?.vehicle?.number || 'N/A';
-
-                return (
-                  <tr key={driver._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                            <span className="text-xl font-bold text-white">
-                              {vehicleType.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            Driver ID
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {driver._id.slice(-8)}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 capitalize">
-                        {vehicleType}
-                      </div>
-                      <div className="text-sm text-gray-500">{vehicleNumber}</div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge status={driver.status} />
-                      {driver.isBlocked && (
-                        <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
-                          Blocked
-                        </span>
-                      )}
-                      <div className="text-xs text-gray-500 mt-1">
-                        {driver.isOnline ? '🟢 Online' : '⚫ Offline'}
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <span className="text-yellow-500">★</span>
-                        <span className="ml-1 text-sm text-gray-900">
-                          {rating}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {driver.rating?.count || 0} reviews
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {driver.stats?.totalTrips || 0} trips
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        ₹{driver.stats?.totalEarnings || 0} earned
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex space-x-2">
-                        {/* ✅ FIXED VIEW BUTTON - Use onViewDriver prop instead of navigate */}
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            if (onViewDriver) {
-                              onViewDriver(driver._id);
-                            } else {
-                              console.error('onViewDriver prop not provided');
-                            }
-                          }}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="View Details"
-                        >
-                          <FaEye />
-                        </button>
-
-                        {(!driver.isApproved || driver.status === 'pending' || driver.status === 'offline') && (
-                          <>
-                            <button
-                              onClick={() => handleApprove(driver._id)}
-                              className="text-green-600 hover:text-green-900"
-                              title="Approve"
-                            >
-                              <FaCheck />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedDriver(driver);
-                                setShowRejectModal(true);
-                              }}
-                              className="text-red-600 hover:text-red-900"
-                              title="Reject"
-                            >
-                              <FaTimes />
-                            </button>
-                          </>
-                        )}
-
-                        {driver.isApproved && !driver.isBlocked && (
-                          <button
-                            onClick={() => {
-                              setSelectedDriver(driver);
-                              setShowBlockModal(true);
-                            }}
-                            className="text-orange-600 hover:text-orange-900"
-                            title="Block"
-                          >
-                            <FaBan />
-                          </button>
-                        )}
-
-                        {driver.isBlocked && (
-                          <button
-                            onClick={() => handleUnblock(driver._id)}
-                            className="text-green-600 hover:text-green-900"
-                            title="Unblock"
-                          >
-                            <FaUnlock />
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => handleDelete(driver._id)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete"
-                        >
-                          <FaTrash />
-                        </button>
-                      </div>
-                    </td>
+      {/* Table */}
+      <div className="bg-white rounded-xl shadow overflow-hidden">
+        {loading && drivers.length === 0 ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-orange-500 border-t-transparent" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-400 uppercase border-b">
+                <tr>
+                  <th className="px-5 py-3 text-left">Driver</th>
+                  <th className="px-5 py-3 text-left">Vehicle</th>
+                  <th className="px-5 py-3 text-left">Status</th>
+                  <th className="px-5 py-3 text-left">Rating</th>
+                  <th className="px-5 py-3 text-left">Stats</th>
+                  <th className="px-5 py-3 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {drivers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-gray-400">No drivers found</td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  drivers.map((driver) => {
+                    const vehicle = driver?.vehicle?.type || "auto";
+                    const vehicleNum = driver?.vehicle?.number || "—";
+                    const rating = driver?.rating?.average ? Number(driver.rating.average).toFixed(1) : "N/A";
+
+                    return (
+                      <tr key={driver._id} className="hover:bg-orange-50 transition">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm">
+                              {(VEHICLE_ICONS[vehicle] || "🚗")}
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-800">{driver.user?.name || "Driver"}</p>
+                              <p className="text-xs text-gray-400">{driver.user?.phone || `#${driver._id.slice(-6)}`}</p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="font-medium capitalize">{vehicle}</p>
+                          <p className="text-xs text-gray-400">{vehicleNum}</p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <StatusBadge status={driver.status} />
+                          {driver.isBlocked && (
+                            <span className="ml-1 px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">Blocked</span>
+                          )}
+                          <p className="text-xs mt-1 text-gray-400">{driver.isOnline ? "🟢 Online" : "⚫ Offline"}</p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span className="text-yellow-500">★</span>
+                          <span className="ml-1 font-medium">{rating}</span>
+                          <p className="text-xs text-gray-400">{driver.rating?.count || 0} reviews</p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="font-medium">{driver.stats?.totalTrips || 0} trips</p>
+                          <p className="text-xs text-gray-400">₹{driver.stats?.totalEarnings || 0} earned</p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => openModal("view", driver)} title="View" className="text-blue-500 hover:text-blue-700"><FaEye /></button>
+
+                            {driver.status === "pending" && (
+                              <>
+                                <button onClick={() => handleApprove(driver._id)} title="Approve" className="text-green-500 hover:text-green-700"><FaCheck /></button>
+                                <button onClick={() => openModal("reject", driver)} title="Reject" className="text-red-500 hover:text-red-700"><FaTimes /></button>
+                              </>
+                            )}
+
+                            {driver.isApproved && !driver.isBlocked && (
+                              <button onClick={() => openModal("block", driver)} title="Block" className="text-orange-500 hover:text-orange-700"><FaBan /></button>
+                            )}
+
+                            {driver.isBlocked && (
+                              <button onClick={() => handleUnblock(driver._id)} title="Unblock" className="text-green-500 hover:text-green-700"><FaUnlock /></button>
+                            )}
+
+                            <button onClick={() => handleDelete(driver._id)} title="Delete" className="text-red-400 hover:text-red-600"><FaTrash /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination */}
-        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-gray-700">
-                Showing <span className="font-medium">{(page - 1) * 20 + 1}</span> to{' '}
-                <span className="font-medium">
-                  {Math.min(page * 20, pagination?.total || 0)}
-                </span>{' '}
-                of <span className="font-medium">{pagination?.total || 0}</span> results
-              </p>
-            </div>
-            <div>
-              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                <button
-                  onClick={() => setPage(page - 1)}
-                  disabled={page === 1}
-                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                  Page {page} of {pagination?.totalPages || 1}
-                </span>
-                <button
-                  onClick={() => setPage(page + 1)}
-                  disabled={page === pagination?.totalPages}
-                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </nav>
-            </div>
+        <div className="px-5 py-3 flex items-center justify-between border-t text-sm text-gray-500">
+          <span>
+            {pagination?.total
+              ? `${(page - 1) * 20 + 1}–${Math.min(page * 20, pagination.total)} of ${pagination.total}`
+              : "0 results"}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => p - 1)}
+              disabled={page === 1}
+              className="px-3 py-1 border rounded-lg disabled:opacity-40 hover:bg-gray-100"
+            >
+              Prev
+            </button>
+            <span className="px-3 py-1 border rounded-lg bg-orange-50 text-orange-600 font-medium">
+              {page} / {pagination?.totalPages || 1}
+            </span>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= (pagination?.totalPages || 1)}
+              className="px-3 py-1 border rounded-lg disabled:opacity-40 hover:bg-gray-100"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
 
+      {/* View Modal */}
+      {modal === "view" && selected && (
+        <Modal title="Driver Details" onClose={closeModal} size="lg">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <InfoRow label="Name"           value={selected.user?.name || "—"} />
+            <InfoRow label="Phone"          value={selected.user?.phone || "—"} />
+            <InfoRow label="Email"          value={selected.user?.email || "—"} />
+            <InfoRow label="Status"         value={<StatusBadge status={selected.status} />} />
+            <InfoRow label="Vehicle Type"   value={selected.vehicle?.type || "—"} />
+            <InfoRow label="Vehicle Number" value={selected.vehicle?.number || "—"} />
+            <InfoRow label="Rating"         value={`${selected.rating?.average?.toFixed(1) || "N/A"} ★ (${selected.rating?.count || 0})`} />
+            <InfoRow label="Total Trips"    value={selected.stats?.totalTrips || 0} />
+            <InfoRow label="Total Earnings" value={`₹${selected.stats?.totalEarnings || 0}`} />
+            <InfoRow label="Joined"         value={selected.createdAt ? new Date(selected.createdAt).toLocaleDateString("en-IN") : "—"} />
+            <InfoRow label="Online"         value={selected.isOnline ? "Yes 🟢" : "No ⚫"} />
+            <InfoRow label="Blocked"        value={selected.isBlocked ? "Yes 🔴" : "No"} />
+          </div>
+          {selected.vehicle?.rc && (
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+              <p className="text-xs text-gray-500 font-medium mb-1">RC / Licence</p>
+              <p className="text-sm">{selected.vehicle.rc}</p>
+            </div>
+          )}
+        </Modal>
+      )}
+
       {/* Reject Modal */}
-      {showRejectModal && (
-        <Modal
-          title="Reject Driver"
-          onClose={() => {
-            setShowRejectModal(false);
-            setRejectReason('');
-          }}
-        >
+      {modal === "reject" && selected && (
+        <Modal title="Reject Driver" onClose={closeModal}>
           <div className="space-y-4">
-            <p>
-              Rejecting driver: <strong>ID {selectedDriver?._id?.slice(-8)}</strong>
+            <p className="text-sm text-gray-600">
+              Rejecting: <strong>{selected.user?.name || `Driver #${selected._id.slice(-6)}`}</strong>
             </p>
             <textarea
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              rows="4"
-              placeholder="Enter reason for rejection..."
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+              rows={4}
+              placeholder="Reason for rejection..."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
             />
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setShowRejectModal(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReject}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                Reject
-              </button>
+            <div className="flex justify-end gap-2">
+              <button onClick={closeModal} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">Cancel</button>
+              <button onClick={handleReject} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">Reject</button>
             </div>
           </div>
         </Modal>
       )}
 
       {/* Block Modal */}
-      {showBlockModal && (
-        <Modal
-          title="Block Driver"
-          onClose={() => {
-            setShowBlockModal(false);
-            setBlockReason('');
-          }}
-        >
+      {modal === "block" && selected && (
+        <Modal title="Block Driver" onClose={closeModal}>
           <div className="space-y-4">
-            <p>
-              Blocking driver: <strong>ID {selectedDriver?._id?.slice(-8)}</strong>
+            <p className="text-sm text-gray-600">
+              Blocking: <strong>{selected.user?.name || `Driver #${selected._id.slice(-6)}`}</strong>
             </p>
             <textarea
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              rows="4"
-              placeholder="Enter reason for blocking..."
-              value={blockReason}
-              onChange={(e) => setBlockReason(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              rows={4}
+              placeholder="Reason for blocking..."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
             />
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={() => setShowBlockModal(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBlock}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-              >
-                Block
-              </button>
+            <div className="flex justify-end gap-2">
+              <button onClick={closeModal} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">Cancel</button>
+              <button onClick={handleBlock} className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm">Block</button>
             </div>
           </div>
         </Modal>
       )}
-
-
-
-      {showViewModal && viewDriver && (
-  <Modal
-    title={`Driver Details - ${viewDriver._id.slice(-8)}`}
-    onClose={() => setShowViewModal(false)}
-  >
-    <div className="space-y-2">
-      <p><strong>Name:</strong> {viewDriver.name || 'N/A'}</p>
-      <p><strong>Email:</strong> {viewDriver.email || 'N/A'}</p>
-      <p><strong>Phone:</strong> {viewDriver.phone || 'N/A'}</p>
-      <p><strong>Status:</strong> {viewDriver.status}</p>
-      <p><strong>Vehicle:</strong> {viewDriver.vehicle?.type} - {viewDriver.vehicle?.number}</p>
-      <p><strong>Total Trips:</strong> {viewDriver.stats?.totalTrips || 0}</p>
-      <p><strong>Total Earnings:</strong> ₹{viewDriver.stats?.totalEarnings || 0}</p>
-    </div>
-  </Modal>
-)}
     </div>
   );
 };
 
-export default DriversList;
+const InfoRow = ({ label, value }) => (
+  <div className="flex flex-col">
+    <span className="text-xs text-gray-400">{label}</span>
+    <span className="font-medium text-gray-800 mt-0.5">{value}</span>
+  </div>
+);
+
+export default Drivers;
