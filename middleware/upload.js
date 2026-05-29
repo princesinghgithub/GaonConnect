@@ -1,41 +1,36 @@
-// middleware/upload.js
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const path   = require('path');
+const fs     = require('fs');
+const { randomUUID } = require('crypto');
 
-// Ensure directory exists
+// Ensure directory exists at startup
 const documentsDir = 'uploads/documents/';
-if (!fs.existsSync(documentsDir)) {
-  fs.mkdirSync(documentsDir, { recursive: true });
-}
+if (!fs.existsSync(documentsDir)) fs.mkdirSync(documentsDir, { recursive: true });
 
 const documentStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/documents/');
+  destination: (_req, _file, cb) => cb(null, documentsDir),
+  filename: (_req, file, cb) => {
+    // UUID-based name — not guessable from outside
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `doc-${randomUUID()}${ext}`);
   },
-  filename: (req, file, cb) => {
-    const docType = req.body.documentType || 'document';
-    const userId = req.user?.id || 'user';
-    cb(null, `${docType}-${userId}-${Date.now()}${path.extname(file.originalname)}`);
-  }
 });
 
-const documentFilter = (req, file, cb) => {
-  const allowed = /jpeg|jpg|png|pdf/;
-  const extname = allowed.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = file.mimetype === 'application/pdf' || file.mimetype.startsWith('image/');
-  
-  if (extname && mimetype) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only JPG/PNG/PDF files are allowed'));
-  }
+const documentFilter = (_req, file, cb) => {
+  const allowedExts  = /\.(jpeg|jpg|png|pdf)$/i;
+  const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+
+  const extOk  = allowedExts.test(path.extname(file.originalname));
+  const mimeOk = allowedMimes.includes(file.mimetype);
+
+  if (extOk && mimeOk) return cb(null, true);
+  cb(new Error('Sirf JPG, PNG ya PDF files allowed hain'));
 };
 
 const docUpload = multer({
-  storage: documentStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-  fileFilter: documentFilter
+  storage:    documentStorage,
+  limits:     { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: documentFilter,
 });
 
 module.exports = { docUpload };

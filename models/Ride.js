@@ -89,6 +89,7 @@ const RideSchema = new mongoose.Schema(
         "accepted",
         "arrived",
         "started",
+        'working',
         "completed",
         "cancelled",
       ],
@@ -128,6 +129,62 @@ const RideSchema = new mongoose.Schema(
     },
 
     cancellationReason: String,
+    // ═══════════════════════════════════════
+// TRACTOR / JCB HOURLY BOOKING FIELDS
+// ═══════════════════════════════════════
+
+// Booking mode — distance ya hourly
+bookingMode: {
+  type: String,
+  enum: ['distance', 'hourly'],
+  default: 'distance'
+},
+
+// Service category — farming, transport, construction etc.
+serviceCategory: {
+  type: String,
+  enum: ['farming', 'transport', 'spraying', 'water', 'construction', 'custom', ''],
+  default: ''
+},
+
+// Sub-service — ploughing, rotavator, digging etc.
+serviceType: {
+  type: String,
+  default: ''
+},
+
+// Hourly booking ke liye
+estimatedHours: {
+  type: Number,
+  default: 0
+},
+
+actualHours: {
+  type: Number,
+  default: 0
+},
+
+hourlyRate: {
+  type: Number,
+  default: 0
+},
+
+// Driver ne timer start kiya kab
+workStartedAt: {
+  type: Date,
+  default: null
+},
+
+workEndedAt: {
+  type: Date,
+  default: null
+},
+
+// Special note from user
+workNote: {
+  type: String,
+  default: ''
+},
     bookingType: {
       type: String,
       enum: ["instant", "scheduled"],

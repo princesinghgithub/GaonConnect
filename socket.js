@@ -1,97 +1,109 @@
-// socket.js
-const { Server } = require("socket.io");
+const { Server } = require('socket.io');
 
 let io = null;
 
-// 🔥 Driver socket mapping (driverId -> socketId)
+// driverId → socketId mapping
 const connectedDrivers = new Map();
 
 function initSocket(server) {
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim());
 
   io = new Server(server, {
     cors: {
-      origin: "*"
-    }
+      origin: (origin, callback) => {
+        // Mobile apps / Postman — no origin allowed
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        callback(new Error(`Socket CORS blocked: ${origin}`));
+      },
+      methods:     ['GET', 'POST'],
+      credentials: true,
+    },
+    // Stale connections faster detect karo
+    pingTimeout:  20000,
+    pingInterval: 25000,
   });
 
-  io.on("connection", (socket) => {
-    console.log("🚖 Client Connected:", socket.id);
+  io.on('connection', (socket) => {
+    console.log(`🚖 Socket connected: ${socket.id}`);
 
-    // 🟢 DRIVER ONLINE
-    socket.on("driverOnline", ({ driverId }) => {
-      connectedDrivers.set(driverId, socket.id);
+    // ─── Driver Online ──────────────────────────────────────────────────────
+    socket.on('driverOnline', ({ driverId }) => {
+      if (!driverId) return;
+      connectedDrivers.set(String(driverId), socket.id);
       socket.join(`driver_${driverId}`);
-
-      console.log("🟢 Driver Online:", driverId);
+      console.log(`🟢 Driver online: ${driverId}`);
     });
 
-    // 👤 USER JOINS ROOM
-    socket.on("user_join", (userId) => {
+    // ─── User Joins Room ────────────────────────────────────────────────────
+    socket.on('user_join', (userId) => {
+      if (!userId) return;
       socket.join(`user_${userId}`);
-      console.log("👤 User Joined:", userId);
+      console.log(`👤 User joined: ${userId}`);
     });
 
-    // 🚕 USER JOINS BOOKING ROOM
-    socket.on("join_booking", (bookingId) => {
+    // ─── User Joins Booking Room ────────────────────────────────────────────
+    socket.on('join_booking', (bookingId) => {
+      if (!bookingId) return;
       socket.join(`booking_${bookingId}`);
-      console.log("📦 Booking Room Joined:", bookingId);
+      console.log(`📦 Booking room joined: ${bookingId}`);
     });
 
-    // 📡 DRIVER LIVE LOCATION
-    socket.on("driverLocation", ({ bookingId, driverId, lat, lng }) => {
-      io.to(`booking_${bookingId}`).emit("location_update", {
-        driverId,
-        lat,
-        lng
-      });
+    // ─── Driver Live Location ────────────────────────────────────────────────
+    socket.on('driverLocation', ({ bookingId, driverId, lat, lng }) => {
+      if (!bookingId || lat === undefined || lng === undefined) return;
+      io.to(`booking_${bookingId}`).emit('location_update', { driverId, lat, lng });
     });
 
-    // 📲 ASSIGN RIDE TO DRIVER
-    socket.on("assignRide", ({ driverId, booking }) => {
-      const driverSocket = connectedDrivers.get(driverId);
-
+    // ─── Assign Ride to Driver ───────────────────────────────────────────────
+    socket.on('assignRide', ({ driverId, booking }) => {
+      if (!driverId || !booking) return;
+      const driverSocket = connectedDrivers.get(String(driverId));
       if (driverSocket) {
-        io.to(driverSocket).emit("newRideRequest", booking);
-        console.log("📩 Ride Sent To Driver:", driverId);
+        io.to(driverSocket).emit('newRideRequest', booking);
+        console.log(`📩 Ride sent to driver: ${driverId}`);
       } else {
-        console.log("⚠ Driver not online", driverId);
+        console.log(`⚠️  Driver not online: ${driverId}`);
       }
     });
 
-    // 🚦 DRIVER ACCEPT / REJECT
-    socket.on("rideResponse", ({ bookingId, driverId, status }) => {
-      io.to(`booking_${bookingId}`).emit("ride_status_update", {
-        bookingId,
-        driverId,
-        status
-      });
+    // ─── Driver Accept / Reject ──────────────────────────────────────────────
+    socket.on('rideResponse', ({ bookingId, driverId, status }) => {
+      if (!bookingId) return;
+      io.to(`booking_${bookingId}`).emit('ride_status_update', { bookingId, driverId, status });
     });
 
-    // 📍 LIVE RIDE TRACKING
-    socket.on("rideTracking", ({ bookingId, lat, lng }) => {
-      io.to(`booking_${bookingId}`).emit("track_update", { lat, lng });
+    // ─── Live Ride Tracking ──────────────────────────────────────────────────
+    socket.on('rideTracking', ({ bookingId, lat, lng }) => {
+      if (!bookingId || lat === undefined || lng === undefined) return;
+      io.to(`booking_${bookingId}`).emit('track_update', { lat, lng });
     });
 
-    // ❌ DISCONNECT
-    socket.on("disconnect", () => {
-      console.log("❌ Disconnected:", socket.id);
-
-      for (let [driverId, sId] of connectedDrivers.entries()) {
+    // ─── Disconnect ──────────────────────────────────────────────────────────
+    socket.on('disconnect', () => {
+      console.log(`❌ Socket disconnected: ${socket.id}`);
+      for (const [driverId, sId] of connectedDrivers.entries()) {
         if (sId === socket.id) {
           connectedDrivers.delete(driverId);
-          console.log("🔴 Driver Offline:", driverId);
+          console.log(`🔴 Driver offline: ${driverId}`);
+          break;
         }
       }
     });
-
   });
 
   return io;
 }
 
 function getIO() {
-  if (!io) throw new Error("Socket.io not initialized");
+  if (!io) throw new Error('Socket.io not initialized');
   return io;
 }
 
-module.exports = { initSocket, getIO };
+// Online drivers ki list (admin dashboard ke liye)
+function getConnectedDrivers() {
+  return Array.from(connectedDrivers.keys());
+}
+
+module.exports = { initSocket, getIO, getConnectedDrivers };

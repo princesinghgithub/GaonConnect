@@ -1,69 +1,14 @@
-// const express = require('express');
-// const router = express.Router();
-// const { protect}= require('../middleware/auth');
-
-// const {
-//   createRide,
-//   getRideById,
-//   getCurrentRideCustomer,
-//   getCurrentRideDriver,
-//   acceptRide,
-//   rejectRide,
-//   updateRideStatus,
-//   verifyOTPAndStart,
-//   cancelRide,
-//   getRideHistoryCustomer,
-//   getRideHistoryDriver,getSearchingRides
-// } = require('../controllers/rideController');
-
-// // ========== CUSTOMER ROUTES ==========
-// // Create new ride request
-// router.post('/create', protect, createRide);
-
-// // Get current active ride
-// router.get('/current/customer', protect, getCurrentRideCustomer);
-
-// // Get ride history
-// router.get('/history/customer', protect, getRideHistoryCustomer);
-
-// // ========== DRIVER ROUTES ==========
-// // Get current active ride
-// router.get('/current/driver', protect, getCurrentRideDriver);
-
-// // Accept ride request
-// router.post('/accept', protect, acceptRide);
-
-// // Reject ride request
-// router.post('/reject', protect, rejectRide);
-
-// // Update ride status (arrived, started, completed)
-// router.put('/status', protect, updateRideStatus);
-
-// // Verify OTP and start ride
-// router.post('/verify-otp', protect, verifyOTPAndStart);
-
-// // Get ride history
-// router.get('/history/driver', protect, getRideHistoryDriver);
-
-// // ========== COMMON ROUTES ==========
-// // Get specific ride details
-// router.get('/:id', protect, getRideById);
-
-// // Cancel ride
-// router.post('/cancel', protect, cancelRide);
-
-// router.get('/searching', protect, getSearchingRides);
-
-// module.exports = router;
-
 const express = require('express');
 const router  = express.Router();
-const { protect } = require('../middleware/auth');
-const { calculateFare, calculateDistance, calculateDuration } = require('../utils/fareCalculator');
+const { protect }  = require('../middleware/auth');
+const { validate, schemas } = require('../middleware/validate');
+const { calculateDistance, calculateDuration, getServicesForVehicle } = require('../utils/fareCalculator');
+const { getAllDynamicFares, getDynamicFare, getCurrentSurgeInfo }      = require('../utils/dynamicFare');
 
 const {
   createRide,
   getRideById,
+  getRideInvoice,
   getCurrentRideCustomer,
   getCurrentRideDriver,
   acceptRide,
@@ -73,17 +18,16 @@ const {
   cancelRide,
   getRideHistoryCustomer,
   getRideHistoryDriver,
-  getSearchingRides,getScheduledRidesDriver
+  getSearchingRides,
+  getScheduledRidesDriver,
 } = require('../controllers/rideController');
 
-// ========== SPECIFIC ROUTES PEHLE — /:id se pehle! ==========
-
-// Customer
+// ─── Customer ─────────────────────────────────────────────────────────────────
 router.post('/create',          protect, createRide);
 router.get('/current/customer', protect, getCurrentRideCustomer);
 router.get('/history/customer', protect, getRideHistoryCustomer);
 
-// Driver
+// ─── Driver ───────────────────────────────────────────────────────────────────
 router.get('/current/driver',   protect, getCurrentRideDriver);
 router.post('/accept',          protect, acceptRide);
 router.post('/reject',          protect, rejectRide);
@@ -91,47 +35,87 @@ router.put('/status',           protect, updateRideStatus);
 router.post('/verify-otp',      protect, verifyOTPAndStart);
 router.get('/history/driver',   protect, getRideHistoryDriver);
 router.get('/searching',        protect, getSearchingRides);
-router.get('/scheduled/driver', protect, getScheduledRidesDriver);  
+router.get('/scheduled/driver', protect, getScheduledRidesDriver);
 
-// Common
-router.post('/cancel',          protect, cancelRide);
+// ─── Common ───────────────────────────────────────────────────────────────────
+router.post('/cancel', protect, cancelRide);
 
-// ✅ FARE ESTIMATE — /:id se pehle ZAROORI
-router.get('/fare-estimate', protect, (req, res) => {
+// ─── Tractor/JCB Services List ────────────────────────────────────────────────
+router.get('/services/:vehicleType', protect, (req, res) => {
+  const services = getServicesForVehicle(req.params.vehicleType);
+  if (!services) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+  return res.json({ success: true, data: services });
+});
+
+// ─── Current Surge Status (App home screen pe badge dikhao) ──────────────────
+// GET /api/ride/surge-status
+router.get('/surge-status', protect, async (req, res) => {
   try {
-    const { pickupLat, pickupLng, dropLat, dropLng } = req.query;
-
-    if (!pickupLat || !pickupLng || !dropLat || !dropLng) {
-      return res.status(400).json({ success: false, message: 'Coordinates required' });
-    }
-
-    const distance = calculateDistance(
-      parseFloat(pickupLat), parseFloat(pickupLng),
-      parseFloat(dropLat),   parseFloat(dropLng)
-    );
-
-    const duration = calculateDuration(distance);
-
-    const fares = {
-      bike:    calculateFare(distance, 'bike'),
-      auto:    calculateFare(distance, 'auto'),
-      car:     calculateFare(distance, 'car'),
-      tractor: calculateFare(distance, 'tractor'),
-      tempo:   calculateFare(distance, 'tempo'),
-      truck:   calculateFare(distance, 'truck'),
-      jcb:     calculateFare(distance, 'jcb'),
-    };
-
-    return res.json({
-      success: true,
-      data: { distance, duration, fares }
-    });
+    const surge = await getCurrentSurgeInfo();
+    return res.json({ success: true, data: surge });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// ⚠️ DYNAMIC ROUTE — SABSE LAST MEIN
+// ─── Fare Estimate — Full Breakdown ──────────────────────────────────────────
+// GET /api/ride/fare-estimate?pickupLat=&pickupLng=&dropLat=&dropLng=&vehicleType=
+router.get('/fare-estimate',
+  protect,
+  validate(schemas.fareEstimate, 'query'),
+  async (req, res) => {
+    try {
+      const { pickupLat, pickupLng, dropLat, dropLng, vehicleType } = req.query;
+
+      const distance = calculateDistance(
+        Number(pickupLat), Number(pickupLng),
+        Number(dropLat),   Number(dropLng),
+      );
+      const duration = calculateDuration(distance);
+
+      const bookingDate = new Date();
+
+      // Specific vehicle — detailed breakdown
+      if (vehicleType) {
+        const breakdown = await getDynamicFare(distance, vehicleType, { bookingDate });
+        return res.json({
+          success: true,
+          data: { distance, duration, ...breakdown },
+        });
+      }
+
+      // Sab vehicles — comparison ke liye
+      const allFares = await getAllDynamicFares(distance, { bookingDate });
+
+      // App ke liye simplified list bhi bhejo
+      const fareList = Object.entries(allFares).map(([type, data]) => ({
+        vehicleType:  type,
+        totalFare:    data.totalFare,
+        surgeActive:  data.surgeActive,
+        surgeType:    data.surgeType,
+        breakdown:    data.breakdown,
+        driverEarnings: data.driverEarnings,
+      }));
+
+      return res.json({
+        success: true,
+        data: {
+          distance,
+          duration,
+          fares: fareList,
+          surgeActive: fareList.some((f) => f.surgeActive),
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+);
+
+// ─── Invoice ──────────────────────────────────────────────────────────────────
+router.get('/:id/invoice', protect, getRideInvoice);
+
+// ⚠️  Dynamic :id — SABSE LAST
 router.get('/:id', protect, getRideById);
 
 module.exports = router;

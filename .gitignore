@@ -2,5 +2,9 @@ node_modules/
 dist/
 build/
 .env
-.env.local
-git add .
+.env.*
+firebase-adminsdk.json
+uploads/documents/
+uploads/profile/
+*.log
+coverage/

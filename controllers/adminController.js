@@ -2105,33 +2105,28 @@ const approveDriver = async (req, res) => {
   try {
     const driver = await Driver.findByIdAndUpdate(
       req.params.id,
-      { 
-        status: 'approved',
-        isApproved: true,
-        approvedAt: Date.now(),
-        approvedBy: req.user._id
+      {
+        isApproved:  true,
+        approvedAt:  Date.now(),
+        approvedBy:  req.user._id,
       },
       { new: true }
-    ).select('-password');
+    ).populate('user', 'name');
 
     if (!driver) {
-      return res.status(404).json({
-        success: false,
-        message: 'Driver not found'
-      });
+      return res.status(404).json({ success: false, message: 'Driver not found' });
     }
 
-    res.json({
-      success: true,
-      message: 'Driver approved successfully',
-      data: driver
-    });
+    // Push notification — driver ko batao ki account approve ho gaya
+    const fcmToken = driver.deviceInfo?.fcmToken;
+    if (fcmToken) {
+      const { notify } = require('../utils/notifications');
+      notify.accountApproved(fcmToken, { driverName: driver.user?.name || 'Driver' }).catch(() => {});
+    }
+
+    res.json({ success: true, message: 'Driver approved successfully', data: driver });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Server error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
 };
 
@@ -3067,134 +3062,122 @@ const unblockUser = async (req, res) => {
 
 // ===== SETTINGS =====
 
+const { invalidateSettingsCache } = require('../utils/dynamicFare');
+
+// GET /api/admin/settings
 const getSettings = async (req, res) => {
   try {
-    let settings = await Setting.findOne();
-
+    let settings = await Setting.findOne().lean();
     if (!settings) {
-      settings = await Setting.create({
-        commission: {
-          percentage: 20,
-          type: 'percentage'
-        },
-        pricing: {
-          baseFare: 50,
-          perKm: 10,
-          perMinute: 2,
-          minimumFare: 80
-        },
-        cancellation: {
-          userFee: 20,
-          driverFee: 30,
-          timeLimit: 5
-        },
-        general: {
-          currency: 'INR',
-          currencySymbol: '₹',
-          timezone: 'Asia/Kolkata'
-        }
-      });
+      settings = await Setting.create({});
+      settings = settings.toObject();
     }
-
-    res.json({
-      success: true,
-      data: settings
-    });
+    res.json({ success: true, data: settings });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Settings fetch error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
 };
 
+// PUT /api/admin/settings
+// Body: partial settings object — jo bhejo woh update hoga
 const updateSettings = async (req, res) => {
   try {
-    let settings = await Setting.findOne();
+    const settings = await Setting.findOneAndUpdate(
+      {},
+      { $set: req.body },
+      { new: true, upsert: true, runValidators: true }
+    );
 
-    if (!settings) {
-      settings = await Setting.create(req.body);
-    } else {
-      settings = await Setting.findOneAndUpdate(
-        {},
-        req.body,
-        { new: true, runValidators: true }
-      );
-    }
+    // Cache invalidate karo — next request pe fresh data aayega
+    await invalidateSettingsCache();
 
-    res.json({
-      success: true,
-      message: 'Settings updated successfully',
-      data: settings
-    });
+    res.json({ success: true, message: 'Settings update ho gayi!', data: settings });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Settings update error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
 };
 
+// PUT /api/admin/pricing
+// Body: { vehicleType: 'auto', baseFare: 30, perKmRate: 14, minimumFare: 35 }
+// Ya surge update: { surge: { highDemand: { enabled: true, multiplier: 1.5, reason: "Festival" } } }
 const updatePricing = async (req, res) => {
   try {
-    const { vehicleType, pricing } = req.body;
+    const { vehicleType, baseFare, perKmRate, minimumFare, surge, waiting, commission } = req.body;
 
-    const settings = await Setting.findOne();
+    const updateObj = {};
 
-    if (!settings) {
-      return res.status(404).json({
-        success: false,
-        message: 'Settings not found'
+    // Vehicle rate update
+    if (vehicleType && baseFare !== undefined) {
+      updateObj[`vehicleRates.${vehicleType}.baseFare`]    = baseFare;
+      updateObj[`vehicleRates.${vehicleType}.perKmRate`]   = perKmRate;
+      updateObj[`vehicleRates.${vehicleType}.minimumFare`] = minimumFare;
+    }
+
+    // Surge update
+    if (surge) {
+      Object.entries(surge).forEach(([key, val]) => {
+        updateObj[`surge.${key}`] = val;
       });
     }
 
-    settings.pricing[vehicleType] = pricing;
-    await settings.save();
+    // Waiting charge update
+    if (waiting) {
+      Object.entries(waiting).forEach(([key, val]) => {
+        updateObj[`waiting.${key}`] = val;
+      });
+    }
 
-    res.json({
-      success: true,
-      message: 'Pricing updated successfully',
-      data: settings
-    });
+    // Commission update
+    if (commission?.percentage !== undefined) {
+      updateObj['commission.percentage'] = commission.percentage;
+    }
+
+    if (!Object.keys(updateObj).length) {
+      return res.status(400).json({ success: false, message: 'Kuch update karne ke liye body mein data do' });
+    }
+
+    const settings = await Setting.findOneAndUpdate(
+      {},
+      { $set: updateObj },
+      { new: true, upsert: true }
+    );
+
+    // Cache invalidate — fare calculator fresh rates lo
+    await invalidateSettingsCache();
+
+    res.json({ success: true, message: 'Pricing update ho gayi! 🎉', data: settings });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Pricing update error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
 };
 
+// GET /api/admin/config
 const getSystemConfig = async (req, res) => {
   try {
     const config = {
-      version: process.env.APP_VERSION || '1.0.0',
-      environment: process.env.NODE_ENV,
+      version:     process.env.npm_package_version || '2.0.0',
+      environment: process.env.NODE_ENV || 'development',
       features: {
-        payment: true,
-        notifications: true,
+        payment:          true,
+        notifications:    true,
         realTimeTracking: true,
-        scheduling: true
+        scheduling:       true,
+        sos:              true,
+        promoCode:        true,
+        invoice:          true,
+        rating:           true,
       },
       limits: {
-        maxRideDistance: 100,
-        maxWaitingTime: 15,
-        maxDriverRadius: 10
-      }
+        maxRideDistance:   100,  // km
+        maxWaitingTime:    15,   // min
+        maxDriverRadius:   15,   // km
+        otpExpiry:         10,   // min
+        accessTokenExpiry: 15,   // min
+      },
     };
-
-    res.json({
-      success: true,
-      data: config
-    });
+    res.json({ success: true, data: config });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Config fetch error' });
   }
 };
 
@@ -3450,38 +3433,88 @@ const getDriverPerformance = async (req, res) => {
 };
 
 // ===== NOTIFICATIONS =====
+const { notify, sendToDevice, sendToMultiple } = require('../utils/notifications');
 
+// POST /api/admin/notifications/send
+// Body: { recipientId, recipientType ('user'|'provider'), title, body }
 const sendNotification = async (req, res) => {
   try {
-    const { recipientId, recipientType, title, message, type } = req.body;
+    const { recipientId, recipientType, title, body, message } = req.body;
+    const notifBody = body || message;
 
-    res.json({
+    if (!recipientId || !title || !notifBody) {
+      return res.status(400).json({ success: false, message: 'recipientId, title, body required hai' });
+    }
+
+    let fcmToken = null;
+
+    if (recipientType === 'provider') {
+      const provider = await Provider.findById(recipientId).select('deviceInfo');
+      fcmToken = provider?.deviceInfo?.fcmToken || null;
+    } else {
+      // Customer — future mein User model mein fcmToken add karna hoga
+      const user = await User.findById(recipientId).select('fcmToken');
+      fcmToken = user?.fcmToken || null;
+    }
+
+    if (!fcmToken) {
+      return res.status(404).json({ success: false, message: 'FCM token nahi mila. User/Provider ka device token register nahi hai.' });
+    }
+
+    const sent = await sendToDevice(fcmToken, { title, body: notifBody, data: { type: 'ADMIN_MESSAGE' } });
+
+    return res.json({
       success: true,
-      message: 'Notification sent successfully'
+      message: sent ? 'Notification bhej diya gaya' : 'Notification fail hua (token invalid ho sakta hai)',
+      sent,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    console.error('sendNotification Error:', error);
+    res.status(500).json({ success: false, message: 'Server error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
 };
 
+// POST /api/admin/notifications/bulk
+// Body: { recipientType ('all'|'providers'|'customers'), title, body }
 const sendBulkNotification = async (req, res) => {
   try {
-    const { recipientType, title, message, type, filters } = req.body;
+    const { recipientType, title, body, message } = req.body;
+    const notifBody = body || message;
 
-    res.json({
+    if (!title || !notifBody) {
+      return res.status(400).json({ success: false, message: 'title aur body required hai' });
+    }
+
+    let tokens = [];
+
+    if (recipientType === 'providers' || recipientType === 'all') {
+      const providers = await Provider.find({ 'deviceInfo.fcmToken': { $exists: true, $ne: null } })
+        .select('deviceInfo');
+      const providerTokens = providers.map((p) => p.deviceInfo?.fcmToken).filter(Boolean);
+      tokens.push(...providerTokens);
+    }
+
+    if (recipientType === 'customers' || recipientType === 'all') {
+      // Future: User model mein fcmToken field add karo
+      const users = await User.find({ fcmToken: { $exists: true, $ne: null } }).select('fcmToken');
+      const userTokens = users.map((u) => u.fcmToken).filter(Boolean);
+      tokens.push(...userTokens);
+    }
+
+    if (!tokens.length) {
+      return res.status(404).json({ success: false, message: 'Koi valid FCM token nahi mila' });
+    }
+
+    await sendToMultiple(tokens, { title, body: notifBody, data: { type: 'ADMIN_BROADCAST' } });
+
+    return res.json({
       success: true,
-      message: `Notification sent to multiple recipients`
+      message: `${tokens.length} devices ko notification bheja gaya`,
+      count: tokens.length,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    console.error('sendBulkNotification Error:', error);
+    res.status(500).json({ success: false, message: 'Server error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
 };
 

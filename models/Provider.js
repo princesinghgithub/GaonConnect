@@ -294,7 +294,6 @@ const ProviderSchema = new mongoose.Schema({
 // Create 2dsphere index for location queries
 ProviderSchema.index({ currentLocation: '2dsphere' });
 ProviderSchema.index({ status: 1, isApproved: 1, isOnline: 1 });
-ProviderSchema.index({ 'user': 1 });
 
 // Update updatedAt before save
 ProviderSchema.pre('save', function(next) {
