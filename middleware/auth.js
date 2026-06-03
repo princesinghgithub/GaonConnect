@@ -29,7 +29,8 @@ const protect = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Account block kar diya gaya hai.' });
     }
 
-    req.user = user;
+    req.user       = user;
+    req.activeRole = decoded.role || user.role; // token mein jo role hai (customer/provider)
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
@@ -52,18 +53,13 @@ const admin = (req, res, next) => {
 
 // ─── provider — sirf provider role allow karo ────────────────────────────────
 const providerOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'provider') {
-    return next();
-  }
-  return res.status(403).json({ success: false, message: 'Provider access required.' });
+  if (req.user && req.activeRole === 'provider') return next();
+  return res.status(403).json({ success: false, message: 'Driver access required. Driver app se login karo.' });
 };
 
-// ─── customer — sirf customer role allow karo ────────────────────────────────
 const customerOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'customer') {
-    return next();
-  }
-  return res.status(403).json({ success: false, message: 'Customer access required.' });
+  if (req.user && req.activeRole === 'customer') return next();
+  return res.status(403).json({ success: false, message: 'Customer access required. User app se login karo.' });
 };
 
 module.exports = { protect, admin, providerOnly, customerOnly };

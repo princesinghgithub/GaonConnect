@@ -24,8 +24,9 @@ const sendOtpViaEmail = async (email, otp) => {
   });
 };
 
-const buildTokenResponse = async (user, providerData = null) => {
-  const accessToken  = generateAccessToken(user._id);
+const buildTokenResponse = async (user, providerData = null, activeRole = null) => {
+  const role        = activeRole || user.role;
+  const accessToken  = generateAccessToken(user._id, role);
   const refreshToken = generateRefreshToken();
   await saveRefreshToken(user._id, refreshToken);
 
@@ -37,7 +38,8 @@ const buildTokenResponse = async (user, providerData = null) => {
       name:       user.name,
       email:      user.email,
       phone:      user.phone,
-      role:       user.role,
+      role,                         // active role (jis app se login kiya)
+      roles:      user.roles || [user.role], // dono roles
       city:       user.city,
       isVerified: user.isVerified,
     },
@@ -177,35 +179,50 @@ exports.verifyPhoneOTP = async (req, res) => {
     const tenDigit = normalized.slice(-10);
 
     let user = await User.findOne({ phone: tenDigit });
+    const activeRole = role || 'customer';
 
     if (!user) {
+      // Naya user — jis app se aaya uska role set karo
       const fallbackName = name || `User${tenDigit.slice(-4)}`;
       user = await User.create({
-        name: fallbackName,
-        phone: tenDigit,
-        email: email || undefined,
-        city: city || '',
-        role: role || 'customer',
+        name:       fallbackName,
+        phone:      tenDigit,
+        email:      email || undefined,
+        city:       city || '',
+        role:       activeRole,
+        roles:      [activeRole],
         isVerified: true,
       });
-    } else if (!user.isVerified) {
-      user.isVerified = true;
-      await user.save();
+    } else {
+      // Existing user — roles array mein add karo agar nahi hai
+      let changed = false;
+      if (!user.isVerified) { user.isVerified = true; changed = true; }
+
+      if (!user.roles) user.roles = [user.role];
+
+      if (!user.roles.includes(activeRole)) {
+        user.roles.push(activeRole);
+        changed = true;
+      }
+      if (changed) await user.save();
     }
 
-    if (user.role === 'provider') {
+    // Provider App se login — approval check
+    if (activeRole === 'provider') {
       const provider = await Provider.findOne({ user: user._id });
-      if (provider && !provider.isApproved)
+      if (!provider)
+        return res.status(404).json({ success: false, message: 'Driver profile nahi mili. Pehle register karo.' });
+      if (!provider.isApproved)
         return res.status(403).json({ success: false, message: 'Aapka account abhi admin se approve nahi hua.' });
     }
 
     let providerData = null;
-    if (user.role === 'provider') {
+    if (activeRole === 'provider') {
       providerData = await Provider.findOne({ user: user._id })
         .select('vehicle documents rating stats status isApproved isOnline wallet');
     }
 
-    const payload = await buildTokenResponse(user, providerData);
+    const payload = await buildTokenResponse(user, providerData, activeRole);
     res.status(200).json({ success: true, message: 'Login successful!', ...payload });
   } catch (error) {
     console.error('verifyPhoneOTP Error:', error);

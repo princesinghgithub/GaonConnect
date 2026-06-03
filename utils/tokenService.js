@@ -10,8 +10,13 @@ const refreshKey   = (token)  => `refresh:${token}`;
 const userTokenKey = (userId) => `user_tokens:${userId}`;
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
-const generateAccessToken = (userId) =>
-  jwt.sign({ id: userId.toString() }, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY_SEC });
+// activeRole = 'customer' | 'provider' — jis app se login ho raha hai
+const generateAccessToken = (userId, activeRole = 'customer') =>
+  jwt.sign(
+    { id: userId.toString(), role: activeRole },
+    process.env.JWT_SECRET,
+    { expiresIn: ACCESS_TOKEN_EXPIRY_SEC }
+  );
 
 const generateRefreshToken = () => crypto.randomBytes(40).toString('hex');
 

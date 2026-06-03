@@ -27,6 +27,12 @@ const UserSchema = new mongoose.Schema({
     enum:    ['customer', 'provider', 'admin'],
     default: 'customer',
   },
+  // Dual role support — same person customer + provider dono ho sakta hai
+  roles: {
+    type:    [String],
+    enum:    ['customer', 'provider', 'admin'],
+    default: ['customer'],
+  },
   wallet: {
     type:    Number,
     default: 0,
