@@ -1,9 +1,58 @@
 const crypto = require('crypto');
+const https  = require('https');
 const redis  = require('../config/redis');
 
 const OTP_TTL_SECONDS    = 600;  // 10 minutes
 const COOLDOWN_SECONDS   = 60;   // 1 min between resends
 const MAX_VERIFY_ATTEMPTS = 5;
+
+// ─── Fast2SMS OTP Send ────────────────────────────────────────────────────────
+const sendSmsViaFast2SMS = (phone, otp) => {
+  return new Promise((resolve) => {
+    const apiKey = process.env.FAST2SMS_API_KEY;
+    if (!apiKey) {
+      console.error('FAST2SMS_API_KEY .env mein nahi hai');
+      return resolve();
+    }
+
+    // phone = +91XXXXXXXXXX → sirf 10 digits chahiye Fast2SMS ko
+    const mobile = phone.replace('+91', '');
+
+    const message = encodeURIComponent(`Your GaonConnect OTP is ${otp}. Valid for 10 minutes. Do not share with anyone.`);
+    const path = `/dev/bulkV2?authorization=${apiKey}&message=${message}&route=q&numbers=${mobile}`;
+
+    const options = {
+      hostname: 'www.fast2sms.com',
+      path,
+      method:  'GET',
+      headers: { 'cache-control': 'no-cache' },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end',  () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.return) {
+            console.log(`SMS sent to ${mobile}`);
+            resolve(parsed);
+          } else {
+            console.error('Fast2SMS error:', data);
+            resolve();
+          }
+        } catch { resolve(); }
+      });
+    });
+
+    req.on('error', (err) => {
+      console.error('Fast2SMS request failed:', err.message);
+      resolve();
+    });
+
+    req.end();
+  });
+};
 
 const normalizePhone = (phone) => {
   const cleaned = String(phone || '').replace(/[^\d]/g, '');
@@ -45,10 +94,17 @@ const sendOTP = async (phone) => {
 
     if (process.env.NODE_ENV !== 'production') {
       console.log(`\n📱 [DEV] OTP for ${normalized}: ${otp}\n`);
+    } else {
+      // Production: Fast2SMS se real SMS bhejo
+      await sendSmsViaFast2SMS(normalized, otp);
     }
-    // Production mein yahan SMS API call hogi (MSG91/Twilio)
 
-    return { success: true, message: 'OTP sent!', otp, phone: normalized };
+    return {
+      success: true,
+      message: 'OTP sent!',
+      phone: normalized,
+      ...(process.env.NODE_ENV !== 'production' && { otp }), // dev mein hi return karo
+    };
   } catch (error) {
     console.error('sendOTP Error:', error);
     return { success: false, message: 'OTP bhejne mein error. Dobara try karo.' };

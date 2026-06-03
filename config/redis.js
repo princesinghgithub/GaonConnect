@@ -1,24 +1,33 @@
 const Redis = require('ioredis');
 
-const redisConfig = {
-  host:     process.env.REDIS_HOST     || '127.0.0.1',
-  port:     parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD || undefined,
-  db:       parseInt(process.env.REDIS_DB   || '0'),
-  lazyConnect:       true,
-  maxRetriesPerRequest: 3,
-  retryStrategy: (times) => {
-    if (times > 10) {
-      console.error('❌ Redis: Max retry attempts reached');
-      return null;
-    }
-    const delay = Math.min(times * 100, 3000);
-    console.warn(`⚠️  Redis: Retrying connection (attempt ${times}) in ${delay}ms`);
-    return delay;
-  },
+const retryStrategy = (times) => {
+  if (times > 10) {
+    console.error('❌ Redis: Max retry attempts reached');
+    return null;
+  }
+  const delay = Math.min(times * 100, 3000);
+  console.warn(`⚠️  Redis: Retrying connection (attempt ${times}) in ${delay}ms`);
+  return delay;
 };
 
-const redis = new Redis(redisConfig);
+// REDIS_URL set hai (Upstash/cloud) — URL se connect karo
+// Warna local host/port/password use karo
+const redis = process.env.REDIS_URL
+  ? new Redis(process.env.REDIS_URL, {
+      lazyConnect:          true,
+      maxRetriesPerRequest: 3,
+      retryStrategy,
+      tls: { rejectUnauthorized: false }, // Upstash TLS ke liye
+    })
+  : new Redis({
+      host:                 process.env.REDIS_HOST     || '127.0.0.1',
+      port:                 parseInt(process.env.REDIS_PORT || '6379'),
+      password:             process.env.REDIS_PASSWORD || undefined,
+      db:                   parseInt(process.env.REDIS_DB   || '0'),
+      lazyConnect:          true,
+      maxRetriesPerRequest: 3,
+      retryStrategy,
+    });
 
 redis.on('connect',   () => console.log('✅ Redis: Connected'));
 redis.on('ready',     () => console.log('✅ Redis: Ready'));
