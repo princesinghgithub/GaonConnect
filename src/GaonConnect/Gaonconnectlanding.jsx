@@ -644,7 +644,7 @@ const GaonConnectLanding = () => {
           <div className="flex flex-wrap justify-center gap-6 mb-6 text-sm">
             <a href="#about" className="hover:text-orange-400 transition-colors">हमारे बारे में</a>
             <a href="#contact" className="hover:text-orange-400 transition-colors">संपर्क करें</a>
-            <a href="#privacy" className="hover:text-orange-400 transition-colors">प्राइवेसी पॉलिसी</a>
+            <button onClick={() => navigate('/privacy-policy')} className="hover:text-orange-400 transition-colors">प्राइवेसी पॉलिसी</button>
             <a href="#terms" className="hover:text-orange-400 transition-colors">नियम और शर्तें</a>
             <a href="#support" className="hover:text-orange-400 transition-colors">सहायता</a>
           </div>

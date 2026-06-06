@@ -163,6 +163,7 @@ import BookRide from './tabs/BookRide';
 import RideTracking from './components/RideTracking';
 import GaonConnectLanding from './GaonConnect/Gaonconnectlanding'
 import WhatsAppFloat from "./components/pages/WhatsAppFloat";
+import PrivacyPolicy from "./components/pages/PrivacyPolicy";
 
 const AuthScreens = () => {
   const { login } = useAuth();
@@ -297,6 +298,9 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* PRIVACY POLICY - Public page for Play Store */}
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           </Routes>
         </DriverProvider>
           <WhatsAppFloat /> 
