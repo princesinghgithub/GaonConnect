@@ -86,7 +86,7 @@ const schemas = {
         longitude: Joi.number().min(-180).max(180).required(),
       }).required(),
     }).required(),
-    vehicleType:        Joi.string().valid('auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb').required(),
+    vehicleType:        Joi.string().valid('auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb', 'ambulance', 'wedding').required(),
     distance:           Joi.number().positive().required(),
     estimatedDuration:  Joi.number().positive().required(),
     fare:               Joi.number().positive().required(),

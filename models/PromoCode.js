@@ -60,7 +60,7 @@ const PromoCodeSchema = new mongoose.Schema({
   // Vehicle type restrict kar sako
   applicableVehicles: [{
     type: String,
-    enum: ['auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb'],
+    enum: ['auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb', 'ambulance', 'wedding'],
   }],
 
   validFrom:  { type: Date, default: Date.now },

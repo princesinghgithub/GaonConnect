@@ -1716,10 +1716,11 @@
 
 
 // controllers/adminController.js
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Driver = require('../models/Provider')
 const Ride = require('../models/Ride');
-const Payment = require('../models/Withdrawal')
+const Transaction = require('../models/Transaction');
 const Setting = require('../models/Setting');
 const Notification = require('../models/Notification');
 
@@ -1735,11 +1736,11 @@ const getStats = async (req, res) => {
       pendingDrivers,
       todayRevenue
     ] = await Promise.all([
-      User.countDocuments({ role: 'user' }),
+      User.countDocuments({ $or: [{ role: 'customer' }, { roles: 'customer' }] }),
       Driver.countDocuments(),
       Ride.countDocuments(),
-      Ride.countDocuments({ status: 'ongoing' }),
-      Driver.countDocuments({ status: 'pending' }),
+      Ride.countDocuments({ status: { $in: ['accepted', 'arrived', 'started', 'working'] } }),
+      Driver.countDocuments({ isApproved: false, isRejected: { $ne: true } }),
       Ride.aggregate([
         {
           $match: {
@@ -1814,7 +1815,7 @@ const getRecentActivity = async (req, res) => {
 
       // ✅ FIXED POPULATE
       .populate('customer', 'name email phone')
-      .populate('provider', 'name phone vehicleNumber')
+      .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name phone' } })
 
       .select(`
         status
@@ -1877,7 +1878,7 @@ const getRevenueChart = async (req, res) => {
           _id: {
             $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }
           },
-          revenue: { $sum: '$fare' },
+          revenue: { $sum: { $ifNull: ['$finalFare', '$fare'] } },
           rides: { $sum: 1 }
         }
       },
@@ -1913,16 +1914,17 @@ const getDashboardMetrics = async (req, res) => {
         {
           $group: {
             _id: null,
-            total: { $sum: '$fare' }
+            total: { $sum: { $ifNull: ['$finalFare', '$fare'] } }
           }
         }
       ]),
       Driver.countDocuments({ isOnline: true }),
       Driver.aggregate([
+        { $match: { 'rating.count': { $gt: 0 } } },
         {
           $group: {
             _id: null,
-            avgRating: { $avg: '$rating' }
+            avgRating: { $avg: '$rating.average' }
           }
         }
       ]),
@@ -1945,11 +1947,198 @@ const getDashboardMetrics = async (req, res) => {
         monthlyRevenue: metrics[0][0]?.total || 0,
         activeDrivers: metrics[1],
         averageRating: metrics[2][0]?.avgRating || 0,
-        completionRate: metrics[3][0] 
+        completionRate: metrics[3][0]
           ? (metrics[3][0].completed / metrics[3][0].total * 100).toFixed(2)
           : 0
       }
     });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// ===== DASHBOARD OVERVIEW (single call — admin dashboard home page) =====
+
+// Service categories jaise dashboard pe dikhte hain — vehicleType ko inme group karte hain
+const VEHICLE_GROUPS = {
+  auto_cab:  ['auto', 'car', 'bike'],
+  tractor:   ['tractor'],
+  goods:     ['truck', 'tempo'],
+  jcb:       ['jcb'],
+  ambulance: ['ambulance'],
+  wedding:   ['wedding'],
+};
+
+const SERVICE_LABELS = {
+  auto: 'Auto', bike: 'Bike', car: 'Cab', tractor: 'Tractor',
+  tempo: 'Tempo', truck: 'Goods', jcb: 'JCB', ambulance: 'Ambulance', wedding: 'Wedding',
+};
+
+const ACTIVE_RIDE_STATUSES = ['accepted', 'arrived', 'started', 'working'];
+
+const mapLiveStatus = (ride) => {
+  if (ride.status === 'completed') return 'done';
+  if (ride.status === 'cancelled') return 'cancelled';
+  if (ride.vehicleType === 'ambulance') return 'urgent';
+  if (ACTIVE_RIDE_STATUSES.includes(ride.status)) return 'active';
+  return 'wait';
+};
+
+const getDashboardOverview = async (req, res) => {
+  try {
+    const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+    const [
+      todayBookings,
+      activeBookings,
+      pendingBookings,
+      activeDrivers,
+      todayRevenueAgg,
+      yesterdayRevenueAgg,
+      ratingAgg,
+      serviceWiseAgg,
+      liveRides,
+    ] = await Promise.all([
+      Ride.countDocuments({ createdAt: { $gte: todayStart } }),
+      Ride.countDocuments({ status: { $in: ACTIVE_RIDE_STATUSES } }),
+      Ride.countDocuments({ status: { $in: ['searching', 'scheduled'] } }),
+      Driver.countDocuments({ isOnline: true }),
+      Ride.aggregate([
+        { $match: { status: 'completed', createdAt: { $gte: todayStart } } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$finalFare', '$fare'] } } } },
+      ]),
+      Ride.aggregate([
+        { $match: { status: 'completed', createdAt: { $gte: yesterdayStart, $lt: todayStart } } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$finalFare', '$fare'] } } } },
+      ]),
+      Driver.aggregate([
+        { $match: { 'rating.count': { $gt: 0 } } },
+        { $group: { _id: null, avg: { $avg: '$rating.average' } } },
+      ]),
+      Ride.aggregate([
+        { $match: { createdAt: { $gte: todayStart } } },
+        { $group: { _id: '$vehicleType', count: { $sum: 1 } } },
+      ]),
+      Ride.find({ createdAt: { $gte: todayStart } })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .populate('customer', 'name')
+        .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name' } })
+        .select('vehicleType status customer provider createdAt'),
+    ]);
+
+    // Service-wise booking count — vehicleType ko group mein daalo
+    const serviceWiseBookings = Object.fromEntries(Object.keys(VEHICLE_GROUPS).map((g) => [g, 0]));
+    serviceWiseAgg.forEach(({ _id: vehicleType, count }) => {
+      const group = Object.keys(VEHICLE_GROUPS).find((g) => VEHICLE_GROUPS[g].includes(vehicleType));
+      if (group) serviceWiseBookings[group] += count;
+    });
+
+    const liveBookings = liveRides.map((ride) => ({
+      id: ride._id,
+      service: SERVICE_LABELS[ride.vehicleType] || ride.vehicleType,
+      customer: ride.customer?.name || 'N/A',
+      driver: ride.provider?.user?.name || 'Pending',
+      status: mapLiveStatus(ride),
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        stats: {
+          todayBookings,
+          activeBookings,
+          pendingBookings,
+          activeDrivers,
+          todayRevenue: todayRevenueAgg[0]?.total || 0,
+          yesterdayRevenue: yesterdayRevenueAgg[0]?.total || 0,
+          averageRating: ratingAgg[0]?.avg ? Number(ratingAgg[0].avg.toFixed(1)) : 0,
+        },
+        serviceWiseBookings,
+        liveBookings,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// ===== AI AGENT TASKS (real data se derive kiye gaye tasks) =====
+
+const getAIAgentTasks = async (req, res) => {
+  try {
+    const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+    const yesterday = new Date(todayStart);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const [autoConfirmedToday, pendingDrivers, newApprovedDrivers] = await Promise.all([
+      Ride.countDocuments({
+        createdAt: { $gte: todayStart },
+        provider: { $ne: null },
+        status: { $ne: 'cancelled' },
+      }),
+      Driver.find({ isApproved: false, isRejected: { $ne: true } }).populate('user', 'name').limit(5).select('user vehicle createdAt'),
+      Driver.find({ isApproved: true, updatedAt: { $gte: yesterday } }).populate('user', 'name').limit(5).select('user vehicle updatedAt'),
+    ]);
+
+    const tasks = [];
+
+    if (autoConfirmedToday > 0) {
+      tasks.push({
+        type: 'auto_confirm',
+        title: `${autoConfirmedToday} bookings auto-confirm`,
+        subtitle: 'Driver milaya, SMS bheja gaya',
+        count: autoConfirmedToday,
+      });
+    }
+
+    if (pendingDrivers.length > 0) {
+      tasks.push({
+        type: 'driver_onboarding',
+        title: `${pendingDrivers.length} drivers onboarding pending`,
+        subtitle: 'Documents verify karne hain',
+        count: pendingDrivers.length,
+        drivers: pendingDrivers.map((d) => ({
+          id: d._id,
+          name: d.user?.name || 'N/A',
+          vehicleType: d.vehicle?.type,
+        })),
+      });
+    }
+
+    if (newApprovedDrivers.length > 0) {
+      tasks.push({
+        type: 'broadcast_ready',
+        title: 'WhatsApp broadcast ready',
+        subtitle: `Naya ${newApprovedDrivers[0].vehicle?.type || ''} driver join hua — customers ko batao`,
+        count: newApprovedDrivers.length,
+        drivers: newApprovedDrivers.map((d) => ({
+          id: d._id,
+          name: d.user?.name || 'N/A',
+          vehicleType: d.vehicle?.type,
+        })),
+      });
+    }
+
+    // Kisan marketplace — yeh feature abhi backend mein nahi bana hai
+    tasks.push({
+      type: 'kisan_marketplace',
+      title: 'Kisan marketplace',
+      subtitle: 'Yeh feature abhi develop nahi hua hai',
+      available: false,
+    });
+
+    res.json({ success: true, data: { tasks } });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -1964,31 +2153,49 @@ const getDashboardMetrics = async (req, res) => {
 const getAllDrivers = async (req, res) => {
   try {
     const { page = 1, limit = 20, status, search } = req.query;
-    
-    const query = {};
-    
-    if (status) query.status = status;
+
+    const matchStage = {};
+    if (status) matchStage.status = status;
+
+    const pipeline = [
+      { $match: matchStage },
+      { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'user' } },
+      { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+    ];
+
     if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
-      ];
+      pipeline.push({
+        $match: {
+          $or: [
+            { 'user.name': { $regex: search, $options: 'i' } },
+            { 'user.email': { $regex: search, $options: 'i' } },
+            { 'user.phone': { $regex: search, $options: 'i' } },
+            { 'vehicle.number': { $regex: search, $options: 'i' } },
+          ],
+        },
+      });
     }
 
-    const drivers = await Driver.find(query)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ createdAt: -1 })
-      .select('-password');
+    pipeline.push(
+      { $project: { 'user.password': 0 } },
+      { $sort: { createdAt: -1 } },
+      {
+        $facet: {
+          data: [{ $skip: (page - 1) * limit }, { $limit: Number(limit) }],
+          totalCount: [{ $count: 'count' }],
+        },
+      }
+    );
 
-    const count = await Driver.countDocuments(query);
+    const result = await Driver.aggregate(pipeline);
+    const drivers = result[0]?.data || [];
+    const count = result[0]?.totalCount[0]?.count || 0;
 
     res.json({
       success: true,
       data: drivers,
       totalPages: Math.ceil(count / limit),
-      currentPage: page,
+      currentPage: Number(page),
       total: count
     });
   } catch (error) {
@@ -2007,7 +2214,7 @@ const getAllDrivers = async (req, res) => {
 
 const getDriverById = async (req, res) => {
   try {
-    const driver = await Driver.findById(req.params.id);
+    const driver = await Driver.findById(req.params.id).populate('user', '-password');
 
     if (!driver) {
       return res.status(404).json({
@@ -2018,7 +2225,7 @@ const getDriverById = async (req, res) => {
 
     // Get driver's ride statistics
     const rideStats = await Ride.aggregate([
-      { $match: { driver: driver._id } },
+      { $match: { provider: driver._id } },
       {
         $group: {
           _id: null,
@@ -2026,8 +2233,10 @@ const getDriverById = async (req, res) => {
           completedRides: {
             $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
           },
-          totalEarnings: { $sum: '$fare' },
-          avgRating: { $avg: '$rating' }
+          totalEarnings: {
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] }
+          },
+          avgRating: { $avg: '$rating.driverRating' }
         }
       }
     ]);
@@ -2109,6 +2318,7 @@ const approveDriver = async (req, res) => {
         isApproved:  true,
         approvedAt:  Date.now(),
         approvedBy:  req.user._id,
+        isRejected:  false,
       },
       { new: true }
     ).populate('user', 'name');
@@ -2136,8 +2346,9 @@ const rejectDriver = async (req, res) => {
 
     const driver = await Driver.findByIdAndUpdate(
       req.params.id,
-      { 
-        status: 'rejected',
+      {
+        isApproved: false,
+        isRejected: true,
         rejectionReason: reason,
         rejectedAt: Date.now(),
         rejectedBy: req.user._id
@@ -2278,8 +2489,8 @@ const deleteDriver = async (req, res) => {
     }
 
     const activeRides = await Ride.countDocuments({
-      driver: driver._id,
-      status: { $in: ['pending', 'accepted', 'ongoing'] }
+      provider: driver._id,
+      status: { $in: ACTIVE_RIDE_STATUSES }
     });
 
     if (activeRides > 0) {
@@ -2308,6 +2519,14 @@ const verifyDocument = async (req, res) => {
   try {
     const { documentType, status } = req.body;
 
+    const VERIFIABLE_DOCS = ['license', 'rc', 'insurance', 'aadhaar'];
+    if (!VERIFIABLE_DOCS.includes(documentType)) {
+      return res.status(400).json({
+        success: false,
+        message: `documentType ek inme se hona chahiye: ${VERIFIABLE_DOCS.join(', ')}`
+      });
+    }
+
     const driver = await Driver.findById(req.params.id);
 
     if (!driver) {
@@ -2317,11 +2536,6 @@ const verifyDocument = async (req, res) => {
       });
     }
 
-    if (!driver.documents) driver.documents = {};
-    if (!driver.documents[documentType]) {
-      driver.documents[documentType] = {};
-    }
-    
     driver.documents[documentType].verified = status === 'verified';
     driver.documents[documentType].verifiedAt = Date.now();
     driver.documents[documentType].verifiedBy = req.user._id;
@@ -2344,10 +2558,10 @@ const verifyDocument = async (req, res) => {
 
 const getDriverStats = async (req, res) => {
   try {
-    const driverId = req.params.id;
+    const driverId = new mongoose.Types.ObjectId(req.params.id);
 
     const stats = await Ride.aggregate([
-      { $match: { driver: require('mongoose').Types.ObjectId(driverId) } },
+      { $match: { provider: driverId } },
       {
         $group: {
           _id: null,
@@ -2359,29 +2573,29 @@ const getDriverStats = async (req, res) => {
             $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] }
           },
           totalEarnings: {
-            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$fare', 0] }
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] }
           },
-          avgRating: { $avg: '$rating' },
+          avgRating: { $avg: '$rating.driverRating' },
           totalDistance: { $sum: '$distance' },
-          avgFare: { $avg: '$fare' }
+          avgFare: { $avg: { $ifNull: ['$finalFare', '$fare'] } }
         }
       }
     ]);
 
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
     const todayStats = await Ride.aggregate([
-      { 
-        $match: { 
-          driver: require('mongoose').Types.ObjectId(driverId),
+      {
+        $match: {
+          provider: driverId,
           createdAt: { $gte: todayStart }
-        } 
+        }
       },
       {
         $group: {
           _id: null,
           todayRides: { $sum: 1 },
           todayEarnings: {
-            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$fare', 0] }
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] }
           }
         }
       }
@@ -2419,12 +2633,12 @@ const getDriverStats = async (req, res) => {
 const getAllRides = async (req, res) => {
   try {
     const { page = 1, limit = 20, status, driverId, userId, startDate, endDate } = req.query;
-    
+
     const query = {};
-    
+
     if (status) query.status = status;
-    if (driverId) query.driver = driverId;
-    if (userId) query.user = userId;
+    if (driverId) query.provider = driverId;
+    if (userId) query.customer = userId;
     if (startDate || endDate) {
       query.createdAt = {};
       if (startDate) query.createdAt.$gte = new Date(startDate);
@@ -2436,7 +2650,7 @@ const getAllRides = async (req, res) => {
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 })
       .populate('customer', 'name email phone')
-      .populate('provider', 'name phone vehicleNumber');
+      .populate({ path: 'provider', select: 'user vehicle rating', populate: { path: 'user', select: 'name phone' } });
 
     const count = await Ride.countDocuments(query);
 
@@ -2456,67 +2670,11 @@ const getAllRides = async (req, res) => {
   }
 };
 
-// const getAllRides = async (req, res) => {
-//   try {
-//     const {
-//       page = 1,
-//       limit = 20,
-//       status,
-//       driverId,
-//       userId,
-//       startDate,
-//       endDate
-//     } = req.query;
-
-//     const query = {};
-
-//     if (status) query.status = status;
-//     if (driverId) query.driver = driverId;
-//     if (userId) query.user = userId;
-
-//     if (startDate || endDate) {
-//       query.createdAt = {};
-//       if (startDate) query.createdAt.$gte = new Date(startDate);
-//       if (endDate) query.createdAt.$lte = new Date(endDate);
-//     }
-
-//     const pageNum = parseInt(page);
-//     const limitNum = parseInt(limit);
-
-//     const rides = await Ride.find(query)
-//       .limit(limitNum)
-//       .skip((pageNum - 1) * limitNum)
-//       .sort({ createdAt: -1 })
-//       .populate('user', 'name email phone')     // ✅ FIXED
-//       .populate('driver', 'name phone vehicleNumber');
-
-//     const count = await Ride.countDocuments(query);
-
-//     res.json({
-//       success: true,
-//       data: rides,
-//       totalPages: Math.ceil(count / limitNum),
-//       currentPage: pageNum,
-//       total: count
-//     });
-
-//   } catch (error) {
-//     console.error('Get All Rides Error:', error); // 👈 VERY IMPORTANT
-//     res.status(500).json({
-//       success: false,
-//       message: 'Server error',
-//       error: error.message
-//     });
-//   }
-// };
-
-
-
 const getRideDetails = async (req, res) => {
   try {
     const ride = await Ride.findById(req.params.id)
-      .populate('user', 'name email phone profileImage')
-      .populate('driver', 'name phone vehicleNumber vehicleType profileImage rating');
+      .populate('customer', 'name email phone profileImage')
+      .populate({ path: 'provider', select: 'user vehicle rating', populate: { path: 'user', select: 'name email phone profileImage' } });
 
     if (!ride) {
       return res.status(404).json({
@@ -2617,12 +2775,12 @@ const getRideStats = async (req, res) => {
             $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] }
           },
           ongoing: {
-            $sum: { $cond: [{ $eq: ['$status', 'ongoing'] }, 1, 0] }
+            $sum: { $cond: [{ $in: ['$status', ACTIVE_RIDE_STATUSES] }, 1, 0] }
           },
           totalRevenue: {
-            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$fare', 0] }
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] }
           },
-          avgFare: { $avg: '$fare' }
+          avgFare: { $avg: { $ifNull: ['$finalFare', '$fare'] } }
         }
       }
     ]);
@@ -2649,11 +2807,11 @@ const getRideStats = async (req, res) => {
 
 const getOngoingRides = async (req, res) => {
   try {
-    const ongoingRides = await Ride.find({ 
-      status: { $in: ['ongoing', 'accepted', 'arriving'] }
+    const ongoingRides = await Ride.find({
+      status: { $in: ACTIVE_RIDE_STATUSES }
     })
-      .populate('user', 'name phone')
-      .populate('driver', 'name phone vehicleNumber location')
+      .populate('customer', 'name phone')
+      .populate({ path: 'provider', select: 'user vehicle currentLocation', populate: { path: 'user', select: 'name phone' } })
       .sort({ createdAt: -1 });
 
     res.json({
@@ -2672,8 +2830,8 @@ const getOngoingRides = async (req, res) => {
 const trackRide = async (req, res) => {
   try {
     const ride = await Ride.findById(req.params.id)
-      .populate('driver', 'name phone location vehicleNumber')
-      .select('status pickup dropoff driver currentLocation estimatedArrival');
+      .select('status pickup drop provider')
+      .populate({ path: 'provider', select: 'user vehicle currentLocation', populate: { path: 'user', select: 'name phone' } });
 
     if (!ride) {
       return res.status(404).json({
@@ -2697,12 +2855,13 @@ const trackRide = async (req, res) => {
 
 const getActiveDriversLocation = async (req, res) => {
   try {
-    const activeDrivers = await Driver.find({ 
+    const activeDrivers = await Driver.find({
       isOnline: true,
       isApproved: true,
-      isBlocked: false
+      isBlocked: { $ne: true }
     })
-      .select('name phone location vehicleType vehicleNumber currentRide');
+      .populate('user', 'name phone')
+      .select('user vehicle currentLocation status');
 
     res.json({
       success: true,
@@ -2722,10 +2881,11 @@ const getActiveDriversLocation = async (req, res) => {
 const getAllPayments = async (req, res) => {
   try {
     const { page = 1, limit = 20, status, method, startDate, endDate } = req.query;
-    
+
+    // Ride hi payment record hai — fare/paymentMethod/paymentStatus usi mein hain
     const query = {};
-    
-    if (status) query.status = status;
+
+    if (status) query.paymentStatus = status;
     if (method) query.paymentMethod = method;
     if (startDate || endDate) {
       query.createdAt = {};
@@ -2733,21 +2893,21 @@ const getAllPayments = async (req, res) => {
       if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    const payments = await Payment.find(query)
+    const payments = await Ride.find(query)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 })
-      .populate('ride')
-      .populate('user', 'name email')
-      .populate('driver', 'name phone');
+      .populate('customer', 'name email phone')
+      .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name phone' } })
+      .select('customer provider vehicleType fare finalFare paymentMethod paymentStatus status createdAt');
 
-    const count = await Payment.countDocuments(query);
+    const count = await Ride.countDocuments(query);
 
     res.json({
       success: true,
       data: payments,
       totalPages: Math.ceil(count / limit),
-      currentPage: page,
+      currentPage: Number(page),
       total: count
     });
   } catch (error) {
@@ -2761,39 +2921,47 @@ const getAllPayments = async (req, res) => {
 
 const getPaymentStats = async (req, res) => {
   try {
-    const stats = await Payment.aggregate([
+    const setting = await Setting.findOne();
+    const commissionPct = setting?.commission?.percentage ?? 15;
+
+    const stats = await Ride.aggregate([
+      { $match: { status: 'completed' } },
       {
         $group: {
           _id: null,
-          totalAmount: { $sum: '$amount' },
-          totalCommission: { $sum: '$commission' },
+          totalAmount: { $sum: { $ifNull: ['$finalFare', '$fare'] } },
           totalTransactions: { $sum: 1 },
           cashPayments: {
-            $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$amount', 0] }
+            $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] }
           },
           onlinePayments: {
-            $sum: { $cond: [{ $eq: ['$paymentMethod', 'online'] }, '$amount', 0] }
+            $sum: { $cond: [{ $eq: ['$paymentMethod', 'online'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] }
           },
           successfulPayments: {
-            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ['$paymentStatus', 'paid'] }, 1, 0] }
           },
           failedPayments: {
-            $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ['$paymentStatus', 'failed'] }, 1, 0] }
           }
         }
       }
     ]);
 
+    const result = stats[0] || {
+      totalAmount: 0,
+      totalTransactions: 0,
+      cashPayments: 0,
+      onlinePayments: 0,
+      successfulPayments: 0,
+      failedPayments: 0
+    };
+
     res.json({
       success: true,
-      data: stats[0] || {
-        totalAmount: 0,
-        totalCommission: 0,
-        totalTransactions: 0,
-        cashPayments: 0,
-        onlinePayments: 0,
-        successfulPayments: 0,
-        failedPayments: 0
+      data: {
+        ...result,
+        totalCommission: Math.round(result.totalAmount * commissionPct / 100),
+        commissionPercent: commissionPct,
       }
     });
   } catch (error) {
@@ -2807,10 +2975,18 @@ const getPaymentStats = async (req, res) => {
 
 const getPendingWithdrawals = async (req, res) => {
   try {
-    // For now, return empty array if Withdrawal model doesn't exist
+    // Driver withdrawal requests Transaction collection mein store hote hain (type:'debit')
+    const withdrawals = await Transaction.find({ type: 'debit', status: 'pending' })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: 'provider',
+        select: 'user vehicle wallet bankDetails',
+        populate: { path: 'user', select: 'name phone' },
+      });
+
     res.json({
       success: true,
-      data: []
+      data: withdrawals
     });
   } catch (error) {
     res.status(500).json({
@@ -2825,9 +3001,36 @@ const processWithdrawal = async (req, res) => {
   try {
     const { status, remarks } = req.body;
 
+    if (!['completed', 'failed'].includes(status)) {
+      return res.status(400).json({ success: false, message: "Status 'completed' ya 'failed' hona chahiye" });
+    }
+
+    const txn = await Transaction.findOne({ _id: req.params.id, type: 'debit', status: 'pending' });
+    if (!txn) {
+      return res.status(404).json({ success: false, message: 'Pending withdrawal request nahi mili' });
+    }
+
+    txn.status = status;
+    txn.processedAt = new Date();
+    if (status === 'failed') txn.failureReason = remarks;
+    await txn.save();
+
+    if (status === 'completed') {
+      // Pending amount clear karo, total withdrawals mein add karo
+      await Driver.findByIdAndUpdate(txn.provider, {
+        $inc: { 'wallet.pendingAmount': -txn.amount, 'wallet.totalWithdrawals': txn.amount },
+      });
+    } else {
+      // Failed — amount wapas balance mein refund karo
+      await Driver.findByIdAndUpdate(txn.provider, {
+        $inc: { 'wallet.balance': txn.amount, 'wallet.pendingAmount': -txn.amount },
+      });
+    }
+
     res.json({
       success: true,
-      message: `Withdrawal ${status} successfully`
+      message: `Withdrawal ${status}`,
+      data: txn
     });
   } catch (error) {
     res.status(500).json({
@@ -2842,6 +3045,9 @@ const getCommissionReport = async (req, res) => {
   try {
     const { from_date, to_date } = req.query;
 
+    const setting = await Setting.findOne();
+    const commissionPct = setting?.commission?.percentage ?? 15;
+
     const query = { status: 'completed' };
     if (from_date || to_date) {
       query.createdAt = {};
@@ -2849,41 +3055,39 @@ const getCommissionReport = async (req, res) => {
       if (to_date) query.createdAt.$lte = new Date(to_date);
     }
 
-    const commissionData = await Payment.aggregate([
+    const daily = await Ride.aggregate([
       { $match: query },
       {
         $group: {
           _id: {
             $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }
           },
-          totalCommission: { $sum: '$commission' },
-          totalAmount: { $sum: '$amount' },
+          totalAmount: { $sum: { $ifNull: ['$finalFare', '$fare'] } },
           transactionCount: { $sum: 1 }
         }
       },
       { $sort: { _id: 1 } }
     ]);
 
-    const summary = await Payment.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: null,
-          totalCommission: { $sum: '$commission' },
-          totalRevenue: { $sum: '$amount' },
-          totalTransactions: { $sum: 1 }
-        }
-      }
-    ]);
+    const dailyWithCommission = daily.map((d) => ({
+      date: d._id,
+      totalAmount: d.totalAmount,
+      transactionCount: d.transactionCount,
+      totalCommission: Math.round(d.totalAmount * commissionPct / 100),
+    }));
+
+    const totalRevenue = daily.reduce((sum, d) => sum + d.totalAmount, 0);
+    const totalTransactions = daily.reduce((sum, d) => sum + d.transactionCount, 0);
 
     res.json({
       success: true,
       data: {
-        daily: commissionData,
-        summary: summary[0] || {
-          totalCommission: 0,
-          totalRevenue: 0,
-          totalTransactions: 0
+        daily: dailyWithCommission,
+        summary: {
+          totalCommission: Math.round(totalRevenue * commissionPct / 100),
+          totalRevenue,
+          totalTransactions,
+          commissionPercent: commissionPct,
         }
       }
     });
@@ -2901,16 +3105,21 @@ const getCommissionReport = async (req, res) => {
 const getAllUsers = async (req, res) => {
   try {
     const { page = 1, limit = 20, search } = req.query;
-    
-    const query = { role: 'user' };
-    
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
-      ];
-    }
+
+    // 'customer' role wale ya dual-role mein customer wale users
+    const customerFilter = { $or: [{ role: 'customer' }, { roles: 'customer' }] };
+    const query = search
+      ? {
+          $and: [
+            customerFilter,
+            { $or: [
+              { name: { $regex: search, $options: 'i' } },
+              { email: { $regex: search, $options: 'i' } },
+              { phone: { $regex: search, $options: 'i' } }
+            ] }
+          ]
+        }
+      : customerFilter;
 
     const users = await User.find(query)
       .limit(limit * 1)
@@ -2924,7 +3133,7 @@ const getAllUsers = async (req, res) => {
       success: true,
       data: users,
       totalPages: Math.ceil(count / limit),
-      currentPage: page,
+      currentPage: Number(page),
       total: count
     });
   } catch (error) {
@@ -2947,18 +3156,18 @@ const getUserDetails = async (req, res) => {
       });
     }
 
-    const rides = await Ride.find({ user: user._id })
+    const rides = await Ride.find({ customer: user._id })
       .sort({ createdAt: -1 })
       .limit(10)
-      .populate('driver', 'name vehicleNumber');
+      .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name' } });
 
     const stats = await Ride.aggregate([
-      { $match: { user: user._id } },
+      { $match: { customer: user._id } },
       {
         $group: {
           _id: null,
           totalRides: { $sum: 1 },
-          totalSpent: { $sum: '$fare' },
+          totalSpent: { $sum: { $ifNull: ['$finalFare', '$fare'] } },
           completedRides: {
             $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
           },
@@ -3222,11 +3431,11 @@ const getAnalytics = async (req, res) => {
       ]),
       
       User.aggregate([
-        { 
-          $match: { 
+        {
+          $match: {
             createdAt: { $gte: startDate },
-            role: 'user'
-          } 
+            $or: [{ role: 'customer' }, { roles: 'customer' }],
+          }
         },
         {
           $group: {
@@ -3283,29 +3492,30 @@ const exportReport = async (req, res) => {
     switch(type) {
       case 'rides':
         data = await Ride.find(query)
-          .populate('user', 'name email')
-          .populate('driver', 'name phone')
+          .populate('customer', 'name email phone')
+          .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name phone' } })
           .lean();
         filename = 'rides-report.csv';
         break;
-        
+
       case 'payments':
-        data = await Payment.find(query)
-          .populate('user', 'name email')
-          .populate('driver', 'name phone')
+        data = await Ride.find({ ...query, status: 'completed' })
+          .populate('customer', 'name email phone')
+          .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name phone' } })
+          .select('customer provider vehicleType fare finalFare paymentMethod paymentStatus createdAt')
           .lean();
         filename = 'payments-report.csv';
         break;
-        
+
       case 'drivers':
         data = await Driver.find()
           .select('-password')
           .lean();
         filename = 'drivers-report.csv';
         break;
-        
+
       case 'users':
-        data = await User.find({ role: 'user' })
+        data = await User.find({ $or: [{ role: 'customer' }, { roles: 'customer' }] })
           .select('-password')
           .lean();
         filename = 'users-report.csv';
@@ -3359,12 +3569,14 @@ const getDriverPerformance = async (req, res) => {
         startDate = new Date(now.setDate(now.getDate() - 7));
     }
 
+    const driverObjectId = new mongoose.Types.ObjectId(driverId);
+
     const performance = await Ride.aggregate([
-      { 
-        $match: { 
-          driver: require('mongoose').Types.ObjectId(driverId),
+      {
+        $match: {
+          provider: driverObjectId,
           createdAt: { $gte: startDate }
-        } 
+        }
       },
       {
         $group: {
@@ -3374,9 +3586,9 @@ const getDriverPerformance = async (req, res) => {
             $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
           },
           totalEarnings: {
-            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$fare', 0] }
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] }
           },
-          avgRating: { $avg: '$rating' },
+          avgRating: { $avg: '$rating.driverRating' },
           totalDistance: { $sum: '$distance' }
         }
       },
@@ -3384,11 +3596,11 @@ const getDriverPerformance = async (req, res) => {
     ]);
 
     const overallStats = await Ride.aggregate([
-      { 
-        $match: { 
-          driver: require('mongoose').Types.ObjectId(driverId),
+      {
+        $match: {
+          provider: driverObjectId,
           createdAt: { $gte: startDate }
-        } 
+        }
       },
       {
         $group: {
@@ -3401,9 +3613,9 @@ const getDriverPerformance = async (req, res) => {
             $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] }
           },
           totalEarnings: {
-            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$fare', 0] }
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] }
           },
-          avgRating: { $avg: '$rating' },
+          avgRating: { $avg: '$rating.driverRating' },
           totalDistance: { $sum: '$distance' }
         }
       }
@@ -3524,6 +3736,8 @@ module.exports = {
   getRecentActivity,
   getRevenueChart,
   getDashboardMetrics,
+  getDashboardOverview,
+  getAIAgentTasks,
   getAllDrivers,
   getDriverById,
   approveDriver,

@@ -11,7 +11,7 @@ const {
 const promoValidateSchema = Joi.object({
   code:        Joi.string().required(),
   fare:        Joi.number().positive().required(),
-  vehicleType: Joi.string().valid('auto','bike','car','tractor','tempo','truck','jcb').optional(),
+  vehicleType: Joi.string().valid('auto','bike','car','tractor','tempo','truck','jcb','ambulance','wedding').optional(),
 });
 
 const promoCreateSchema = Joi.object({

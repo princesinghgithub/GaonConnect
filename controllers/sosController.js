@@ -87,6 +87,7 @@ exports.triggerSOS = async (req, res) => {
     const nearbyDrivers = await Provider.find({
       isOnline:   true,
       isApproved: true,
+      isBlocked:  { $ne: true },
       currentLocation: {
         $near: {
           $geometry: { type: 'Point', coordinates: [longitude, latitude] },

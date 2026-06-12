@@ -115,6 +115,7 @@ exports.createRide = async (req, res) => {
       availableDrivers = await Provider.find({
         isOnline:        true,
         isApproved:      true,
+        isBlocked:       { $ne: true },
         status:          'available',
         'vehicle.type':  vehicleType,
         currentLocation: {
@@ -131,6 +132,7 @@ exports.createRide = async (req, res) => {
       availableDrivers = await Provider.find({
         isOnline:       true,
         isApproved:     true,
+        isBlocked:      { $ne: true },
         status:         'available',
         'vehicle.type': vehicleType,
       }).select('_id deviceInfo').lean();

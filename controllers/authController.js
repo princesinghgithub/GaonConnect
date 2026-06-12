@@ -121,7 +121,7 @@ exports.verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+otp +otpExpiry');
     if (!user) return res.status(404).json({ success: false, message: 'User nahi mila' });
     if (user.otp !== otp) return res.status(400).json({ success: false, message: 'OTP galat hai' });
     if (new Date() > user.otpExpiry)

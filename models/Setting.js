@@ -25,6 +25,8 @@ const SettingSchema = new mongoose.Schema({
     tempo:   { type: vehicleRateSchema, default: { baseFare: 80,  perKmRate: 20, minimumFare: 120 } },
     truck:   { type: vehicleRateSchema, default: { baseFare: 150, perKmRate: 30, minimumFare: 200 } },
     jcb:     { type: vehicleRateSchema, default: { baseFare: 200, perKmRate: 40, minimumFare: 300 } },
+    ambulance: { type: vehicleRateSchema, default: { baseFare: 100, perKmRate: 18, minimumFare: 150 } },
+    wedding:   { type: vehicleRateSchema, default: { baseFare: 500, perKmRate: 35, minimumFare: 1500 } },
   },
 
   // ─── Surge Pricing ───────────────────────────────────────────────────────────

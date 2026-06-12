@@ -12,7 +12,7 @@ const ProviderSchema = new mongoose.Schema({
     type: {
       type: String,
       required: true,
-      enum: ['auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb']
+      enum: ['auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb', 'ambulance', 'wedding']
     },
     number: {
       type: String,
@@ -46,7 +46,11 @@ const ProviderSchema = new mongoose.Schema({
         type: Boolean,
         default: false
       },
-      verifiedAt: Date
+      verifiedAt: Date,
+      verifiedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
     },
     rc: {
       number: {
@@ -58,7 +62,11 @@ const ProviderSchema = new mongoose.Schema({
         type: Boolean,
         default: false
       },
-      verifiedAt: Date
+      verifiedAt: Date,
+      verifiedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
     },
     insurance: {
       number: {
@@ -71,7 +79,11 @@ const ProviderSchema = new mongoose.Schema({
         type: Boolean,
         default: false
       },
-      verifiedAt: Date
+      verifiedAt: Date,
+      verifiedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
     },
     aadhaar: {
       number: {
@@ -82,6 +94,11 @@ const ProviderSchema = new mongoose.Schema({
       verified: {
         type: Boolean,
         default: false
+      },
+      verifiedAt: Date,
+      verifiedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
       }
     },
     photo: {
@@ -212,6 +229,35 @@ const ProviderSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+
+  approvedAt: Date,
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+
+  isRejected: {
+    type: Boolean,
+    default: false
+  },
+  rejectionReason: String,
+  rejectedAt: Date,
+  rejectedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+
+  isBlocked: {
+    type: Boolean,
+    default: false
+  },
+  blockReason: String,
+  blockedAt: Date,
+  blockedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  unblockedAt: Date,
 
   isOnline: {
     type: Boolean,

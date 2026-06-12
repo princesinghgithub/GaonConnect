@@ -50,7 +50,7 @@ const RideSchema = new mongoose.Schema(
     vehicleType: {
       type: String,
       required: true,
-      enum: ["auto", "bike", "car", "tractor", "tempo", "truck", "jcb"],
+      enum: ["auto", "bike", "car", "tractor", "tempo", "truck", "jcb", "ambulance", "wedding"],
     },
 
     distance: {
@@ -125,7 +125,7 @@ const RideSchema = new mongoose.Schema(
 
     cancelledBy: {
       type: String,
-      enum: ["customer", "driver"],
+      enum: ["customer", "driver", "admin"],
     },
 
     cancellationReason: String,

@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 
 const { protect }                                        = require('../middleware/auth');
+const User                                               = require('../models/User');
 const { otpLimiter, loginLimiter }                       = require('../middleware/rateLimiter');
 const { validate, schemas }                              = require('../middleware/validate');
 const { verifyRefreshToken, rotateRefreshToken,
@@ -61,7 +62,8 @@ router.post('/refresh',
         return res.status(401).json({ success: false, message: 'Invalid ya expired refresh token. Dobara login karo.' });
       }
 
-      const accessToken = generateAccessToken(result.userId);
+      const user = await User.findById(result.userId);
+      const accessToken = generateAccessToken(result.userId, user?.role);
 
       return res.status(200).json({
         success: true,

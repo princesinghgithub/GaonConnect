@@ -27,6 +27,7 @@ const startScheduledRideJob = () => {
         const drivers = await Provider.find({
           isOnline:       true,
           isApproved:     true,
+          isBlocked:      { $ne: true },
           status:         'available',
           'vehicle.type': ride.vehicleType,
         }).populate('user', 'name phone');

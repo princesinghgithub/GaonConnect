@@ -11,6 +11,8 @@ const DEFAULT_RATES = {
   tempo:   { baseFare: 80,  perKmRate: 20, minimumFare: 120 },
   truck:   { baseFare: 150, perKmRate: 30, minimumFare: 200 },
   jcb:     { baseFare: 200, perKmRate: 40, minimumFare: 300 },
+  ambulance: { baseFare: 100, perKmRate: 18, minimumFare: 150 },
+  wedding:   { baseFare: 500, perKmRate: 35, minimumFare: 1500 },
 };
 
 const DEFAULT_SURGE = {

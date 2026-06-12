@@ -44,9 +44,12 @@ router.get('/stats/overview', adminController.getStats);
 router.get('/activity/recent', adminController.getRecentActivity);
 router.get('/revenue/chart', adminController.getRevenueChart);
 router.get('/dashboard/metrics', adminController.getDashboardMetrics);
+router.get('/dashboard/overview', adminController.getDashboardOverview);
+router.get('/ai-agent/tasks', adminController.getAIAgentTasks);
 
 // ===== DRIVERS MANAGEMENT =====
 router.get('/drivers', adminController.getAllDrivers);
+router.get('/drivers/live-locations', adminController.getActiveDriversLocation);
 router.get('/drivers/:id', adminController.getDriverById);
 router.get('/drivers/:id/stats', adminController.getDriverStats);
 router.get('/drivers/:id/performance', adminController.getDriverPerformance);
@@ -66,9 +69,6 @@ router.get('/rides/ongoing', adminController.getOngoingRides);
 router.get('/rides/:id', adminController.getRideDetails);
 router.get('/rides/:id/track', adminController.trackRide);
 router.post('/rides/:id/cancel', adminController.cancelRideAdmin);
-
-// ===== LIVE MAP =====
-router.get('/drivers/live-locations', adminController.getActiveDriversLocation);
 
 // ===== PAYMENTS =====
 router.get('/payments', adminController.getAllPayments);
