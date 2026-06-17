@@ -131,6 +131,7 @@ const sendInvoiceEmail = async (toEmail, customerName, html, invoiceNo) => {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    family: 4, // Railway containers ka outbound IPv6 route broken hai; force IPv4
   });
 
   await transporter.sendMail({

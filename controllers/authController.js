@@ -18,6 +18,7 @@ const sendOtpViaEmail = async (email, otp) => {
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 10000,
+    family: 4, // Railway containers ka outbound IPv6 route broken hai; force IPv4
   });
   await transporter.sendMail({
     from: `"GaonConnect" <${process.env.EMAIL_USER}>`,
