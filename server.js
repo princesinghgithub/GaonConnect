@@ -1,3 +1,4 @@
+const dns        = require('dns');
 const express    = require('express');
 const dotenv     = require('dotenv');
 const cors       = require('cors');
@@ -7,6 +8,10 @@ const path       = require('path');
 const mongoose   = require('mongoose');
 
 dotenv.config();
+
+// Railway containers have no outbound IPv6 route; Gmail SMTP (and other hosts)
+// resolve to IPv6 first and hang/fail with ENETUNREACH unless IPv4 is preferred.
+dns.setDefaultResultOrder('ipv4first');
 
 const connectDB       = require('./config/db');
 const redis           = require('./config/redis');
@@ -21,6 +26,10 @@ connectDB();
 
 const app    = express();
 const server = http.createServer(app);
+
+// Railway sits in front as a reverse proxy and sets X-Forwarded-For;
+// trust its single proxy hop so express-rate-limit sees the real client IP.
+app.set('trust proxy', 1);
 
 // ─── Security Headers (Helmet) ────────────────────────────────────────────────
 app.use(helmet());
