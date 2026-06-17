@@ -1,8 +1,8 @@
-const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const Provider = require('../models/Provider');
 const { sendOTP, verifyOTP, normalizePhone } = require('../utils/sendOTP');
 const { generateAccessToken, generateRefreshToken, saveRefreshToken } = require('../utils/tokenService');
+const { createGmailTransporter } = require('../utils/mailer');
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -12,14 +12,7 @@ const generateOTP = () => {
 };
 
 const sendOtpViaEmail = async (email, otp) => {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    family: 4, // Railway containers ka outbound IPv6 route broken hai; force IPv4
-  });
+  const transporter = await createGmailTransporter();
   await transporter.sendMail({
     from: `"GaonConnect" <${process.env.EMAIL_USER}>`,
     to: email,
