@@ -2,7 +2,7 @@ const dns = require('dns');
 const nodemailer = require('nodemailer');
 
 const GMAIL_HOST = 'smtp.gmail.com';
-const GMAIL_PORT = 465;
+const GMAIL_PORT = 587; // 465 (SMTPS) timed out on Railway; try STARTTLS port
 
 const resolveIPv4 = (hostname) =>
   new Promise((resolve) => {
@@ -19,7 +19,8 @@ const createGmailTransporter = async () => {
   return nodemailer.createTransport({
     host,
     port: GMAIL_PORT,
-    secure: true,
+    secure: false,
+    requireTLS: true,
     tls: { servername: GMAIL_HOST },
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     connectionTimeout: 10000,
