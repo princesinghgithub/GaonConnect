@@ -4,7 +4,7 @@ const User = require('../models/User');
 
 const ADMIN = {
   name:       'Prince Patel',
-  phone:      '9589892555',
+  phone:      '6260132613',
   email:      'gaonconnect.in@gmail.com',
   city:       'Rewa',
   role:       'admin',
