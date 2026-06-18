@@ -1,4 +1,4 @@
-const { createGmailTransporter } = require('./mailer');
+const { sendEmail } = require('./mailer');
 
 // ─── HTML Invoice Template ────────────────────────────────────────────────────
 const generateInvoiceHTML = (data) => {
@@ -126,12 +126,9 @@ const generateInvoiceNo = (rideId) => {
 
 // ─── Email bhejo ──────────────────────────────────────────────────────────────
 const sendInvoiceEmail = async (toEmail, customerName, html, invoiceNo) => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
+  if (!process.env.EMAIL_USER || !process.env.BREVO_API_KEY) return;
 
-  const transporter = await createGmailTransporter();
-
-  await transporter.sendMail({
-    from:    `"GaonConnect" <${process.env.EMAIL_USER}>`,
+  await sendEmail({
     to:      toEmail,
     subject: `GaonConnect Receipt - ${invoiceNo}`,
     html,

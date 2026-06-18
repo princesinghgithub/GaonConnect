@@ -2,7 +2,7 @@ const User = require('../models/User');
 const Provider = require('../models/Provider');
 const { sendOTP, verifyOTP, normalizePhone } = require('../utils/sendOTP');
 const { generateAccessToken, generateRefreshToken, saveRefreshToken } = require('../utils/tokenService');
-const { createGmailTransporter } = require('../utils/mailer');
+const { sendEmail } = require('../utils/mailer');
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -12,9 +12,7 @@ const generateOTP = () => {
 };
 
 const sendOtpViaEmail = async (email, otp) => {
-  const transporter = await createGmailTransporter();
-  await transporter.sendMail({
-    from: `"GaonConnect" <${process.env.EMAIL_USER}>`,
+  await sendEmail({
     to: email,
     subject: 'Your OTP for GaonConnect',
     text: `Your OTP is: ${otp}. Valid for 10 minutes. Do not share with anyone.`,
