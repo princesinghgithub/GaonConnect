@@ -1,4 +1,5 @@
 const crypto   = require('crypto');
+const Razorpay = require('razorpay');
 const Ride     = require('../models/Ride');
 const Provider = require('../models/Provider');
 const User     = require('../models/User');
@@ -9,6 +10,11 @@ const { applyPromoToRide }          = require('./promoController');
 const { buildAndSendInvoice }       = require('../utils/invoiceGenerator');
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+const razorpay = new Razorpay({
+  key_id:     process.env.RAZORPAY_KEY,
+  key_secret: process.env.RAZORPAY_SECRET,
+});
 
 // ─── Helper: provider ka FCM token lo ────────────────────────────────────────
 const getProviderFcm = async (providerId) => {
@@ -651,5 +657,71 @@ exports.getScheduledRidesDriver = async (req, res) => {
     return res.status(200).json({ success: true, data: rides });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ─── RAZORPAY: CREATE ORDER FOR FARE ──────────────────────────────────────────
+exports.createRazorpayOrder = async (req, res) => {
+  try {
+    const ride = await Ride.findById(req.params.id);
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride not found' });
+
+    if (ride.customer.toString() !== req.user.id)
+      return res.status(403).json({ success: false, message: 'Yeh ride aapki nahi hai' });
+
+    if (ride.paymentMethod !== 'online')
+      return res.status(400).json({ success: false, message: 'Payment method online nahi hai' });
+
+    if (ride.paymentStatus === 'paid')
+      return res.status(400).json({ success: false, message: 'Fare already paid' });
+
+    const amount = Math.round((ride.finalFare || ride.fare) * 100); // paise mein
+
+    const order = await razorpay.orders.create({
+      amount,
+      currency: 'INR',
+      receipt:  `ride_${ride._id}`,
+    });
+
+    ride.razorpayOrderId = order.id;
+    await ride.save();
+
+    return res.json({ success: true, order, key: process.env.RAZORPAY_KEY });
+  } catch (err) {
+    console.error('createRazorpayOrder Error:', err);
+    return res.status(500).json({ success: false, message: 'Razorpay order creation failed' });
+  }
+};
+
+// ─── RAZORPAY: VERIFY PAYMENT FOR FARE ────────────────────────────────────────
+exports.verifyRazorpayPayment = async (req, res) => {
+  try {
+    const { rideId, razorpayPaymentId, razorpaySignature } = req.body;
+
+    const ride = await Ride.findById(rideId);
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride not found' });
+
+    if (ride.customer.toString() !== req.user.id)
+      return res.status(403).json({ success: false, message: 'Yeh ride aapki nahi hai' });
+
+    const generatedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_SECRET)
+      .update(`${ride.razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
+
+    if (generatedSignature !== razorpaySignature) {
+      ride.paymentStatus = 'failed';
+      await ride.save();
+      return res.status(400).json({ success: false, message: 'Payment verification failed' });
+    }
+
+    ride.paymentStatus     = 'paid';
+    ride.razorpayPaymentId = razorpayPaymentId;
+    await ride.save();
+
+    return res.json({ success: true, message: 'Payment verified', ride });
+  } catch (err) {
+    console.error('verifyRazorpayPayment Error:', err);
+    return res.status(500).json({ success: false, message: 'Payment verification failed' });
   }
 };

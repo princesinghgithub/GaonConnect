@@ -20,6 +20,8 @@ const {
   getRideHistoryDriver,
   getSearchingRides,
   getScheduledRidesDriver,
+  createRazorpayOrder,
+  verifyRazorpayPayment,
 } = require('../controllers/rideController');
 
 // ─── Customer ─────────────────────────────────────────────────────────────────
@@ -39,6 +41,10 @@ router.get('/scheduled/driver', protect, getScheduledRidesDriver);
 
 // ─── Common ───────────────────────────────────────────────────────────────────
 router.post('/cancel', protect, cancelRide);
+
+// ─── Razorpay (Online Fare Payment) ───────────────────────────────────────────
+router.post('/:id/razorpay-order', protect, createRazorpayOrder);
+router.post('/razorpay-verify',    protect, verifyRazorpayPayment);
 
 // ─── Tractor/JCB Services List ────────────────────────────────────────────────
 router.get('/services/:vehicleType', protect, (req, res) => {

@@ -108,6 +108,14 @@ const RideSchema = new mongoose.Schema(
       default: "pending",
     },
 
+    razorpayOrderId: {
+      type: String,
+    },
+
+    razorpayPaymentId: {
+      type: String,
+    },
+
     rating: {
       customerRating: {
         type: Number,
