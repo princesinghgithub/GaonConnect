@@ -24,6 +24,8 @@ exports.chat = async (req, res) => {
 
   const system = SYSTEM_PROMPTS[mode] || SYSTEM_PROMPTS.ops;
 
+  console.log('🔑 GEMINI_API_KEY present:', !!process.env.GEMINI_API_KEY, 'length:', (process.env.GEMINI_API_KEY || '').length);
+
   try {
     const { data } = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
