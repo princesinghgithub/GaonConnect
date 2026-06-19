@@ -2150,6 +2150,64 @@ const getAIAgentTasks = async (req, res) => {
 
 // ===== DRIVERS MANAGEMENT =====
 
+const createDriver = async (req, res) => {
+  try {
+    const { name, phone, email, city, vehicleType, vehicleNumber, vehicleModel, vehicleColor } = req.body;
+
+    if (!name || !phone) {
+      return res.status(400).json({ success: false, message: 'Naam aur phone required hai' });
+    }
+    if (!vehicleType || !vehicleNumber) {
+      return res.status(400).json({ success: false, message: 'Vehicle type aur number required hai' });
+    }
+
+    const existingUser = await User.findOne({ phone: phone.trim() });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'Is phone number se account already exist karta hai' });
+    }
+
+    const existingVehicle = await Driver.findOne({ 'vehicle.number': vehicleNumber.trim().toUpperCase() });
+    if (existingVehicle) {
+      return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
+    }
+
+    const user = await User.create({
+      name:       name.trim(),
+      phone:      phone.trim(),
+      email:      email ? email.trim().toLowerCase() : undefined,
+      city:       city || '',
+      role:       'provider',
+      roles:      ['provider'],
+      isVerified: true,
+    });
+
+    const driver = await Driver.create({
+      user: user._id,
+      vehicle: {
+        type:   vehicleType,
+        number: vehicleNumber.trim().toUpperCase(),
+        model:  vehicleModel || '',
+        color:  vehicleColor || '',
+      },
+      isApproved: true,
+      approvedAt: Date.now(),
+      approvedBy: req.user._id,
+      status: 'offline',
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Driver onboard ho gaya',
+      data: { ...driver.toObject(), user: { _id: user._id, name: user.name, phone: user.phone } }
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Yeh phone ya vehicle number already registered hai' });
+    }
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
 const getAllDrivers = async (req, res) => {
   try {
     const { page = 1, limit = 20, status, search } = req.query;
@@ -3102,6 +3160,38 @@ const getCommissionReport = async (req, res) => {
 
 // ===== USERS =====
 
+const createUser = async (req, res) => {
+  try {
+    const { name, phone, email, city } = req.body;
+
+    if (!name || !phone) {
+      return res.status(400).json({ success: false, message: 'Naam aur phone required hai' });
+    }
+
+    const existing = await User.findOne({ phone: phone.trim() });
+    if (existing) {
+      return res.status(400).json({ success: false, message: 'Is phone number se account already exist karta hai' });
+    }
+
+    const user = await User.create({
+      name:       name.trim(),
+      phone:      phone.trim(),
+      email:      email ? email.trim().toLowerCase() : undefined,
+      city:       city || '',
+      role:       'customer',
+      roles:      ['customer'],
+      isVerified: true,
+    });
+
+    res.status(201).json({ success: true, message: 'User onboard ho gaya', data: user });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Is phone/email se account already exist karta hai' });
+    }
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
 const getAllUsers = async (req, res) => {
   try {
     const { page = 1, limit = 20, search } = req.query;
@@ -3738,6 +3828,7 @@ module.exports = {
   getDashboardMetrics,
   getDashboardOverview,
   getAIAgentTasks,
+  createDriver,
   getAllDrivers,
   getDriverById,
   approveDriver,
@@ -3760,6 +3851,7 @@ module.exports = {
   getPendingWithdrawals,
   processWithdrawal,
   getCommissionReport,
+  createUser,
   getAllUsers,
   getUserDetails,
   blockUser,

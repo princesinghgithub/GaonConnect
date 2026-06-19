@@ -8,6 +8,7 @@ const ADMIN = {
   email:      'gaonconnect.in@gmail.com',
   city:       'Rewa',
   role:       'admin',
+  roles:      ['admin'],
   isVerified: true,
 };
 
@@ -19,6 +20,7 @@ async function seed() {
   const existing = await User.findOne({ phone: ADMIN.phone });
   if (existing) {
     existing.role       = 'admin';
+    existing.roles      = ['admin'];
     existing.email      = ADMIN.email;
     existing.name       = ADMIN.name;
     existing.city       = ADMIN.city;

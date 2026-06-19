@@ -48,6 +48,7 @@ router.get('/dashboard/overview', adminController.getDashboardOverview);
 router.get('/ai-agent/tasks', adminController.getAIAgentTasks);
 
 // ===== DRIVERS MANAGEMENT =====
+router.post('/drivers', adminController.createDriver);
 router.get('/drivers', adminController.getAllDrivers);
 router.get('/drivers/live-locations', adminController.getActiveDriversLocation);
 router.get('/drivers/:id', adminController.getDriverById);
@@ -78,6 +79,7 @@ router.get('/payments/commission', adminController.getCommissionReport);
 router.put('/payments/withdrawal/:id', adminController.processWithdrawal);
 
 // ===== USERS/CUSTOMERS =====
+router.post('/users', adminController.createUser);
 router.get('/users', adminController.getAllUsers);
 router.get('/users/:id', adminController.getUserDetails);
 router.put('/users/:id/block', adminController.blockUser);

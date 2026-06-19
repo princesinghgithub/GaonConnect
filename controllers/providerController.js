@@ -1585,6 +1585,7 @@ exports.registerProvider = async (req, res) => {
       phone: phone.trim(),
       city:  city || '',
       role:  'provider',
+      roles: ['provider'],
     });
 
     // ── Step 2: Provider banao — Provider model ke exact fields ──
