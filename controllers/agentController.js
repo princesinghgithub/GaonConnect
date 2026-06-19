@@ -10,7 +10,7 @@ const SYSTEM_PROMPTS = {
   sup: "You are GaonConnect ka Customer Support Agent. Rural India ke users ke liye Hindi/Hinglish mein friendly support do. Booking problems, driver issues, payment complaints handle karo.",
 };
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 
 /**
  * POST /api/agent/chat
@@ -23,8 +23,6 @@ exports.chat = async (req, res) => {
   }
 
   const system = SYSTEM_PROMPTS[mode] || SYSTEM_PROMPTS.ops;
-
-  console.log('🔑 GEMINI_API_KEY present:', !!process.env.GEMINI_API_KEY, 'length:', (process.env.GEMINI_API_KEY || '').length);
 
   try {
     const { data } = await axios.post(
