@@ -10,7 +10,7 @@ const SYSTEM_PROMPTS = {
   sup: "You are GaonConnect ka Customer Support Agent. Rural India ke users ke liye Hindi/Hinglish mein friendly support do. Booking problems, driver issues, payment complaints handle karo.",
 };
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 /**
  * POST /api/agent/chat
