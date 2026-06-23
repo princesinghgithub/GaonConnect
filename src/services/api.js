@@ -377,13 +377,16 @@ export const walletAPI = {
 // ================= RATING APIs =================
 //
 export const ratingAPI = {
-  rateCustomer: (rideId, rating, feedback) =>
-    api.post("/rating/rate-customer", { rideId, rating, feedback }),
+  // Customer -> driver or driver -> customer; raterType is inferred server-side from req.user
+  submitRating: (rideId, stars, review, tags) =>
+    api.post("/ratings/submit", { rideId, stars, review, tags }),
 
-  rateDriver: (rideId, rating, feedback) =>
-    api.post("/rating/rate-driver", { rideId, rating, feedback }),
+  getProviderRatings: (providerId, page = 1, limit = 20) =>
+    api.get(`/ratings/provider/${providerId}`, { params: { page, limit } }),
 
-  getDriverRatings: () => api.get("/rating/driver/me"),
+  getRideRatings: (rideId) => api.get(`/ratings/ride/${rideId}`),
+
+  getPendingRatings: () => api.get("/ratings/pending"),
 };
 
 
