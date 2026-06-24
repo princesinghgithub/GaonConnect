@@ -528,4 +528,18 @@ export const locationAPI = {
     api.post('/location/distance', { origin, destination, vehicleType }),
 };
 
+//
+// ================= NOTIFICATION APIs =================
+//
+export const notificationAPI = {
+  getAll: (page = 1, limit = 20) =>
+    api.get("/notifications", { params: { page, limit } }),
+
+  getUnreadCount: () => api.get("/notifications/unread-count"),
+
+  markAsRead: (id) => api.put(`/notifications/${id}/read`),
+
+  markAllAsRead: () => api.put("/notifications/read-all"),
+};
+
 export default api;

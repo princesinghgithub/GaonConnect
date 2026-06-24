@@ -530,9 +530,7 @@ import {
   ChevronDown,
   User,
 } from "lucide-react";
-import axios from "axios";
-
-const API_URL = "http://localhost:5000/api";
+import { rideAPI } from "../services/api";
 
 const HistoryTab = () => {
   const [rides, setRides] = useState([]);
@@ -549,16 +547,12 @@ const HistoryTab = () => {
   const fetchRideHistory = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
 
-      const res = await axios.get(`${API_URL}/ride/history/driver`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          status: filter === "all" ? undefined : filter,
-          page,
-          limit: 10,
-        },
-      });
+      const res = await rideAPI.getRideHistoryDriver(
+        page,
+        10,
+        filter === "all" ? undefined : filter
+      );
 
       const apiData = res.data;
       let rideArray =
@@ -567,7 +561,7 @@ const HistoryTab = () => {
       if (!Array.isArray(rideArray)) rideArray = [];
 
       setRides(rideArray);
-      setTotalPages(apiData?.pagination?.totalPages || 1);
+      setTotalPages(apiData?.totalPages || 1);
     } catch (e) {
       console.log(e);
       setRides([]);

@@ -1,5 +1,14 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-saffron: #e85500;
+  --color-india-green: #2d7a27;
+  --color-cta: #ff8c00;
+  --color-navy: #000080;
+  --color-ink: #1a1a1a;
+}
 /* * {
   margin: 0;
   padding: 0;

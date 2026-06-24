@@ -1,44 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import SideMenu from '../components/SideMenu';
-// import TabNavigation from '../components/TabNavigation';
-import CustomerTab from '../tabs/CustomerTab';
-import TrackingTab from '../tabs/TrackingTab';
-import BookingModal from '../components/BookingModal';
-import { useBooking } from '../hooks/useBooking';
-import { useProviders } from '../hooks/useProviders';
-import { SERVICES } from '../utils/constants';
-import { calculateFare } from '../utils/fareCalculator';
+import BookRide from '../tabs/BookRide';
+import CustomerHistoryTab from '../tabs/CustomerHistoryTab';
 import { useAuth } from '../context/AuthContext';
+import { walletAPI, notificationAPI } from '../services/api';
 
 const CustomerDashboard = () => {
   const { user, logout } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('customer');
-  const [selectedService, setSelectedService] = useState(null);
-  const [showBooking, setShowBooking] = useState(false);
+  const [activeTab, setActiveTab] = useState('booking');
   const [showMenu, setShowMenu] = useState(false);
-  const [notifications, setNotifications] = useState(3);
-  const [walletBalance] = useState(500);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [notifications, setNotifications] = useState(0);
 
-  const { bookings, tracking, createBooking, startTracking } = useBooking();
-  const { providers } = useProviders();
+  useEffect(() => {
+    walletAPI.getBalance()
+      .then((res) => setWalletBalance(res.data?.data?.balance ?? 0))
+      .catch(() => setWalletBalance(0));
 
-  const handleServiceSelect = (service) => {
-    setSelectedService(service);
-    setShowBooking(true);
-  };
-
-  const handleBooking = (provider) => {
-    const fare = calculateFare(selectedService);
-    const booking = createBooking(selectedService, provider, fare);
-
-    setShowBooking(false);
-    setNotifications(n => n + 1);
-
-    alert(`Booking Confirmed 🚜\nFare: ₹${fare}`);
-    setActiveTab('tracking');
-  };
+    notificationAPI.getUnreadCount()
+      .then((res) => setNotifications(res.data?.data?.count ?? 0))
+      .catch(() => setNotifications(0));
+  }, []);
 
   return (
     <div className="min-h-screen bg-orange-50">
@@ -53,38 +37,32 @@ const CustomerDashboard = () => {
 
       <SideMenu showMenu={showMenu} setShowMenu={setShowMenu} user={user} />
 
-      {/* <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} /> */}
-
-      <div className="container mx-auto px-4 py-6 pt-24">
-        {activeTab === 'customer' && (
-          <CustomerTab
-            services={SERVICES}
-            bookings={bookings}
-            onServiceSelect={handleServiceSelect}
-            onTrackBooking={(b) => {
-              startTracking(b);
-              setActiveTab('tracking');
-            }}
-          />
-        )}
-
-        {activeTab === 'tracking' && (
-          <TrackingTab tracking={tracking} onBackToBooking={() => setActiveTab('customer')} />
-        )}
+      <div className="bg-white border-b sticky top-0 z-30">
+        <div className="container mx-auto px-4 flex">
+          {[
+            { id: 'booking', label: 'Book a Ride' },
+            { id: 'history', label: 'Ride History' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-6 py-3 font-semibold transition ${
+                activeTab === tab.id
+                  ? 'text-orange-600 border-b-2 border-orange-600'
+                  : 'text-gray-500'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {showBooking && (
-        <BookingModal
-          selectedService={selectedService}
-          providers={providers}
-          onClose={() => setShowBooking(false)}
-          onBook={handleBooking}
-        />
-      )}
+      <div className="container mx-auto px-4 py-6">
+        {activeTab === 'booking' ? <BookRide /> : <CustomerHistoryTab />}
+      </div>
     </div>
   );
 };
 
 export default CustomerDashboard;
-
-

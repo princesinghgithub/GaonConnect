@@ -1,0 +1,144 @@
+{
+  "nav": {
+    "services": "Services",
+    "howItWorks": "How It Works",
+    "whyUs": "Why Us",
+    "about": "About Us",
+    "reviews": "Reviews",
+    "faqs": "FAQs",
+    "contact": "Contact",
+    "downloadApp": "Download App",
+    "becomePartner": "Become a Partner"
+  },
+  "hero": {
+    "tagline": "Your Vehicle, Your Service",
+    "description": "India's first platform connecting villages and cities! From auto-rickshaws to tractors, every vehicle is now at your fingertips. Easy booking, affordable rates, trusted service!",
+    "downloadCta": "Download App",
+    "howItWorksCta": "How It Works?"
+  },
+  "features": {
+    "heading": "Why Choose Gaon Connect?",
+    "subheading": "We bring you the best features and services",
+    "items": [
+      { "icon": "⚡", "title": "Instant Booking", "description": "Book your vehicle in seconds. No waiting, no hassle!" },
+      { "icon": "💰", "title": "Affordable Rates", "description": "All services at prices lower than the market. ₹50 off on your first ride!" },
+      { "icon": "🔒", "title": "Safe Travel", "description": "All drivers are verified. Complete safety with real-time tracking!" },
+      { "icon": "🌐", "title": "Available Everywhere", "description": "Village or city, we serve everywhere. Available 24/7!" },
+      { "icon": "📞", "title": "Hindi Support", "description": "Fully available in Hindi! Customer support in Hindi too." },
+      { "icon": "💳", "title": "Easy Payments", "description": "Cash, UPI, Wallet — pay however you like!" }
+    ]
+  },
+  "howItWorks": {
+    "heading": "How It Works?",
+    "subheading": "Book your vehicle in just 4 easy steps",
+    "steps": [
+      { "title": "Download the App", "description": "Download the GaonConnect app and register with your mobile number" },
+      { "title": "Choose Your Vehicle", "description": "Auto, bike, car, tractor — pick whatever you need" },
+      { "title": "Enter Location", "description": "Tell us where you're going from and to, we'll handle the rest" },
+      { "title": "Enjoy the Ride", "description": "The driver will arrive and you travel safely!" }
+    ]
+  },
+  "services": {
+    "heading": "Our Services",
+    "subheading": "The right vehicle for every need — pick a service and get started!",
+    "clickToSelect": "Click to select →",
+    "items": [
+      { "name": "Auto Rickshaw", "icon": "🛺", "price": "₹30+" },
+      { "name": "Bike Taxi", "icon": "🏍️", "price": "₹30+" },
+      { "name": "Car", "icon": "🚗", "price": "₹100+" },
+      { "name": "Tractor (Jutai)", "icon": "🚜", "price": "₹400+" },
+      { "name": "Wedding Car", "icon": "🏛️", "price": "₹500+" },
+      { "name": "Goods Transport", "icon": "🚚", "price": "₹200+" },
+      { "name": "Tempo", "icon": "🚐", "price": "₹150+" },
+      { "name": "JCB/Excavator", "icon": "🏗️", "price": "₹1000+" }
+    ]
+  },
+  "benefits": {
+    "heading": "More Benefits",
+    "subheading": "Get these special perks with GaonConnect",
+    "items": [
+      { "icon": "🎁", "title": "Referral Bonus", "description": "Invite friends and earn ₹100 per referral!" },
+      { "icon": "⭐", "title": "Rating System", "description": "Rate your driver and get better service" },
+      { "icon": "📍", "title": "Live Tracking", "description": "Track your vehicle in real-time" },
+      { "icon": "🎫", "title": "Digital Receipt", "description": "Get a digital receipt for every ride" },
+      { "icon": "👨‍💼", "title": "Become a Driver", "description": "Earn money with your own vehicle, become a driver partner!" },
+      { "icon": "🏆", "title": "Reward Program", "description": "Take more rides, earn more rewards" }
+    ]
+  },
+  "about": {
+    "heading": "About Us",
+    "vision": "Gaon Connect is building India's trusted platform for tractor, JCB, tempo, and agricultural machinery booking, making rural services faster, transparent, and easily accessible.",
+    "point1Title": "Our Mission",
+    "point1": "To bridge the gap between rural needs and reliable transport & machinery services through technology.",
+    "point2Title": "Our Vision",
+    "point2": "A India where every village has instant access to trusted vehicles and machinery, just a tap away.",
+    "point3Title": "Our Values",
+    "point3": "Transparency, fair pricing, and trust — built with and for rural communities."
+  },
+  "download": {
+    "heading": "Download the App",
+    "subheading": "Get GaonConnect on your phone and book in seconds",
+    "playStore": "Get it on Google Play",
+    "appStore": "Download on App Store",
+    "comingSoon": "Coming soon",
+    "promo": "Use code GAON50 to get ₹50 off on your first ride!"
+  },
+  "partner": {
+    "heading": "Become a Partner",
+    "subheading": "Own a vehicle? Start earning with GaonConnect today.",
+    "point1": "Earn money with your own vehicle",
+    "point2": "Flexible working hours",
+    "point3": "Weekly payments, no delays",
+    "cta": "Register as Partner"
+  },
+  "reviews": {
+    "heading": "Customer Reviews",
+    "subheading": "What our customers say about us",
+    "items": [
+      { "name": "Ramesh Kumar", "location": "Patna, Bihar", "text": "Booking a tractor used to take all day. Now I get one in minutes. Truly a game changer for farmers like me!", "rating": 5 },
+      { "name": "Sunita Devi", "location": "Lucknow, UP", "text": "Affordable rates and the drivers are always polite and verified. I trust GaonConnect for all my travel needs.", "rating": 5 },
+      { "name": "Anil Yadav", "location": "Jaipur, Rajasthan", "text": "Booked a JCB for our farmland in just a few clicks. Transparent pricing, no hidden charges.", "rating": 4 }
+    ]
+  },
+  "faqs": {
+    "heading": "Frequently Asked Questions",
+    "subheading": "Have questions? We've got answers.",
+    "items": [
+      { "q": "How do I book a vehicle on GaonConnect?", "a": "Simply download the app, select your service, enter pickup and drop location, and confirm your booking." },
+      { "q": "Is GaonConnect available in my village?", "a": "We are rapidly expanding across rural and urban India. Check the app for availability in your area." },
+      { "q": "What payment methods are accepted?", "a": "We accept Cash, UPI, and wallet payments for your convenience." },
+      { "q": "How do I become a driver partner?", "a": "Click on 'Become a Partner', fill in your vehicle details, and our team will reach out to you for verification." },
+      { "q": "Is it safe to travel with GaonConnect?", "a": "Yes, all drivers are verified and every ride includes real-time tracking for your safety." }
+    ]
+  },
+  "contact": {
+    "heading": "Contact Us",
+    "subheading": "We'd love to hear from you. Reach out anytime!",
+    "phone": "Phone",
+    "email": "Email",
+    "address": "Address",
+    "addressValue": "GaonConnect HQ, India",
+    "formName": "Your Name",
+    "formEmail": "Your Email",
+    "formMessage": "Your Message",
+    "formSubmit": "Send Message",
+    "formSending": "Sending...",
+    "formSuccess": "Thanks! Your message has been sent.",
+    "formError": "Something went wrong. Please try again or email us directly."
+  },
+  "finalCta": {
+    "heading": "Get Started Today!",
+    "subheading": "Get ₹50 off on your first ride. Code: GAON50",
+    "downloadCta": "Download App Now",
+    "partnerCta": "Become a Driver Partner"
+  },
+  "footer": {
+    "about": "About Us",
+    "contact": "Contact Us",
+    "privacy": "Privacy Policy",
+    "terms": "Terms & Conditions",
+    "support": "Support",
+    "copyright": "© 2026 GaonConnect. All rights reserved.",
+    "tagline": "🛺 Your Vehicle, Your Service 🛺"
+  }
+}
