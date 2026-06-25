@@ -1,8 +1,9 @@
 const crypto   = require('crypto');
 const Razorpay = require('razorpay');
-const Ride     = require('../models/Ride');
-const Provider = require('../models/Provider');
-const User     = require('../models/User');
+const Ride         = require('../models/Ride');
+const Provider     = require('../models/Provider');
+const User         = require('../models/User');
+const Notification = require('../models/Notification');
 const { calculateFare }             = require('../utils/fareCalculator');
 const { getIO }                     = require('../socket');
 const { notify }                    = require('../utils/notifications');
@@ -26,6 +27,19 @@ const getProviderFcm = async (providerId) => {
 const getCustomerFcm = async (userId) => {
   // User model mein fcmToken field nahi hai abhi, future ke liye placeholder
   return null;
+};
+
+// ─── Helper: customer ke liye in-app notification persist karo ──────────────
+// Push (FCM) sirf device pe jaata hai jab token ho; yeh website/app ke
+// notification bell ke liye DB mein record rakhta hai.
+const notifyCustomerInApp = async (customerId, { title, message, type = 'info', data = {} }) => {
+  try {
+    await Notification.create({
+      recipient: customerId, recipientType: 'User', title, message, type, data,
+    });
+  } catch (err) {
+    console.error('In-app notification create error:', err.message);
+  }
 };
 
 // ─── CREATE RIDE ──────────────────────────────────────────────────────────────
@@ -262,6 +276,8 @@ exports.acceptRide = async (req, res) => {
   try {
     const provider = await Provider.findOne({ user: req.user.id }).populate('user', 'name');
     if (!provider) return res.status(403).json({ success: false, message: 'Unauthorized driver' });
+    if (!provider.isApproved) return res.status(403).json({ success: false, message: 'Aapka account abhi admin se approve nahi hua' });
+    if (provider.isBlocked) return res.status(403).json({ success: false, message: 'Aapka account block hai' });
 
     const { rideId } = req.body;
     const ride = await Ride.findOne({ _id: rideId, status: 'searching' });
@@ -292,6 +308,13 @@ exports.acceptRide = async (req, res) => {
         otp:         ride.otp,
       }).catch(() => {});
     }
+
+    notifyCustomerInApp(ride.customer, {
+      title:   '🚗 Driver Mil Gaya!',
+      message: `${provider.user?.name || 'Driver'} aapki ride accept kar liya. OTP: ${ride.otp}`,
+      type:    'success',
+      data:    { rideId: ride._id.toString(), event: 'RIDE_ACCEPTED' },
+    }).catch(() => {});
 
     return res.status(200).json({ success: true, message: 'Ride accepted', data: ride });
   } catch (err) {
@@ -377,12 +400,20 @@ exports.updateRideStatus = async (req, res) => {
     const driverName   = provider.user?.name || 'Driver';
     const customerName = ride.customer?.name || 'Customer';
 
-    if (status === 'arrived' && customerFcm) {
-      notify.driverArrived(customerFcm, { driverName }).catch(() => {});
+    if (status === 'arrived') {
+      if (customerFcm) notify.driverArrived(customerFcm, { driverName }).catch(() => {});
+      notifyCustomerInApp(ride.customer?._id, {
+        title: '📍 Driver Pahunch Gaya!', message: `${driverName} aapke pickup location pe aa gaya hai.`,
+        type: 'info', data: { rideId: ride._id.toString(), event: 'DRIVER_ARRIVED' },
+      });
     }
 
-    if (status === 'started' && customerFcm) {
-      notify.rideStarted(customerFcm, { driverName, destination: ride.drop.address }).catch(() => {});
+    if (status === 'started') {
+      if (customerFcm) notify.rideStarted(customerFcm, { driverName, destination: ride.drop.address }).catch(() => {});
+      notifyCustomerInApp(ride.customer?._id, {
+        title: '🚀 Ride Shuru Ho Gayi!', message: `Aap ${ride.drop.address} ja rahe hain. Safe journey!`,
+        type: 'info', data: { rideId: ride._id.toString(), event: 'RIDE_STARTED' },
+      });
     }
 
     if (status === 'completed') {
@@ -390,6 +421,10 @@ exports.updateRideStatus = async (req, res) => {
       if (customerFcm) {
         notify.rideCompleted(customerFcm, { fare: ride.fare, destination: ride.drop.address }).catch(() => {});
       }
+      notifyCustomerInApp(ride.customer?._id, {
+        title: '✅ Ride Complete!', message: `${ride.drop.address} pahunch gaye. Fare: ₹${ride.fare}. Rating dijiye!`,
+        type: 'success', data: { rideId: ride._id.toString(), event: 'RIDE_COMPLETED' },
+      });
 
       // Driver earnings update
       const commission    = Math.round(ride.fare * 0.15);
@@ -428,6 +463,10 @@ exports.updateRideStatus = async (req, res) => {
       if (customerFcm) {
         notify.rideCancelledForCustomer(customerFcm, { reason: 'Driver ne ride cancel kar di' }).catch(() => {});
       }
+      notifyCustomerInApp(ride.customer?._id, {
+        title: '❌ Ride Cancel Ho Gayi', message: 'Driver ne ride cancel kar di. Dobara try karein.',
+        type: 'warning', data: { rideId: ride._id.toString(), event: 'RIDE_CANCELLED' },
+      });
     }
 
     return res.status(200).json({ success: true, message: 'Ride status updated', data: ride });
@@ -531,6 +570,10 @@ exports.cancelRide = async (req, res) => {
       if (customerFcm) {
         notify.rideCancelledForCustomer(customerFcm, { reason: 'Driver ne ride cancel kar di' }).catch(() => {});
       }
+      notifyCustomerInApp(ride.customer?._id, {
+        title: '❌ Ride Cancel Ho Gayi', message: 'Driver ne ride cancel kar di. Dobara try karein.',
+        type: 'warning', data: { rideId: ride._id.toString(), event: 'RIDE_CANCELLED' },
+      });
     }
 
     return res.status(200).json({ success: true, message: 'Ride cancel ho gayi', data: ride });

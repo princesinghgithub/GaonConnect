@@ -1,12 +1,25 @@
 const Provider = require('../models/Provider');
 const Transaction = require('../models/Transaction');
 const Ride = require('../models/Ride');
+const User = require('../models/User');
 
 /**
  * GET WALLET BALANCE
+ * Customers only have a flat balance (User.wallet) — no earnings/withdrawal
+ * concepts apply to them, so they get a smaller response shape.
  */
 exports.getWalletBalance = async (req, res) => {
   try {
+    if (req.user.role !== 'provider') {
+      const user = await User.findById(req.user.id).select('wallet');
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+      return res.status(200).json({
+        success: true,
+        data: { balance: user.wallet },
+      });
+    }
+
     const provider = await Provider.findOne({ user: req.user.id })
       .select('wallet stats');
 
@@ -74,6 +87,18 @@ exports.getWalletBalance = async (req, res) => {
 exports.getTransactionHistory = async (req, res) => {
   try {
     const { page = 1, limit = 20, type } = req.query;
+
+    // Customers don't have a transaction ledger yet (Transaction model is
+    // provider-earnings only) — return an empty list instead of 404.
+    if (req.user.role !== 'provider') {
+      return res.status(200).json({
+        success: true,
+        data: {
+          transactions: [],
+          pagination: { currentPage: Number(page), totalPages: 0, total: 0 },
+        },
+      });
+    }
 
     const provider = await Provider.findOne({ user: req.user.id });
 

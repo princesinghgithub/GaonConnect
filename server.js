@@ -80,6 +80,7 @@ app.use('/api/wallet',   require('./routes/wallet'));
 app.use('/api/admin',    adminRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/ratings', require('./routes/rating'));
+app.use('/api/notifications', require('./routes/notification'));
 app.use('/api/sos',     require('./routes/sos'));
 app.use('/api/promo',   require('./routes/promo'));
 app.use('/api/agent',   require('./routes/agent'));
