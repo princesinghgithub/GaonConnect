@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Star, ChevronDown, Phone, Mail, MapPin } from 'lucide-react';
+import { FaFacebook, FaInstagram, FaTwitter, FaYoutube, FaLinkedin } from 'react-icons/fa';
 import emailjs from '@emailjs/browser';
 import Navbar from './Navbar';
 
@@ -480,6 +481,23 @@ const GaonConnectLanding = () => {
             <button onClick={() => navigate('/privacy-policy')} className="hover:text-orange-400 transition-colors">{t('footer.privacy')}</button>
             <button onClick={() => scrollToSection('faqs')} className="hover:text-orange-400 transition-colors">{t('footer.terms')}</button>
             <button onClick={() => scrollToSection('faqs')} className="hover:text-orange-400 transition-colors">{t('footer.support')}</button>
+          </div>
+          <div className="flex justify-center gap-5 mb-6">
+            <a href="#" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-gray-400 hover:text-orange-400 transition-colors">
+              <FaFacebook size={22} />
+            </a>
+            <a href="#" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-gray-400 hover:text-orange-400 transition-colors">
+              <FaInstagram size={22} />
+            </a>
+            <a href="#" target="_blank" rel="noopener noreferrer" aria-label="Twitter" className="text-gray-400 hover:text-orange-400 transition-colors">
+              <FaTwitter size={22} />
+            </a>
+            <a href="#" target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="text-gray-400 hover:text-orange-400 transition-colors">
+              <FaYoutube size={22} />
+            </a>
+            <a href="https://www.linkedin.com/company/133394201/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="text-gray-400 hover:text-orange-400 transition-colors">
+              <FaLinkedin size={22} />
+            </a>
           </div>
           <p className="text-center text-gray-400 text-sm mb-2">{t('footer.copyright')}</p>
           <p className="text-center text-gray-500 text-sm">{t('footer.tagline')}</p>
