@@ -254,8 +254,9 @@ api.interceptors.response.use(
 // ================= AUTH APIs =================
 //
 export const authAPI = {
-  sendOTP: (phone) => api.post("/auth/send-otp", { phone }),
-  verifyOTP: (phone, otp) => api.post("/auth/verify-otp", { phone, otp }),
+  sendOTP: (phone) => api.post("/auth/send-phone-otp", { phone }),
+  verifyOTP: (phone, otp, extra = {}) =>
+    api.post("/auth/verify-phone-otp", { phone, otp, role: "customer", ...extra }),
   register: (data) => api.post("/auth/register", data),
   getProfile: () => api.get("/auth/profile"),
   logout: () => api.post("/auth/logout"),
@@ -266,7 +267,10 @@ export const authAPI = {
 // ================= PROVIDER APIs =================
 //
 export const providerAPI = {
-  register: (data) => api.post("/provider/register", data),
+  register: (formData) =>
+    api.post("/provider/register", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }),
   getProfile: () => api.get("/provider/profile/me"),
   updateProfile: (data) => api.put("/provider/profile/update", data),
   // uploadProfilePhoto: (file) => {
@@ -352,6 +356,17 @@ export const rideAPI = {
     }),
   getSearchingRides: () => api.get("/ride/searching"),
 
+  createRazorpayOrder: (rideId) => api.post(`/ride/${rideId}/razorpay-order`),
+  verifyRazorpayPayment: (data) => api.post("/ride/razorpay-verify", data),
+};
+
+
+//
+// ================= SOS API =================
+//
+export const sosAPI = {
+  trigger: (rideId, latitude, longitude, address) =>
+    api.post("/sos/trigger", { rideId, latitude, longitude, address }),
 };
 
 

@@ -16,6 +16,7 @@ const BookRide = () => {
   const [fare, setFare] = useState(null);
   const [mapMarkers, setMapMarkers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
 
   const handlePickupSelect = (location) => {
     console.log('Pickup selected:', location);
@@ -117,9 +118,10 @@ const BookRide = () => {
         pickup: pickup,
         dropoff: dropoff,
         vehicleType: vehicleType,
-        distance: distance,
+        distance: distance.distance,
+        estimatedDuration: Math.round(distance.duration.value / 60),
         estimatedFare: fare,
-        paymentMethod: 'cash'
+        paymentMethod: paymentMethod
       };
 
       console.log('Booking ride with data:', rideData);
@@ -224,6 +226,33 @@ const BookRide = () => {
                 </div>
               </div>
             )}
+
+            {/* Payment Method */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Method</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setPaymentMethod('cash')}
+                  className={`flex items-center justify-center gap-2 py-3 px-3 rounded-lg border-2 font-semibold transition ${
+                    paymentMethod === 'cash'
+                      ? 'border-orange-600 bg-orange-50 text-orange-600'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                  }`}
+                >
+                  💵 Cash
+                </button>
+                <button
+                  onClick={() => setPaymentMethod('online')}
+                  className={`flex items-center justify-center gap-2 py-3 px-3 rounded-lg border-2 font-semibold transition ${
+                    paymentMethod === 'online'
+                      ? 'border-orange-600 bg-orange-50 text-orange-600'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                  }`}
+                >
+                  💳 Pay Online
+                </button>
+              </div>
+            </div>
 
             {/* Confirm Button */}
             <button

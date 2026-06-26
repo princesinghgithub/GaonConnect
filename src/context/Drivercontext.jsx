@@ -199,7 +199,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { providerAPI, rideAPI, walletAPI } from "../services/api";
+import { providerAPI, rideAPI, walletAPI, sosAPI } from "../services/api";
 
 const DriverContext = createContext();
 
@@ -312,6 +312,46 @@ export const DriverProvider = ({ children }) => {
     return () => pollingRef.current && clearInterval(pollingRef.current);
   }, [isOnline, loadCurrentRide]);
 
+  /* ---------------- LIVE LOCATION (while online) ---------------- */
+  const locationWatchIdRef = useRef(null);
+  useEffect(() => {
+    if (isOnline && navigator.geolocation) {
+      locationWatchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          providerAPI
+            .updateLocation(pos.coords.latitude, pos.coords.longitude)
+            .catch(() => {});
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+      );
+    }
+    return () => {
+      if (locationWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchIdRef.current);
+        locationWatchIdRef.current = null;
+      }
+    };
+  }, [isOnline]);
+
+  /* ---------------- SOS ---------------- */
+  const triggerSOS = (rideId) =>
+    new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error("Location not available"));
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const res = await sosAPI.trigger(rideId, pos.coords.latitude, pos.coords.longitude);
+            resolve(res.data);
+          } catch (err) {
+            reject(err);
+          }
+        },
+        (err) => reject(err),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+
   /* ---------------- TOGGLE DUTY ---------------- */
   const toggleDuty = useCallback(async () => {
     unlockAudio(); // ✅ MOST IMPORTANT LINE
@@ -376,6 +416,7 @@ export const DriverProvider = ({ children }) => {
         rejectRide,
         updateRideStatus,
         verifyOTP,
+        triggerSOS,
       }}
     >
       {children}

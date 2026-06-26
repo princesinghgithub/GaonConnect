@@ -270,22 +270,38 @@
 
 
 import React, { useState } from 'react';
-import { User, Phone, Mail, MapPin, ArrowRight } from 'lucide-react';
+import { User, Phone, Mail, MapPin, ArrowRight, Truck, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom'; // ⭐ YEH ADD KARO
-import { authAPI } from '../../services/api';
+import { authAPI, providerAPI } from '../../services/api';
+
+const VEHICLE_TYPES = ['auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb', 'ambulance', 'wedding'];
 
 const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
   const navigate = useNavigate(); // ⭐ YEH ADD KARO
-  
+
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
     city: '',
-    role: 'customer'
+    role: 'customer',
+    // Driver-only fields (POST /provider/register)
+    vehicleType: '',
+    vehicleNumber: '',
+    vehicleModel: '',
+    vehicleColor: '',
+    licenseNumber: '',
+    rcNumber: '',
+  });
+
+  const [files, setFiles] = useState({
+    profilePhoto: null,
+    licensePhoto: null,
+    rcPhoto: null,
   });
 
   const [showOTP, setShowOTP] = useState(false);
+  const [registered, setRegistered] = useState(false); // driver: registered, awaiting admin approval
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -300,26 +316,69 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
     });
   };
 
+  const handleFileChange = (e) => {
+    setFiles({
+      ...files,
+      [e.target.name]: e.target.files?.[0] || null
+    });
+  };
+
   /* =====================
-        SEND OTP API
+        REGISTER (customer: OTP flow / driver: provider/register)
   ====================== */
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (!formData.name || formData.phone.length !== 10) {
+    if (!formData.name || formData.phone.length !== 10 || !formData.email) {
       setError('Please fill all required fields correctly');
+      return;
+    }
+
+    if (formData.role === 'provider') {
+      if (!formData.vehicleType || !formData.vehicleNumber) {
+        setError('Vehicle type aur vehicle number required hai');
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        const fd = new FormData();
+        fd.append('name', formData.name);
+        fd.append('email', formData.email);
+        fd.append('phone', formData.phone);
+        fd.append('city', formData.city);
+        fd.append('vehicleType', formData.vehicleType);
+        fd.append('vehicleNumber', formData.vehicleNumber);
+        fd.append('vehicleModel', formData.vehicleModel);
+        fd.append('vehicleColor', formData.vehicleColor);
+        fd.append('licenseNumber', formData.licenseNumber);
+        fd.append('rcNumber', formData.rcNumber);
+        if (files.profilePhoto) fd.append('profilePhoto', files.profilePhoto);
+        if (files.licensePhoto) fd.append('licensePhoto', files.licensePhoto);
+        if (files.rcPhoto) fd.append('rcPhoto', files.rcPhoto);
+
+        // 🔥 Driver registration — no OTP here, admin approval required before login
+        await providerAPI.register(fd);
+
+        setRegistered(true);
+      } catch (err) {
+        setError(err?.response?.data?.message || 'Registration failed');
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
     try {
       setLoading(true);
 
-      // 🔥 API CALL — SEND OTP + TEMP REGISTER
+      // 🔥 Create the account, then send the real phone OTP for login
       await authAPI.register(formData);
+      await authAPI.sendOTP(formData.phone);
 
       setShowOTP(true);
-      alert('OTP sent to your mobile number');
     } catch (err) {
       setError(err?.response?.data?.message || 'Failed to send OTP');
     } finally {
@@ -342,26 +401,20 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
     try {
       setLoading(true);
 
-      const res = await authAPI.verifyOTP(formData.phone, otp);
+      const res = await authAPI.verifyOTP(formData.phone, otp, { role: formData.role });
 
-      console.log("👉 VERIFY RESPONSE:", res);
-
-      const data = res?.data || res;
+      const data = res?.data;
 
       if (!data?.success) {
         setError(data?.message || "Invalid OTP");
         return;
       }
 
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-
       const role = data.user.role;
-      console.log("👉 USER ROLE:", role);
 
-      // ⭐ CALLBACK CALL (OPTIONAL - agar parent ko notify karna ho)
+      // ⭐ AuthContext.login() stores the token/user and updates auth state
       if (onRegisterSuccess) {
-        onRegisterSuccess(data.user, data.token);
+        onRegisterSuccess(data.user, data.accessToken);
       }
 
       // ⭐ REDIRECT BASED ON ROLE
@@ -382,6 +435,29 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
       setLoading(false);
     }
   };
+
+  /* =====================
+        DRIVER: PENDING APPROVAL SCREEN
+  ====================== */
+  if (registered) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
+          <div className="text-6xl mb-4">🚜</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Registration Submitted!</h2>
+          <p className="text-gray-600 mb-6">
+            Aapka driver account ban gaya hai. Admin approve karega, uske baad aap login kar sakte ho.
+          </p>
+          <button
+            onClick={onSwitchToLogin}
+            className="w-full bg-gradient-to-r from-orange-600 to-yellow-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   /* =====================
         OTP SCREEN
@@ -506,7 +582,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
           {/* Email */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Email (Optional)
+              Email *
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -519,6 +595,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
                 onChange={handleChange}
                 placeholder="your@email.com"
                 className="pl-10 w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                required
               />
             </div>
           </div>
@@ -573,6 +650,165 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
               </button>
             </div>
           </div>
+
+          {/* Driver-only fields */}
+          {formData.role === 'provider' && (
+            <>
+              {/* Vehicle Type */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Vehicle Type *
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Truck className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <select
+                    name="vehicleType"
+                    value={formData.vehicleType}
+                    onChange={handleChange}
+                    className="pl-10 w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                    required
+                  >
+                    <option value="">Select vehicle type</option>
+                    {VEHICLE_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Vehicle Number */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Vehicle Number *
+                </label>
+                <input
+                  type="text"
+                  name="vehicleNumber"
+                  value={formData.vehicleNumber}
+                  onChange={handleChange}
+                  placeholder="e.g. MP19AB1234"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none uppercase"
+                  required
+                />
+              </div>
+
+              {/* Vehicle Model & Color */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Vehicle Model
+                  </label>
+                  <input
+                    type="text"
+                    name="vehicleModel"
+                    value={formData.vehicleModel}
+                    onChange={handleChange}
+                    placeholder="e.g. Bajaj RE"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Vehicle Color
+                  </label>
+                  <input
+                    type="text"
+                    name="vehicleColor"
+                    value={formData.vehicleColor}
+                    onChange={handleChange}
+                    placeholder="e.g. Yellow"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* License Number */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  License Number
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FileText className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    name="licenseNumber"
+                    value={formData.licenseNumber}
+                    onChange={handleChange}
+                    placeholder="Driving license number"
+                    className="pl-10 w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* RC Number */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  RC Number
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FileText className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    name="rcNumber"
+                    value={formData.rcNumber}
+                    onChange={handleChange}
+                    placeholder="Vehicle RC number"
+                    className="pl-10 w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Profile Photo */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Your Photo
+                </label>
+                <input
+                  type="file"
+                  name="profilePhoto"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="w-full text-sm border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+
+              {/* License Photo */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  License Photo
+                </label>
+                <input
+                  type="file"
+                  name="licensePhoto"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="w-full text-sm border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+
+              {/* RC Photo */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  RC Photo
+                </label>
+                <input
+                  type="file"
+                  name="rcPhoto"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="w-full text-sm border-2 border-gray-300 rounded-lg px-4 py-2 focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+            </>
+          )}
 
           <button
             type="submit"

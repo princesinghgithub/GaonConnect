@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { rideAPI } from '../services/api';
+import { rideAPI, ratingAPI } from '../services/api';
 import Map from '../tabs/Map';
 import { FaSpinner, FaCar, FaPhone, FaStar, FaMapMarkerAlt } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
+
+const loadRazorpayScript = () =>
+  new Promise((resolve) => {
+    if (window.Razorpay) return resolve(true);
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
 
 const RideTracking = () => {
   const { rideId } = useParams();
@@ -12,6 +22,11 @@ const RideTracking = () => {
   const [driver, setDriver] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mapMarkers, setMapMarkers] = useState([]);
+  const [paying, setPaying] = useState(false);
+  const [stars, setStars] = useState(0);
+  const [review, setReview] = useState('');
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [submittingRating, setSubmittingRating] = useState(false);
 
   useEffect(() => {
     fetchRideDetails();
@@ -54,25 +69,6 @@ const RideTracking = () => {
 
 
 
-
-  const fetchSearchingRides = async () => {
-  try {
-    const response = await rideAPI.getSearchingRides();
-
-    if (response.data.success) {
-      setRideRequests(response.data.data); // list of rides
-    }
-  } catch (error) {
-    console.error("Fetch searching rides error:", error);
-  } finally {
-    setLoading(false);
-  }
-};
-
-useEffect(() => {
-  fetchSearchingRides();
-}, []);
-
   const updateMapMarkers = () => {
     const markers = [];
     
@@ -107,6 +103,78 @@ useEffect(() => {
     } catch (error) {
       console.error('Cancel ride error:', error);
       toast.error('Failed to cancel ride');
+    }
+  };
+
+  const handlePayNow = async () => {
+    setPaying(true);
+    try {
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        toast.error('Razorpay load failed. Check your internet connection.');
+        return;
+      }
+
+      const orderRes = await rideAPI.createRazorpayOrder(rideId);
+      if (!orderRes.data.success) {
+        toast.error(orderRes.data.message || 'Could not start payment');
+        return;
+      }
+      const { order, key } = orderRes.data;
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+      const rzp = new window.Razorpay({
+        key,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.id,
+        name: 'GaonConnect',
+        description: 'Ride Fare Payment',
+        prefill: { name: user.name, contact: user.phone, email: user.email },
+        theme: { color: '#ea580c' },
+        handler: async (response) => {
+          try {
+            const verifyRes = await rideAPI.verifyRazorpayPayment({
+              rideId,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            });
+            if (verifyRes.data.success) {
+              toast.success('Payment successful!');
+              fetchRideDetails();
+            } else {
+              toast.error('Payment verification failed');
+            }
+          } catch (err) {
+            console.error('Verify payment error:', err);
+            toast.error('Payment verification failed');
+          }
+        },
+        modal: {
+          ondismiss: () => toast.error('Payment cancelled'),
+        },
+      });
+      rzp.open();
+    } catch (error) {
+      console.error('Razorpay order error:', error);
+      toast.error(error.response?.data?.message || 'Payment failed to start');
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handleSubmitRating = async () => {
+    if (stars === 0) return;
+    setSubmittingRating(true);
+    try {
+      await ratingAPI.submitRating(rideId, stars, review.trim() || undefined);
+      setRatingSubmitted(true);
+      toast.success('Thanks for your feedback!');
+    } catch (error) {
+      console.error('Submit rating error:', error);
+      toast.error('Failed to submit rating');
+    } finally {
+      setSubmittingRating(false);
     }
   };
 
@@ -208,8 +276,28 @@ useEffect(() => {
                 <p className="text-2xl font-bold text-orange-600">₹{ride.fare}</p>
               </div>
             </div>
+
+            <div className="pt-2 flex justify-between items-center text-sm">
+              <span className="text-gray-600">Payment</span>
+              <span className="font-semibold text-gray-900">
+                {ride.paymentMethod === 'online'
+                  ? (ride.paymentStatus === 'paid' ? '✅ Paid Online' : '⏳ Online — Pending')
+                  : '💵 Cash'}
+              </span>
+            </div>
           </div>
         </div>
+
+        {/* Pay Now (online payment due after trip) */}
+        {ride.status === 'completed' && ride.paymentMethod === 'online' && ride.paymentStatus !== 'paid' && (
+          <button
+            onClick={handlePayNow}
+            disabled={paying}
+            className="w-full bg-orange-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-orange-700 transition disabled:opacity-50"
+          >
+            {paying ? 'Opening Payment...' : `Pay ₹${ride.fare} Now`}
+          </button>
+        )}
 
         {/* Cancel Button */}
         {['searching', 'accepted', 'arrived'].includes(ride.status) && (
@@ -226,6 +314,39 @@ useEffect(() => {
           <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
             <p className="text-2xl font-bold text-green-700 mb-2">Trip Completed! ✅</p>
             <p className="text-gray-700">Thank you for riding with us</p>
+
+            {!ratingSubmitted ? (
+              <div className="mt-6 bg-white rounded-xl p-5 text-left">
+                <p className="font-semibold text-gray-900 mb-3 text-center">Rate your driver</p>
+                <div className="flex justify-center gap-2 mb-3">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button key={s} onClick={() => setStars(s)} className="text-3xl leading-none">
+                      <span style={{ color: s <= stars ? '#F5A623' : '#ddd' }}>★</span>
+                    </button>
+                  ))}
+                </div>
+                {stars > 0 && (
+                  <textarea
+                    value={review}
+                    onChange={(e) => setReview(e.target.value)}
+                    placeholder="Share feedback (optional)"
+                    maxLength={200}
+                    className="w-full border border-gray-200 rounded-lg p-3 text-sm mb-3"
+                    rows={2}
+                  />
+                )}
+                <button
+                  onClick={handleSubmitRating}
+                  disabled={stars === 0 || submittingRating}
+                  className="w-full bg-orange-600 text-white py-3 rounded-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {submittingRating ? 'Submitting...' : 'Submit Rating'}
+                </button>
+              </div>
+            ) : (
+              <p className="mt-4 text-green-700 font-semibold">🙏 Thanks for your feedback!</p>
+            )}
+
             <button
               onClick={() => navigate('/customer')}
               className="mt-4 px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"

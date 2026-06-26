@@ -209,10 +209,11 @@ const handleSendOTP = async (e) => {
     // ✅ response ko variable me lo
     const res = await authAPI.sendOTP(phone);
 
-    // ✅ OTP nikalo
+    // ✅ OTP nikalo (dev mode only)
     const receivedOTP = res.data.otp;
-
-    alert(`Your OTP is: ${receivedOTP}`);
+    if (receivedOTP) {
+      alert(`Your OTP is: ${receivedOTP}`);
+    }
 
     setShowOTP(true);
   } catch (err) {
@@ -226,7 +227,35 @@ const handleSendOTP = async (e) => {
   /* =====================
      VERIFY OTP
   ====================== */
- 
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    try {
+      setLoading(true);
+
+      const res = await authAPI.verifyOTP(phone, otp);
+      const data = res?.data;
+
+      if (!data?.success) {
+        setError(data?.message || 'Invalid OTP');
+        return;
+      }
+
+      onLoginSuccess(data.user, data.accessToken);
+
+      const role = data.user.role;
+      if (role === 'customer') navigate('/customer');
+      else if (role === 'provider') navigate('/driver');
+      else if (role === 'admin') navigate('/admin');
+      else navigate('/');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">

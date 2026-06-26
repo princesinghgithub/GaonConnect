@@ -435,6 +435,7 @@ import {
   AlertCircle,
   MessageCircle,
 } from "lucide-react";
+import { toast } from "react-hot-toast";
 import { useDriver } from "../context/Drivercontext";
 
 /* ---------------- STEPS ---------------- */
@@ -460,11 +461,26 @@ const CurrentRideTab = () => {
     rejectRide,
     updateRideStatus,
     verifyOTP,
+    triggerSOS,
   } = useDriver();
 
   const [step, setStep] = useState(1);
   const [otp, setOtp] = useState("");
   const [showOTP, setShowOTP] = useState(false);
+  const [sosSending, setSosSending] = useState(false);
+
+  const handleSOS = async () => {
+    if (sosSending) return;
+    setSosSending(true);
+    try {
+      await triggerSOS(currentRide?._id);
+      toast.success("🚨 SOS bhej diya gaya! Help raste mein hai.");
+    } catch (err) {
+      toast.error("SOS bhejne mein error. Location permission check karo.");
+    } finally {
+      setSosSending(false);
+    }
+  };
 
   /* ---------------- LOAD CURRENT RIDE ---------------- */
   useEffect(() => {
@@ -725,8 +741,12 @@ const CurrentRideTab = () => {
       )}
 
       {/* SOS */}
-      <button className="w-full bg-red-600 text-white py-3 rounded-xl">
-        <AlertCircle size={18} /> Emergency SOS
+      <button
+        onClick={handleSOS}
+        disabled={sosSending}
+        className="w-full bg-red-600 text-white py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+      >
+        <AlertCircle size={18} /> {sosSending ? "Sending..." : "Emergency SOS"}
       </button>
     </div>
   );
