@@ -242,7 +242,7 @@ const handleSendOTP = async (e) => {
         return;
       }
 
-      onLoginSuccess(data.user, data.accessToken);
+      onLoginSuccess(data.user, data.accessToken, data.refreshToken);
 
       const role = data.user.role;
       if (role === 'customer') navigate('/customer');

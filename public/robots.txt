@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /customer
+Disallow: /driver
+Disallow: /admin
+Disallow: /book-ride
+Disallow: /ride/
+
+Sitemap: https://gaonconnect.in/sitemap.xml

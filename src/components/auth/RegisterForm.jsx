@@ -414,7 +414,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
 
       // ⭐ AuthContext.login() stores the token/user and updates auth state
       if (onRegisterSuccess) {
-        onRegisterSuccess(data.user, data.accessToken);
+        onRegisterSuccess(data.user, data.accessToken, data.refreshToken);
       }
 
       // ⭐ REDIRECT BASED ON ROLE

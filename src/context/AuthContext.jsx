@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { authAPI } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -45,16 +46,23 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = (userData, token) => {
+  const login = (userData, token, refreshToken) => {
     localStorage.setItem('token', token);
+    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('currentUser', JSON.stringify(userData));
     setUser(userData);
     setIsAuthenticated(true);
-    
+
     // Note: Navigation now handled in LoginForm component
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authAPI.logout(localStorage.getItem('refreshToken'));
+    } catch (error) {
+      console.error('Logout API error:', error);
+    }
+
     localStorage.clear();
     setUser(null);
     setIsAuthenticated(false);

@@ -62,9 +62,9 @@ export default defineConfig({
       },
 
       manifest: {
-        name: 'GoanConnect',
-        short_name: 'GoanConnect',
-        description: 'GoanConnect - Connect Goa with Digital Services',
+        name: 'GaonConnect',
+        short_name: 'GaonConnect',
+        description: 'GaonConnect - Apni Gaadi, Apni Seva. Book bike, auto, car, tractor aur other vehicles for your village/rural area.',
 
         start_url: '/',
         scope: '/',
