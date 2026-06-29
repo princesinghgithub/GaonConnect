@@ -483,10 +483,10 @@ const GaonConnectLanding = () => {
             <button onClick={() => scrollToSection('faqs')} className="hover:text-orange-400 transition-colors">{t('footer.support')}</button>
           </div>
           <div className="flex justify-center gap-5 mb-6">
-            <a href="#" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-gray-400 hover:text-orange-400 transition-colors">
+            <a href="https://facebook.com/profile.php?id=61591245161485" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-gray-400 hover:text-orange-400 transition-colors">
               <FaFacebook size={22} />
             </a>
-            <a href="#" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-gray-400 hover:text-orange-400 transition-colors">
+            <a href="https://www.instagram.com/gaonconnect/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-gray-400 hover:text-orange-400 transition-colors">
               <FaInstagram size={22} />
             </a>
             <a href="#" target="_blank" rel="noopener noreferrer" aria-label="Twitter" className="text-gray-400 hover:text-orange-400 transition-colors">
