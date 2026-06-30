@@ -50,7 +50,9 @@
       { "name": "Wedding Car", "icon": "🏛️", "price": "₹500+" },
       { "name": "Goods Transport", "icon": "🚚", "price": "₹200+" },
       { "name": "Tempo", "icon": "🚐", "price": "₹150+" },
-      { "name": "JCB/Excavator", "icon": "🏗️", "price": "₹1000+" }
+      { "name": "JCB/Excavator", "icon": "🏗️", "price": "₹1000+" },
+      { "name": "Thresher", "icon": "🌾", "price": "₹800+" },
+      { "name": "Harvester", "icon": "", "price": "₹1500+" }
     ]
   },
   "benefits": {

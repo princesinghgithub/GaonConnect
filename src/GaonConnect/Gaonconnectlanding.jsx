@@ -65,7 +65,7 @@ const GaonConnectLanding = () => {
   };
 
   // Base prices kept separate since they drive booking logic, not translation
-  const basePrices = [50, 30, 100, 400, 2000, 200, 150, 1000];
+  const basePrices = [50, 30, 100, 400, 2000, 200, 150, 1000, 800, 1500];
   const services = t('services.items', { returnObjects: true });
   const features = t('features.items', { returnObjects: true });
   const steps = t('howItWorks.steps', { returnObjects: true });
