@@ -6,6 +6,7 @@ const Ride     = require('../models/Ride');
 const Provider = require('../models/Provider');
 const User     = require('../models/User');
 const { getIO } = require('../socket');
+const { notify } = require('../utils/notifications');
 
 const startScheduledRideJob = () => {
   // Har 2 minute mein check karo
@@ -24,11 +25,14 @@ const startScheduledRideJob = () => {
       if (rides.length > 0) console.log(`⏰ ${rides.length} scheduled rides notify karne hain`);
 
       for (const ride of rides) {
+        // isOnline/'available' check nahi — app band ho tab bhi driver ko
+        // push notification chahiye (jaise tractor/JCB waale jo hamesha
+        // app khole nahi baithte). Sirf 'busy' (kisi aur ride pe) waalon
+        // ko skip karo.
         const drivers = await Provider.find({
-          isOnline:       true,
           isApproved:     true,
           isBlocked:      { $ne: true },
-          status:         'available',
+          status:         { $ne: 'busy' },
           'vehicle.type': ride.vehicleType,
         }).populate('user', 'name phone');
 
@@ -59,7 +63,16 @@ const startScheduledRideJob = () => {
         };
 
         drivers.forEach(driver => {
+          // Socket — agar driver app khula/connected hai to turant dikhega
           io.to(`driver_${driver._id}`).emit('newRideRequest', payload);
+
+          // FCM push — app band ho ya driver offline ho, tab bhi phone pe
+          // notification pahunche
+          const fcm = driver.deviceInfo?.fcmToken;
+          if (fcm) {
+            notify.scheduledRideReminder(fcm, payload).catch(() => {});
+          }
+
           console.log(`🔔 Scheduled ride → ${driver.user?.name} | ${scheduledTime}`);
         });
 

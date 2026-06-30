@@ -110,20 +110,24 @@ const notify = {
   },
 
   // Driver ko — naya ride request (offline push, socket nahi mila toh backup)
-  newRideRequest: async (driverFcmToken, { customerName, pickup, fare, vehicleType }) => {
+  // `payload` poora ride object hai (rideId, pickup, drop, fare, ...) — JSON
+  // string ki tarah data mein jaata hai taaki app tap karne par seedha
+  // accept/reject modal khol sake.
+  newRideRequest: async (driverFcmToken, payload) => {
     return sendToDevice(driverFcmToken, {
       title: '🔔 Naya Ride Request!',
-      body:  `${customerName} — ${pickup} se. Fare: ₹${fare}`,
-      data:  { type: 'NEW_RIDE_REQUEST', customerName, pickup, fare: String(fare), vehicleType },
+      body:  `${payload.customerName} — ${payload.pickup?.address || payload.pickup}. Fare: ₹${payload.fare}`,
+      data:  { type: 'NEW_RIDE_REQUEST', payload: JSON.stringify(payload) },
     });
   },
 
-  // Driver ko — scheduled ride reminder (15 min pehle)
-  scheduledRideReminder: async (driverFcmToken, { customerName, scheduledTime, pickup }) => {
+  // Driver ko — scheduled ride reminder (15 min pehle). isOnline status
+  // ke bina bhi sabhi matching drivers ko jaata hai.
+  scheduledRideReminder: async (driverFcmToken, payload) => {
     return sendToDevice(driverFcmToken, {
       title: '⏰ Scheduled Ride Reminder',
-      body:  `${customerName} ki ride ${scheduledTime} pe hai. Pickup: ${pickup}`,
-      data:  { type: 'SCHEDULED_RIDE_REMINDER', customerName, scheduledTime, pickup },
+      body:  `${payload.customerName} ki ride ${payload.scheduledTime} pe hai. Pickup: ${payload.pickup?.address || payload.pickup}`,
+      data:  { type: 'SCHEDULED_RIDE_REMINDER', payload: JSON.stringify(payload) },
     });
   },
 

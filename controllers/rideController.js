@@ -185,12 +185,7 @@ exports.createRide = async (req, res) => {
       // Push notification — driver offline ho toh bhi mile
       const fcm = driver.deviceInfo?.fcmToken;
       if (fcm) {
-        notify.newRideRequest(fcm, {
-          customerName: ridePayload.customerName,
-          pickup:       ride.pickup.address,
-          fare:         finalFare,
-          vehicleType,
-        }).catch(() => {});
+        notify.newRideRequest(fcm, ridePayload).catch(() => {});
       }
     });
 
@@ -280,13 +275,15 @@ exports.acceptRide = async (req, res) => {
     if (provider.isBlocked) return res.status(403).json({ success: false, message: 'Aapka account block hai' });
 
     const { rideId } = req.body;
-    const ride = await Ride.findOne({ _id: rideId, status: 'searching' });
+    // Atomic check-and-set — jab ek saath kai drivers (jaise scheduled
+    // tractor/JCB request) accept karne ki koshish karein, sirf pehla
+    // hi jeete; baki ko turant "Ride not available" mile.
+    const ride = await Ride.findOneAndUpdate(
+      { _id: rideId, status: 'searching' },
+      { provider: provider._id, status: 'accepted', acceptedAt: new Date() },
+      { new: true },
+    );
     if (!ride) return res.status(404).json({ success: false, message: 'Ride not available' });
-
-    ride.provider  = provider._id;
-    ride.status    = 'accepted';
-    ride.acceptedAt = new Date();
-    await ride.save();
 
     provider.status = 'busy';
     await provider.save();
