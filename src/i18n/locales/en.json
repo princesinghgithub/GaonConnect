@@ -52,7 +52,7 @@
       { "name": "Tempo", "icon": "🚐", "price": "₹150+" },
       { "name": "JCB/Excavator", "icon": "🏗️", "price": "₹1000+" },
       { "name": "Thresher", "icon": "🌾", "price": "₹800+" },
-      { "name": "Harvester", "icon": "", "price": "₹1500+" }
+      { "name": "Harvester", "icon": "🚛", "price": "₹1500+" }
     ]
   },
   "benefits": {
