@@ -3,7 +3,7 @@ const config = {
   env: import.meta.env.MODE || 'development',
 
   // API Base URL
-  apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  apiUrl: import.meta.env.VITE_API_URL || 'https://gaonconnect-backend.onrender.com/api',
 
   // App Info
   appName: 'GaonConnect',
