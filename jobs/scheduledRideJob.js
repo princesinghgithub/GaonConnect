@@ -57,9 +57,15 @@ const startScheduledRideJob = () => {
           distance:      ride.distance,
           vehicleType:   ride.vehicleType,
           paymentMethod: ride.paymentMethod,
-          isScheduled:   true,
+          isScheduled:     true,
           scheduledTime,
-          scheduledNote: ride.scheduledNote || '',
+          scheduledNote:   ride.scheduledNote   || '',
+          bookingMode:     ride.bookingMode     || 'distance',
+          serviceCategory: ride.serviceCategory || '',
+          serviceType:     ride.serviceType     || '',
+          estimatedHours:  ride.estimatedHours  || 0,
+          hourlyRate:      ride.hourlyRate       || 0,
+          workNote:        ride.workNote         || '',
         };
 
         drivers.forEach(driver => {

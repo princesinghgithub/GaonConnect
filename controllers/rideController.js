@@ -57,6 +57,7 @@ exports.createRide = async (req, res) => {
       serviceCategory = '',
       serviceType     = '',
       estimatedHours  = 0,
+      hourlyRate      = 0,
       workNote        = '',
       promoCode       = null,
     } = req.body;
@@ -110,6 +111,7 @@ exports.createRide = async (req, res) => {
       serviceCategory,
       serviceType,
       estimatedHours,
+      hourlyRate,
       workNote,
     });
 
@@ -176,6 +178,12 @@ exports.createRide = async (req, res) => {
       distance:      finalDist,
       vehicleType,
       paymentMethod,
+      bookingMode,
+      serviceCategory,
+      serviceType,
+      estimatedHours,
+      hourlyRate:    ride.hourlyRate || hourlyRate,
+      workNote,
     };
 
     // Socket (online drivers) + FCM push (offline drivers)
