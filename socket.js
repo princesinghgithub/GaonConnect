@@ -6,15 +6,18 @@ let io = null;
 const connectedDrivers = new Map();
 
 function initSocket(server) {
+  const isProd = process.env.NODE_ENV === 'production';
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
     .split(',')
-    .map((o) => o.trim());
+    .map((o) => o.trim())
+    .filter(Boolean);
 
   io = new Server(server, {
     cors: {
       origin: (origin, callback) => {
-        // Mobile apps / Postman — no origin allowed
-        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        if (!origin) return callback(null, true);
+        if (!isProd) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
         callback(new Error(`Socket CORS blocked: ${origin}`));
       },
       methods:     ['GET', 'POST'],
