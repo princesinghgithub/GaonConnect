@@ -73,10 +73,13 @@ const sendViaMsg91 = (normalizedPhone, otp) => {
             console.log(`MSG91 OTP sent to ${mobile}`);
             resolve(true);
           } else {
-            console.error('MSG91 send error:', data);
+            console.error(`MSG91 send error (status ${res.statusCode}):`, data);
             resolve(false);
           }
-        } catch { resolve(false); }
+        } catch (err) {
+          console.error(`MSG91 response parse error (status ${res.statusCode}):`, data, err.message);
+          resolve(false);
+        }
       });
     });
 
