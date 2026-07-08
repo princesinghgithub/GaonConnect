@@ -93,30 +93,36 @@ const sendViaMsg91 = (normalizedPhone, otp) => {
   });
 };
 
-// ─── Fast2SMS Send OTP ────────────────────────────────────────────────────────
+// ─── Fast2SMS Send OTP (Smart OTP API) ────────────────────────────────────────
 const sendViaFast2Sms = (normalizedPhone, otp) => {
   return new Promise((resolve) => {
     const apiKey = process.env.FAST2SMS_API_KEY;
-    if (!apiKey) {
-      console.error('FAST2SMS_API_KEY .env mein nahi hai');
+    const otpId  = process.env.FAST2SMS_OTP_ID;
+    if (!apiKey || !otpId) {
+      console.error('FAST2SMS_API_KEY ya FAST2SMS_OTP_ID .env mein nahi hai');
       return resolve(false);
     }
 
     // Fast2SMS format: 10 digit number, no '+91'
     const mobile = normalizedPhone.replace('+91', '');
 
-    const params = new URLSearchParams({
-      authorization:     apiKey,
-      route:             'otp',
-      variables_values:  otp,
-      flash:             '0',
-      numbers:           mobile,
+    const body = JSON.stringify({
+      mobile,
+      otp_id:     otpId,
+      otp,
+      otp_length: OTP_LENGTH,
+      otp_expiry: OTP_EXPIRY_MINUTES,
     });
 
     const options = {
       hostname: 'www.fast2sms.com',
-      path:     `/dev/bulkV2?${params.toString()}`,
-      method:   'GET',
+      path:     '/dev/otp/send',
+      method:   'POST',
+      headers: {
+        'Authorization':  apiKey,
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
     };
 
     const req = https.request(options, (res) => {
@@ -144,6 +150,7 @@ const sendViaFast2Sms = (normalizedPhone, otp) => {
       resolve(false);
     });
 
+    req.write(body);
     req.end();
   });
 };
