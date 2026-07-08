@@ -93,6 +93,61 @@ const sendViaMsg91 = (normalizedPhone, otp) => {
   });
 };
 
+// ─── Fast2SMS Send OTP ────────────────────────────────────────────────────────
+const sendViaFast2Sms = (normalizedPhone, otp) => {
+  return new Promise((resolve) => {
+    const apiKey = process.env.FAST2SMS_API_KEY;
+    if (!apiKey) {
+      console.error('FAST2SMS_API_KEY .env mein nahi hai');
+      return resolve(false);
+    }
+
+    // Fast2SMS format: 10 digit number, no '+91'
+    const mobile = normalizedPhone.replace('+91', '');
+
+    const params = new URLSearchParams({
+      authorization:     apiKey,
+      route:             'otp',
+      variables_values:  otp,
+      flash:             '0',
+      numbers:           mobile,
+    });
+
+    const options = {
+      hostname: 'www.fast2sms.com',
+      path:     `/dev/bulkV2?${params.toString()}`,
+      method:   'GET',
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.return === true) {
+            console.log(`Fast2SMS OTP sent to ${mobile}`);
+            resolve(true);
+          } else {
+            console.error(`Fast2SMS send error (status ${res.statusCode}):`, data);
+            resolve(false);
+          }
+        } catch (err) {
+          console.error(`Fast2SMS response parse error (status ${res.statusCode}):`, data, err.message);
+          resolve(false);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      console.error('Fast2SMS request error:', err.message);
+      resolve(false);
+    });
+
+    req.end();
+  });
+};
+
 // ─── Public: Send OTP ─────────────────────────────────────────────────────────
 const sendOTP = async (phone) => {
   try {
@@ -121,7 +176,7 @@ const sendOTP = async (phone) => {
     if (process.env.NODE_ENV !== 'production') {
       console.log(`\n📱 [DEV] OTP for ${normalized}: ${otp}\n`);
     } else {
-      await sendViaMsg91(normalized, otp);
+      await sendViaFast2Sms(normalized, otp);
     }
 
     return {
