@@ -254,9 +254,9 @@ api.interceptors.response.use(
 // ================= AUTH APIs =================
 //
 export const authAPI = {
-  sendOTP: (phone) => api.post("/auth/send-phone-otp", { phone }),
-  verifyOTP: (phone, otp, extra = {}) =>
-    api.post("/auth/verify-phone-otp", { phone, otp, role: "customer", ...extra }),
+  sendOTP: (email) => api.post("/auth/send-email-otp", { email }),
+  verifyOTP: (email, otp, extra = {}) =>
+    api.post("/auth/verify-email-otp", { email, otp, role: "customer", ...extra }),
   register: (data) => api.post("/auth/register", data),
   getProfile: () => api.get("/auth/profile"),
   logout: (refreshToken) => api.post("/auth/logout", { refreshToken }),

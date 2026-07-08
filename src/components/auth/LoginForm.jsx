@@ -185,7 +185,7 @@ import { authAPI } from '../../services/api';
 
 const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
   const navigate = useNavigate();
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [showOTP, setShowOTP] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -194,35 +194,27 @@ const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
   /* =====================
      SEND OTP
   ====================== */
-const handleSendOTP = async (e) => {
-  e.preventDefault();
-  setError('');
+  const handleSendOTP = async (e) => {
+    e.preventDefault();
+    setError('');
 
-  if (phone.length !== 10) {
-    setError('Enter valid 10-digit mobile number');
-    return;
-  }
-
-  try {
-    setLoading(true);
-
-    // ✅ response ko variable me lo
-    const res = await authAPI.sendOTP(phone);
-
-    // ✅ OTP nikalo (dev mode only)
-    const receivedOTP = res.data.otp;
-    if (receivedOTP) {
-      alert(`Your OTP is: ${receivedOTP}`);
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Valid email address enter karo');
+      return;
     }
 
-    setShowOTP(true);
-  } catch (err) {
-    setError(err.response?.data?.message || 'Failed to send OTP');
-  } finally {
-    setLoading(false);
-  }
-};
-
+    try {
+      setLoading(true);
+      const res = await authAPI.sendOTP(email);
+      const receivedOTP = res.data.otp;
+      if (receivedOTP) alert(`Your OTP is: ${receivedOTP}`);
+      setShowOTP(true);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /* =====================
      VERIFY OTP
@@ -234,7 +226,7 @@ const handleSendOTP = async (e) => {
     try {
       setLoading(true);
 
-      const res = await authAPI.verifyOTP(phone, otp);
+      const res = await authAPI.verifyOTP(email, otp);
       const data = res?.data;
 
       if (!data?.success) {
@@ -274,18 +266,16 @@ const handleSendOTP = async (e) => {
           </div>
         )}
 
-        {/* Phone / OTP */}
+        {/* Email / OTP */}
         {!showOTP ? (
           <form onSubmit={handleSendOTP}>
-            <label className="text-sm font-semibold">Mobile Number</label>
+            <label className="text-sm font-semibold">Email Address</label>
             <input
-              type="tel"
-              value={phone}
-              onChange={(e) =>
-                setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))
-              }
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full mt-2 px-4 py-3 border rounded-lg"
-              placeholder="10-digit mobile"
+              placeholder="your@email.com"
               required
             />
 
@@ -300,14 +290,14 @@ const handleSendOTP = async (e) => {
           </form>
         ) : (
           <form onSubmit={handleVerifyOTP}>
+            <p className="text-sm text-gray-500 mb-3">OTP sent to {email}</p>
             <label className="text-sm font-semibold">Enter OTP</label>
             <input
               value={otp}
-              onChange={(e) =>
-                setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))
-              }
-              className="w-full mt-2 px-4 py-3 border rounded-lg text-center text-xl"
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="w-full mt-2 px-4 py-3 border rounded-lg text-center text-xl tracking-widest"
               placeholder="******"
+              maxLength="6"
               required
             />
 
@@ -318,16 +308,21 @@ const handleSendOTP = async (e) => {
             >
               {loading ? 'Verifying...' : 'Verify & Login'}
             </button>
+
+            <button
+              type="button"
+              onClick={() => setShowOTP(false)}
+              className="mt-3 w-full text-orange-600 text-sm font-semibold hover:underline"
+            >
+              Change Email
+            </button>
           </form>
         )}
 
         {/* Switch */}
         <p className="text-center mt-6">
           No account?{' '}
-          <button
-            onClick={onSwitchToRegister}
-            className="text-orange-600 font-bold"
-          >
+          <button onClick={onSwitchToRegister} className="text-orange-600 font-bold">
             Register
           </button>
         </p>
