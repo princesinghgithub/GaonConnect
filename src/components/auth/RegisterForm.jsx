@@ -309,7 +309,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
     try {
       setLoading(true);
       await authAPI.register(formData);
-      const res = await authAPI.sendOTP(formData.email);
+      const res = await authAPI.sendOTP(formData.phone);
       const receivedOTP = res?.data?.otp;
       if (receivedOTP) alert(`Your OTP is: ${receivedOTP}`);
       setShowOTP(true);
@@ -335,7 +335,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
     try {
       setLoading(true);
 
-      const res = await authAPI.verifyOTP(formData.email, otp, { role: formData.role });
+      const res = await authAPI.verifyOTP(formData.phone, otp, { role: formData.role });
 
       const data = res?.data;
 
@@ -387,7 +387,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
           <div className="text-center mb-8">
             <div className="text-6xl mb-4">🚜</div>
             <h2 className="text-2xl font-bold text-gray-800">Verify OTP</h2>
-            <p className="text-sm text-gray-500 mt-1">OTP sent to {formData.email}</p>
+            <p className="text-sm text-gray-500 mt-1">OTP sent to +91 {formData.phone}</p>
           </div>
 
           <form onSubmit={handleVerifyOTP}>

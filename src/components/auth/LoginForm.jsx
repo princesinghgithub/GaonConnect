@@ -185,27 +185,24 @@ import { authAPI } from '../../services/api';
 
 const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [showOTP, setShowOTP] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  /* =====================
-     SEND OTP
-  ====================== */
   const handleSendOTP = async (e) => {
     e.preventDefault();
     setError('');
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Valid email address enter karo');
+    if (phone.length !== 10) {
+      setError('Enter valid 10-digit mobile number');
       return;
     }
 
     try {
       setLoading(true);
-      const res = await authAPI.sendOTP(email);
+      const res = await authAPI.sendOTP(phone);
       const receivedOTP = res.data.otp;
       if (receivedOTP) alert(`Your OTP is: ${receivedOTP}`);
       setShowOTP(true);
@@ -216,17 +213,13 @@ const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
     }
   };
 
-  /* =====================
-     VERIFY OTP
-  ====================== */
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     setError('');
 
     try {
       setLoading(true);
-
-      const res = await authAPI.verifyOTP(email, otp);
+      const res = await authAPI.verifyOTP(phone, otp);
       const data = res?.data;
 
       if (!data?.success) {
@@ -252,33 +245,30 @@ const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
 
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="text-6xl mb-4">🚜</div>
           <h1 className="text-3xl font-bold">GaonConnect</h1>
           <p className="text-gray-600">आपकी गाड़ी आपकी सेवा</p>
         </div>
 
-        {/* Error */}
         {error && (
           <div className="mb-4 text-sm text-red-600 bg-red-50 p-2 rounded">
             {error}
           </div>
         )}
 
-        {/* Email / OTP */}
         {!showOTP ? (
           <form onSubmit={handleSendOTP}>
-            <label className="text-sm font-semibold">Email Address</label>
+            <label className="text-sm font-semibold">Mobile Number</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
               className="w-full mt-2 px-4 py-3 border rounded-lg"
-              placeholder="your@email.com"
+              placeholder="10-digit mobile"
+              maxLength="10"
               required
             />
-
             <button
               type="submit"
               disabled={loading}
@@ -290,7 +280,7 @@ const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
           </form>
         ) : (
           <form onSubmit={handleVerifyOTP}>
-            <p className="text-sm text-gray-500 mb-3">OTP sent to {email}</p>
+            <p className="text-sm text-gray-500 mb-3">OTP sent to +91 {phone}</p>
             <label className="text-sm font-semibold">Enter OTP</label>
             <input
               value={otp}
@@ -300,7 +290,6 @@ const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
               maxLength="6"
               required
             />
-
             <button
               type="submit"
               disabled={loading}
@@ -308,18 +297,16 @@ const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
             >
               {loading ? 'Verifying...' : 'Verify & Login'}
             </button>
-
             <button
               type="button"
               onClick={() => setShowOTP(false)}
               className="mt-3 w-full text-orange-600 text-sm font-semibold hover:underline"
             >
-              Change Email
+              Change Number
             </button>
           </form>
         )}
 
-        {/* Switch */}
         <p className="text-center mt-6">
           No account?{' '}
           <button onClick={onSwitchToRegister} className="text-orange-600 font-bold">
