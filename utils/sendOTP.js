@@ -93,36 +93,26 @@ const sendViaMsg91 = (normalizedPhone, otp) => {
   });
 };
 
-// ─── Fast2SMS Send OTP (Smart OTP API) ────────────────────────────────────────
+// ─── Fast2SMS Send OTP (Quick SMS route) ──────────────────────────────────────
 const sendViaFast2Sms = (normalizedPhone, otp) => {
   return new Promise((resolve) => {
     const apiKey = process.env.FAST2SMS_API_KEY;
-    const otpId  = process.env.FAST2SMS_OTP_ID;
-    if (!apiKey || !otpId) {
-      console.error('FAST2SMS_API_KEY ya FAST2SMS_OTP_ID .env mein nahi hai');
+    if (!apiKey) {
+      console.error('FAST2SMS_API_KEY .env mein nahi hai');
       return resolve(false);
     }
 
     // Fast2SMS format: 10 digit number, no '+91'
     const mobile = normalizedPhone.replace('+91', '');
 
-    const body = JSON.stringify({
-      mobile,
-      otp_id:     otpId,
-      otp,
-      otp_length: OTP_LENGTH,
-      otp_expiry: OTP_EXPIRY_MINUTES,
-    });
+    const message = encodeURIComponent(`Your GaonConnect OTP is ${otp}. Valid for ${OTP_EXPIRY_MINUTES} minutes. Do not share with anyone.`);
+    const path = `/dev/bulkV2?authorization=${apiKey}&message=${message}&route=q&numbers=${mobile}`;
 
     const options = {
       hostname: 'www.fast2sms.com',
-      path:     '/dev/otp/send',
-      method:   'POST',
-      headers: {
-        'Authorization':  apiKey,
-        'Content-Type':   'application/json',
-        'Content-Length': Buffer.byteLength(body),
-      },
+      path,
+      method:   'GET',
+      headers:  { 'cache-control': 'no-cache' },
     };
 
     const req = https.request(options, (res) => {
@@ -150,7 +140,6 @@ const sendViaFast2Sms = (normalizedPhone, otp) => {
       resolve(false);
     });
 
-    req.write(body);
     req.end();
   });
 };
