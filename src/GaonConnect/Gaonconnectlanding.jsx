@@ -475,32 +475,40 @@ const GaonConnectLanding = () => {
       {/* Footer */}
       <footer className="bg-gray-900 dark:bg-black text-white py-12 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-wrap justify-center gap-6 mb-6 text-sm">
+          <div className="text-center mb-8">
+            <div className="text-2xl font-bold text-orange-400 mb-1">GaonConnect</div>
+            <div className="text-gray-400 text-sm">gaon aur dehat ke liye transport app</div>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-6 mb-8 text-sm">
             <button onClick={() => scrollToSection('about')} className="hover:text-orange-400 transition-colors">{t('footer.about')}</button>
             <button onClick={() => scrollToSection('contact')} className="hover:text-orange-400 transition-colors">{t('footer.contact')}</button>
             <button onClick={() => navigate('/privacy-policy')} className="hover:text-orange-400 transition-colors">{t('footer.privacy')}</button>
             <button onClick={() => scrollToSection('faqs')} className="hover:text-orange-400 transition-colors">{t('footer.terms')}</button>
             <button onClick={() => scrollToSection('faqs')} className="hover:text-orange-400 transition-colors">{t('footer.support')}</button>
           </div>
-          <div className="flex justify-center gap-5 mb-6">
-            <a href="https://facebook.com/profile.php?id=61591245161485" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-gray-400 hover:text-orange-400 transition-colors">
-              <FaFacebook size={22} />
+
+          {/* Social Media - with labels */}
+          <div className="flex flex-wrap justify-center gap-4 mb-8">
+            <a href="https://www.instagram.com/gaonconnect/" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-white transition-opacity hover:opacity-80"
+              style={{ background: 'linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)' }}>
+              <FaInstagram size={16} /> Instagram
             </a>
-            <a href="https://www.instagram.com/gaonconnect/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-gray-400 hover:text-orange-400 transition-colors">
-              <FaInstagram size={22} />
+            <a href="https://facebook.com/profile.php?id=61591245161485" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors">
+              <FaFacebook size={16} /> Facebook
             </a>
-            <a href="#" target="_blank" rel="noopener noreferrer" aria-label="Twitter" className="text-gray-400 hover:text-orange-400 transition-colors">
-              <FaTwitter size={22} />
-            </a>
-            <a href="#" target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="text-gray-400 hover:text-orange-400 transition-colors">
-              <FaYoutube size={22} />
-            </a>
-            <a href="https://www.linkedin.com/company/133394201/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="text-gray-400 hover:text-orange-400 transition-colors">
-              <FaLinkedin size={22} />
+            <a href="https://www.linkedin.com/company/133394201/" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-blue-700 text-white hover:bg-blue-600 transition-colors">
+              <FaLinkedin size={16} /> LinkedIn
             </a>
           </div>
-          <p className="text-center text-gray-400 text-sm mb-2">{t('footer.copyright')}</p>
-          <p className="text-center text-gray-500 text-sm">{t('footer.tagline')}</p>
+
+          <div className="border-t border-gray-800 pt-6">
+            <p className="text-center text-gray-400 text-sm mb-2">{t('footer.copyright')}</p>
+            <p className="text-center text-gray-500 text-sm">{t('footer.tagline')}</p>
+          </div>
         </div>
       </footer>
     </div>

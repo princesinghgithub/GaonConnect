@@ -3,6 +3,20 @@ import { Users, Gift, Award, MessageCircle } from 'lucide-react';
 
 const SUPPORT_PHONE = '916260132613';
 
+const InstagramIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+    <circle cx="12" cy="12" r="4"/>
+    <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+  </svg>
+);
+
+const FacebookIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>
+  </svg>
+);
+
 const SideMenu = ({ showMenu, setShowMenu }) => {
   if (!showMenu) return null;
 
@@ -42,6 +56,34 @@ const SideMenu = ({ showMenu, setShowMenu }) => {
               )}
             </button>
           ))}
+        </div>
+
+        {/* Social Media Links */}
+        <div className="mt-6 pt-4 border-t border-gray-100">
+          <p className="text-xs text-gray-400 mb-3 text-center">Follow GaonConnect</p>
+          <div className="flex gap-3 justify-center">
+            <a
+              href="https://www.instagram.com/gaonconnect/"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setShowMenu(false)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-medium"
+              style={{ background: 'linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)' }}
+            >
+              <InstagramIcon />
+              Instagram
+            </a>
+            <a
+              href="https://facebook.com/profile.php?id=61591245161485"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setShowMenu(false)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-medium bg-blue-600"
+            >
+              <FacebookIcon />
+              Facebook
+            </a>
+          </div>
         </div>
       </div>
     </div>
