@@ -1,19 +1,15 @@
 const multer = require('multer');
 const path   = require('path');
-const fs     = require('fs');
-const { randomUUID } = require('crypto');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
 
-// Ensure directory exists at startup
-const documentsDir = 'uploads/documents/';
-if (!fs.existsSync(documentsDir)) fs.mkdirSync(documentsDir, { recursive: true });
-
-const documentStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, documentsDir),
-  filename: (_req, file, cb) => {
-    // UUID-based name — not guessable from outside
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `doc-${randomUUID()}${ext}`);
-  },
+const documentStorage = new CloudinaryStorage({
+  cloudinary,
+  params: (_req, file) => ({
+    folder:        'gaonconnect/documents',
+    resource_type: 'auto', // PDFs ke liye zaroori, images bhi handle ho jaati hain
+    allowed_formats: ['jpg', 'jpeg', 'png', 'pdf'],
+  }),
 });
 
 const documentFilter = (_req, file, cb) => {

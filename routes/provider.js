@@ -1,8 +1,8 @@
 const express = require('express');
 const router  = express.Router();
-const path    = require('path');
-const fs      = require('fs');
 const multer  = require('multer');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
 
 const { protect }    = require('../middleware/auth');
 const { docUpload }  = require('../middleware/upload');
@@ -30,18 +30,15 @@ const {
 
 const { sendPhoneOTP, verifyPhoneOTP } = require('../controllers/authController');
 
-// ─── Ensure upload dirs exist ────────────────────────────────────────────────
-['uploads/profile/', 'uploads/documents/'].forEach((dir) => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-});
-
 // ─── Profile photo upload config ─────────────────────────────────────────────
-const { randomUUID } = require('crypto');
-
 const photoUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, 'uploads/profile/'),
-    filename:    (_req, file, cb) => cb(null, `profile-${randomUUID()}${path.extname(file.originalname)}`),
+  storage: new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder:          'gaonconnect/profile',
+      resource_type:   'image',
+      allowed_formats: ['jpg', 'jpeg', 'png'],
+    },
   }),
   limits:     { fileSize: 5 * 1024 * 1024 }, // 5 MB
   fileFilter: (_req, file, cb) => {

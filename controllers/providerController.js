@@ -1341,9 +1341,8 @@ exports.uploadDoc = async (req, res) => {
       data: {
         documentType: req.body.documentType,
         filename: req.file.filename,
-        path: req.file.path,
         size: req.file.size,
-        url: `/uploads/documents/${req.file.filename}`
+        url: req.file.path // Cloudinary secure URL
       }
     });
   } catch (error) {
@@ -1374,7 +1373,7 @@ exports.uploadProfilePhoto = async (req, res) => {
     if (!req.file)
       return res.status(400).json({ success: false, message: 'Please upload a photo' });
 
-    provider.profilePhoto = `/uploads/profile/${req.file.filename}`;
+    provider.profilePhoto = req.file.path; // Cloudinary secure URL
     await provider.save();
 
     res.json({
@@ -1410,9 +1409,9 @@ exports.uploadProviderDocument = async (req, res) => {
     if (!validTypes.includes(documentType))
       return res.status(400).json({ success: false, message: 'Invalid document type' });
 
-    // Update document URL
-    const documentUrl = `/uploads/documents/${req.file.filename}`;
-    
+    // Update document URL (Cloudinary secure URL)
+    const documentUrl = req.file.path;
+
     provider.documents[documentType].url = documentUrl;
     provider.documents[documentType].verified = false; // Reset verification
 
