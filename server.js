@@ -59,9 +59,6 @@ app.use(cors({
   allowedHeaders:       ['Content-Type', 'Authorization'],
 }));
 
-// ─── Webhooks (raw body — mounted before JSON parser for signature verification)
-app.use('/api/webhook', require('./routes/webhook'));
-
 // ─── Body Parsers (with size limit) ──────────────────────────────────────────
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
