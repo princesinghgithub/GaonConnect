@@ -255,7 +255,7 @@ const BookRide = () => {
   const displayFare = isTractorJcb ? calcTractorFare() : fare;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="bg-gray-50 py-4 lg:py-8">
       <div className="max-w-6xl mx-auto px-4">
         <h2 className="text-3xl font-bold text-gray-900 mb-8">Book a Ride</h2>
 
@@ -500,7 +500,7 @@ const BookRide = () => {
           </div>
 
           {/* ── Right: Map ── */}
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden sticky top-8" style={{ height: 'fit-content' }}>
+          <div className="hidden lg:block bg-white rounded-xl shadow-sm overflow-hidden sticky top-8" style={{ height: 'fit-content' }}>
             <div className="h-[600px]">
               <Map
                 center={
