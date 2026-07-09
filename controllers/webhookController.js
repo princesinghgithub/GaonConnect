@@ -1,0 +1,49 @@
+const crypto = require('crypto');
+const Ride   = require('../models/Ride');
+
+// ─── RAZORPAY WEBHOOK ──────────────────────────────────────────────────────────
+// Razorpay dashboard se seedha server-to-server call aata hai (payment.captured /
+// payment.failed) — client-side verify (razorpay-verify) ke miss ho jaane ka
+// (app band ho gaya, network gaya) backup / source of truth yehi hai.
+// Route raw body (Buffer) pe mount hai — signature isi raw bytes se banti hai.
+exports.razorpayWebhook = async (req, res) => {
+  try {
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!secret) {
+      console.error('RAZORPAY_WEBHOOK_SECRET .env mein nahi hai');
+      return res.status(500).json({ success: false });
+    }
+
+    const signature = req.headers['x-razorpay-signature'];
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(req.body) // raw Buffer — express.raw() se aata hai
+      .digest('hex');
+
+    if (!signature || expectedSignature !== signature) {
+      console.error('Razorpay webhook: invalid signature');
+      return res.status(400).json({ success: false, message: 'Invalid signature' });
+    }
+
+    const event = JSON.parse(req.body.toString('utf8'));
+
+    if (event.event === 'payment.captured' || event.event === 'payment.failed') {
+      const payment = event.payload?.payment?.entity;
+      const orderId = payment?.order_id;
+      if (!orderId) return res.status(200).json({ success: true }); // acknowledge, kuch karne layak nahi
+
+      const ride = await Ride.findOne({ razorpayOrderId: orderId });
+      if (ride) {
+        ride.paymentStatus = event.event === 'payment.captured' ? 'paid' : 'failed';
+        if (event.event === 'payment.captured') ride.razorpayPaymentId = payment.id;
+        await ride.save();
+        console.log(`Razorpay webhook: ride ${ride._id} → ${ride.paymentStatus}`);
+      }
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Razorpay webhook error:', error);
+    return res.status(500).json({ success: false });
+  }
+};
