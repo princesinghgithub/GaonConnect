@@ -29,4 +29,21 @@ const docUpload = multer({
   fileFilter: documentFilter,
 });
 
-module.exports = { docUpload };
+// ─── Photo Upload (Cloudinary, image-only) ────────────────────────────────────
+const createPhotoUpload = (folder) => multer({
+  storage: new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder,
+      resource_type:   'image',
+      allowed_formats: ['jpg', 'jpeg', 'png'],
+    },
+  }),
+  limits:     { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Sirf image files allowed hain (JPG/PNG)'));
+  },
+});
+
+module.exports = { docUpload, createPhotoUpload };

@@ -5,6 +5,7 @@ const { protect }                                        = require('../middlewar
 const User                                               = require('../models/User');
 const { otpLimiter, loginLimiter }                       = require('../middleware/rateLimiter');
 const { validate, schemas }                              = require('../middleware/validate');
+const { createPhotoUpload }                              = require('../middleware/upload');
 const { verifyRefreshToken, rotateRefreshToken,
         revokeRefreshToken, revokeAllUserTokens,
         generateAccessToken }                            = require('../utils/tokenService');
@@ -12,7 +13,10 @@ const {
   register, sendOTP, verifyOTP,
   sendPhoneOTP, verifyPhoneOTP,
   getProfile, updateProfile,
+  uploadProfilePhoto,
 } = require('../controllers/authController');
+
+const photoUpload = createPhotoUpload('gaonconnect/customer-profile');
 
 // ─── Register ─────────────────────────────────────────────────────────────────
 router.post('/register',
@@ -114,5 +118,6 @@ router.post('/logout-all',
 // ─── Profile ──────────────────────────────────────────────────────────────────
 router.get('/profile',  protect, getProfile);
 router.put('/profile',  protect, validate(schemas.updateProfile), updateProfile);
+router.post('/profile/photo', protect, photoUpload.single('photo'), uploadProfilePhoto);
 
 module.exports = router;

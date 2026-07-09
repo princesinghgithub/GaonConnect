@@ -1,11 +1,8 @@
 const express = require('express');
 const router  = express.Router();
-const multer  = require('multer');
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const cloudinary = require('../config/cloudinary');
 
 const { protect }    = require('../middleware/auth');
-const { docUpload }  = require('../middleware/upload');
+const { docUpload, createPhotoUpload }  = require('../middleware/upload');
 const { otpLimiter, loginLimiter } = require('../middleware/rateLimiter');
 const { validate, schemas }        = require('../middleware/validate');
 
@@ -31,21 +28,7 @@ const {
 const { sendPhoneOTP, verifyPhoneOTP } = require('../controllers/authController');
 
 // ─── Profile photo upload config ─────────────────────────────────────────────
-const photoUpload = multer({
-  storage: new CloudinaryStorage({
-    cloudinary,
-    params: {
-      folder:          'gaonconnect/profile',
-      resource_type:   'image',
-      allowed_formats: ['jpg', 'jpeg', 'png'],
-    },
-  }),
-  limits:     { fileSize: 5 * 1024 * 1024 }, // 5 MB
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Sirf image files allowed hain (JPG/PNG)'));
-  },
-});
+const photoUpload = createPhotoUpload('gaonconnect/profile');
 
 // ─── PUBLIC ROUTES — no token needed ─────────────────────────────────────────
 

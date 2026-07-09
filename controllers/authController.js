@@ -252,3 +252,24 @@ exports.updateProfile = async (req, res) => {
     res.status(500).json({ success: false, message: 'Profile update mein error', ...(isDev && { error: error.message }) });
   }
 };
+
+// ─── UPLOAD PROFILE PHOTO ─────────────────────────────────────────────────────
+exports.uploadProfilePhoto = async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'Photo upload karo' });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User nahi mila' });
+
+    user.profilePhoto = req.file.path; // Cloudinary secure URL
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile photo update ho gaya!',
+      data: { profilePhoto: user.profilePhoto },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Photo upload mein error', ...(isDev && { error: error.message }) });
+  }
+};
