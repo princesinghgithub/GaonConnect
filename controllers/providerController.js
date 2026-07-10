@@ -1412,7 +1412,7 @@ exports.uploadProviderDocument = async (req, res) => {
     // Update document URL (Cloudinary secure URL)
     const documentUrl = req.file.path;
 
-    provider.documents[documentType].url = documentUrl;
+    provider.documents[documentType].photo = documentUrl;
     provider.documents[documentType].verified = false; // Reset verification
 
     await provider.save();
