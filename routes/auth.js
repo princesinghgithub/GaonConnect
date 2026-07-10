@@ -12,6 +12,7 @@ const { verifyRefreshToken, rotateRefreshToken,
 const {
   register, sendOTP, verifyOTP,
   sendPhoneOTP, verifyPhoneOTP,
+  checkUser, checkDriver,
   getProfile, updateProfile,
   uploadProfilePhoto,
 } = require('../controllers/authController');
@@ -37,6 +38,12 @@ router.post('/verify-otp',
   validate(schemas.verifyOTP),
   verifyOTP
 );
+
+// ─── Check User Exists (customer app login pre-check) ─────────────────────────
+router.get('/check-user', checkUser);
+
+// ─── Check Driver Exists (driver app login pre-check) ─────────────────────────
+router.get('/check-driver', checkDriver);
 
 // ─── Phone OTP ────────────────────────────────────────────────────────────────
 router.post('/send-phone-otp',
