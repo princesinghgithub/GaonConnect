@@ -1043,7 +1043,7 @@ const DocumentStatus = ({ name, doc }) => {
         icon: <Shield size={18} className="text-green-600" />
       };
     }
-    if (doc?.url) {
+    if (doc?.photo) {
       return {
         text: 'Pending Verification',
         bgColor: 'bg-yellow-50',
