@@ -225,6 +225,39 @@ exports.verifyPhoneOTP = async (req, res) => {
   }
 };
 
+// ─── CHECK USER EXISTS (customer app login pre-check) ────────────────────────
+// GET /api/auth/check-user?phone=9876543210
+exports.checkUser = async (req, res) => {
+  try {
+    const phone = String(req.query.phone || '').replace(/\D/g, '').slice(-10);
+    if (!phone || phone.length !== 10) return res.json({ exists: false });
+    const user = await User.findOne({ phone });
+    return res.json({ exists: !!user });
+  } catch (error) {
+    console.error('checkUser Error:', error);
+    return res.json({ exists: null });
+  }
+};
+
+// ─── CHECK DRIVER EXISTS ─────────────────────────────────────────────────────
+// GET /api/auth/check-driver?phone=9876543210
+// Driver app login se pehle check karta hai ki number registered hai ya nahi
+exports.checkDriver = async (req, res) => {
+  try {
+    const phone = String(req.query.phone || '').replace(/\D/g, '').slice(-10);
+    if (!phone || phone.length !== 10) return res.json({ exists: false });
+
+    const user = await User.findOne({ phone });
+    if (!user) return res.json({ exists: false });
+
+    const provider = await Provider.findOne({ user: user._id });
+    return res.json({ exists: !!provider });
+  } catch (error) {
+    console.error('checkDriver Error:', error);
+    return res.json({ exists: null });
+  }
+};
+
 // ─── GET PROFILE ─────────────────────────────────────────────────────────────
 exports.getProfile = async (req, res) => {
   try {
