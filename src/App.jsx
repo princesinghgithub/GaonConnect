@@ -164,6 +164,8 @@ import RideTracking from './components/RideTracking';
 import GaonConnectLanding from './GaonConnect/Gaonconnectlanding'
 import WhatsAppFloat from "./components/pages/WhatsAppFloat";
 import PrivacyPolicy from "./components/pages/PrivacyPolicy";
+import AccountDeletion from "./components/pages/AccountDeletion";
+import DataDeletion from "./components/pages/DataDeletion";
 
 const AuthScreens = () => {
   const { login } = useAuth();
@@ -301,6 +303,10 @@ function App() {
 
             {/* PRIVACY POLICY - Public page for Play Store */}
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+
+            {/* ACCOUNT / DATA DELETION - Public pages for Play Store */}
+            <Route path="/account-deletion" element={<AccountDeletion />} />
+            <Route path="/data-deletion" element={<DataDeletion />} />
           </Routes>
         </DriverProvider>
           <WhatsAppFloat /> 
