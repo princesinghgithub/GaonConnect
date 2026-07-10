@@ -202,6 +202,13 @@ const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
 
     try {
       setLoading(true);
+
+      const checkRes = await authAPI.checkUser(phone);
+      if (!checkRes.data?.exists) {
+        setError('Is number se koi account nahi mila. Pehle Register karein.');
+        return;
+      }
+
       const res = await authAPI.sendOTP(phone);
       const receivedOTP = res.data.otp;
       if (receivedOTP) alert(`Your OTP is: ${receivedOTP}`);

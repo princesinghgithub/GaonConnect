@@ -254,6 +254,7 @@ api.interceptors.response.use(
 // ================= AUTH APIs =================
 //
 export const authAPI = {
+  checkUser: (phone) => api.get("/auth/check-user", { params: { phone } }),
   sendOTP: (phone) => api.post("/auth/send-phone-otp", { phone }),
   verifyOTP: (phone, otp, extra = {}) =>
     api.post("/auth/verify-phone-otp", { phone, otp, role: "customer", ...extra }),
