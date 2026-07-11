@@ -40,10 +40,10 @@ router.post('/verify-otp',
 );
 
 // ─── Check User Exists (customer app login pre-check) ─────────────────────────
-router.get('/check-user', checkUser);
+router.get('/check-user', otpLimiter, checkUser);
 
 // ─── Check Driver Exists (driver app login pre-check) ─────────────────────────
-router.get('/check-driver', checkDriver);
+router.get('/check-driver', otpLimiter, checkDriver);
 
 // ─── Phone OTP ────────────────────────────────────────────────────────────────
 router.post('/send-phone-otp',
