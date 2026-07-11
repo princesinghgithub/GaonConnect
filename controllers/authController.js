@@ -6,6 +6,10 @@ const { sendEmail } = require('../utils/mailer');
 
 const isDev = process.env.NODE_ENV !== 'production';
 
+// Client se sirf ye roles self-service accept honge — 'admin' hamesha backend/seed se hi set hoga
+const CLIENT_SETTABLE_ROLES = ['customer', 'provider'];
+const sanitizeRole = (role) => (CLIENT_SETTABLE_ROLES.includes(role) ? role : 'customer');
+
 const generateOTP = () => {
   const crypto = require('crypto');
   return crypto.randomInt(100000, 999999).toString();
@@ -54,7 +58,7 @@ exports.register = async (req, res) => {
     const otp = generateOTP();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    await User.create({ name, phone, email, city: city || '', role: role || 'customer', otp, otpExpiry, isVerified: false });
+    await User.create({ name, phone, email, city: city || '', role: sanitizeRole(role), otp, otpExpiry, isVerified: false });
 
     if (!isDev) {
       await sendOtpViaEmail(email, otp);
@@ -174,7 +178,7 @@ exports.verifyPhoneOTP = async (req, res) => {
     const tenDigit = normalized.slice(-10);
 
     let user = await User.findOne({ phone: tenDigit });
-    const activeRole = role || 'customer';
+    const activeRole = sanitizeRole(role);
 
     if (!user) {
       // Naya user — jis app se aaya uska role set karo
@@ -190,12 +194,13 @@ exports.verifyPhoneOTP = async (req, res) => {
       });
     } else {
       // Existing user — roles array mein add karo agar nahi hai
+      // 'provider' yahan add nahi karte — wo sirf Provider profile confirm hone ke baad add hota hai (neeche)
       let changed = false;
       if (!user.isVerified) { user.isVerified = true; changed = true; }
 
       if (!user.roles) user.roles = [user.role];
 
-      if (!user.roles.includes(activeRole)) {
+      if (activeRole !== 'provider' && !user.roles.includes(activeRole)) {
         user.roles.push(activeRole);
         changed = true;
       }
@@ -209,6 +214,12 @@ exports.verifyPhoneOTP = async (req, res) => {
         return res.status(404).json({ success: false, message: 'Driver profile nahi mili. Pehle register karo.' });
       if (!provider.isApproved)
         return res.status(403).json({ success: false, message: 'Aapka account abhi admin se approve nahi hua.' });
+
+      // Provider profile confirm ho gaya — ab hi roles mein 'provider' add karo
+      if (!user.roles.includes('provider')) {
+        user.roles.push('provider');
+        await user.save();
+      }
     }
 
     let providerData = null;
