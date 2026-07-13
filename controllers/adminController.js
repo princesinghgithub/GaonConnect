@@ -1719,6 +1719,7 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Driver = require('../models/Provider')
+const Vehicle = require('../models/Vehicle');
 const Ride = require('../models/Ride');
 const Transaction = require('../models/Transaction');
 const Setting = require('../models/Setting');
@@ -1815,7 +1816,7 @@ const getRecentActivity = async (req, res) => {
 
       // ✅ FIXED POPULATE
       .populate('customer', 'name email phone')
-      .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name phone' } })
+      .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
 
       .select(`
         status
@@ -2029,7 +2030,7 @@ const getDashboardOverview = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(20)
         .populate('customer', 'name')
-        .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name' } })
+        .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name' }, { path: 'activeVehicle' }] })
         .select('vehicleType status customer provider createdAt'),
     ]);
 
@@ -2087,8 +2088,8 @@ const getAIAgentTasks = async (req, res) => {
         provider: { $ne: null },
         status: { $ne: 'cancelled' },
       }),
-      Driver.find({ isApproved: false, isRejected: { $ne: true } }).populate('user', 'name').limit(5).select('user vehicle createdAt'),
-      Driver.find({ isApproved: true, updatedAt: { $gte: yesterday } }).populate('user', 'name').limit(5).select('user vehicle updatedAt'),
+      Driver.find({ isApproved: false, isRejected: { $ne: true } }).populate('user', 'name').populate('vehicles').limit(5).select('user createdAt'),
+      Driver.find({ isApproved: true, updatedAt: { $gte: yesterday } }).populate('user', 'name').populate('vehicles').limit(5).select('user updatedAt'),
     ]);
 
     const tasks = [];
@@ -2111,7 +2112,7 @@ const getAIAgentTasks = async (req, res) => {
         drivers: pendingDrivers.map((d) => ({
           id: d._id,
           name: d.user?.name || 'N/A',
-          vehicleType: d.vehicle?.type,
+          vehicleType: d.vehicles?.[0]?.type,
         })),
       });
     }
@@ -2120,12 +2121,12 @@ const getAIAgentTasks = async (req, res) => {
       tasks.push({
         type: 'broadcast_ready',
         title: 'WhatsApp broadcast ready',
-        subtitle: `Naya ${newApprovedDrivers[0].vehicle?.type || ''} driver join hua — customers ko batao`,
+        subtitle: `Naya ${newApprovedDrivers[0].vehicles?.[0]?.type || ''} driver join hua — customers ko batao`,
         count: newApprovedDrivers.length,
         drivers: newApprovedDrivers.map((d) => ({
           id: d._id,
           name: d.user?.name || 'N/A',
-          vehicleType: d.vehicle?.type,
+          vehicleType: d.vehicles?.[0]?.type,
         })),
       });
     }
@@ -2166,7 +2167,7 @@ const createDriver = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Is phone number se account already exist karta hai' });
     }
 
-    const existingVehicle = await Driver.findOne({ 'vehicle.number': vehicleNumber.trim().toUpperCase() });
+    const existingVehicle = await Vehicle.findOne({ number: vehicleNumber.trim().toUpperCase() });
     if (existingVehicle) {
       return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
     }
@@ -2183,22 +2184,34 @@ const createDriver = async (req, res) => {
 
     const driver = await Driver.create({
       user: user._id,
-      vehicle: {
-        type:   vehicleType,
-        number: vehicleNumber.trim().toUpperCase(),
-        model:  vehicleModel || '',
-        color:  vehicleColor || '',
-      },
       isApproved: true,
       approvedAt: Date.now(),
       approvedBy: req.user._id,
       status: 'offline',
     });
 
+    // Admin-onboarded driver — vehicle pre-verified aur turant active (kaam ke liye ready)
+    const vehicle = await Vehicle.create({
+      providerId: driver._id,
+      type:   vehicleType,
+      number: vehicleNumber.trim().toUpperCase(),
+      model:  vehicleModel || '',
+      color:  vehicleColor || '',
+      isVerified: true,
+      isActive:   true,
+    });
+
+    driver.activeVehicle = vehicle._id;
+    await driver.save();
+
     res.status(201).json({
       success: true,
       message: 'Driver onboard ho gaya',
-      data: { ...driver.toObject(), user: { _id: user._id, name: user.name, phone: user.phone } }
+      data: {
+        ...driver.toObject(),
+        vehicle,
+        user: { _id: user._id, name: user.name, phone: user.phone }
+      }
     });
   } catch (error) {
     if (error.code === 11000) {
@@ -2219,6 +2232,11 @@ const getAllDrivers = async (req, res) => {
       { $match: matchStage },
       { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'user' } },
       { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+      { $lookup: { from: 'vehicles', localField: '_id', foreignField: 'providerId', as: 'vehicles' } },
+      // Admin dashboard listing sirf "current" vehicle dikhata hai — activeVehicle ko
+      // 'vehicle' (singular) naam se attach karo taaki wo field seedha match ho jaye
+      { $lookup: { from: 'vehicles', localField: 'activeVehicle', foreignField: '_id', as: 'vehicle' } },
+      { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
     ];
 
     if (search) {
@@ -2228,7 +2246,7 @@ const getAllDrivers = async (req, res) => {
             { 'user.name': { $regex: search, $options: 'i' } },
             { 'user.email': { $regex: search, $options: 'i' } },
             { 'user.phone': { $regex: search, $options: 'i' } },
-            { 'vehicle.number': { $regex: search, $options: 'i' } },
+            { 'vehicles.number': { $regex: search, $options: 'i' } },
           ],
         },
       });
@@ -2272,7 +2290,7 @@ const getAllDrivers = async (req, res) => {
 
 const getDriverById = async (req, res) => {
   try {
-    const driver = await Driver.findById(req.params.id).populate('user', '-password');
+    const driver = await Driver.findById(req.params.id).populate('user', '-password').populate('vehicles');
 
     if (!driver) {
       return res.status(404).json({
@@ -2573,11 +2591,12 @@ const deleteDriver = async (req, res) => {
   }
 };
 
+// Provider-level KYC doc verification (aadhaar only — vehicle docs use verifyVehicleDocument)
 const verifyDocument = async (req, res) => {
   try {
     const { documentType, status } = req.body;
 
-    const VERIFIABLE_DOCS = ['license', 'rc', 'insurance', 'aadhaar'];
+    const VERIFIABLE_DOCS = ['aadhaar'];
     if (!VERIFIABLE_DOCS.includes(documentType)) {
       return res.status(400).json({
         success: false,
@@ -2594,6 +2613,7 @@ const verifyDocument = async (req, res) => {
       });
     }
 
+    driver.documents[documentType] = driver.documents[documentType] || {};
     driver.documents[documentType].verified = status === 'verified';
     driver.documents[documentType].verifiedAt = Date.now();
     driver.documents[documentType].verifiedBy = req.user._id;
@@ -2611,6 +2631,179 @@ const verifyDocument = async (req, res) => {
       message: 'Server error',
       error: error.message
     });
+  }
+};
+
+// Bank details verify — bina isके withdrawal (/wallet/withdraw) kabhi allow nahi hota
+const verifyBankDetails = async (req, res) => {
+  try {
+    const { verified } = req.body;
+
+    const driver = await Driver.findById(req.params.id);
+
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        message: 'Driver not found'
+      });
+    }
+
+    if (!driver.bankDetails || !driver.bankDetails.accountNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Driver ne abhi bank details add hi nahi ki hai'
+      });
+    }
+
+    driver.bankDetails.verified = verified !== false;
+    await driver.save();
+
+    res.json({
+      success: true,
+      message: `Bank details ${driver.bankDetails.verified ? 'verified' : 'unverified'}`,
+      data: driver.bankDetails
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
+// ===== VEHICLES MANAGEMENT =====
+
+const getAllVehicles = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, providerId, type, isVerified } = req.query;
+
+    const query = {};
+    if (providerId) query.providerId = providerId;
+    if (type) query.type = type;
+    if (isVerified !== undefined) query.isVerified = isVerified === 'true';
+
+    const vehicles = await Vehicle.find(query)
+      .populate({ path: 'providerId', select: 'user', populate: { path: 'user', select: 'name phone' } })
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const count = await Vehicle.countDocuments(query);
+
+    res.json({
+      success: true,
+      data: vehicles,
+      totalPages: Math.ceil(count / limit),
+      currentPage: Number(page),
+      total: count
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const getVehicleByIdAdmin = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id)
+      .populate({ path: 'providerId', select: 'user', populate: { path: 'user', select: 'name phone' } });
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    res.json({ success: true, data: vehicle });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const approveVehicle = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findByIdAndUpdate(
+      req.params.id,
+      { isVerified: true, isRejected: false },
+      { new: true }
+    );
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    res.json({ success: true, message: 'Vehicle approved', data: vehicle });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const rejectVehicle = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findByIdAndUpdate(
+      req.params.id,
+      { isVerified: false, isRejected: true, rejectionReason: req.body.reason || '' },
+      { new: true }
+    );
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    res.json({ success: true, message: 'Vehicle rejected', data: vehicle });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const deleteVehicleAdmin = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    // Agar yehi kisi provider ki active vehicle hai, to unlink karo pehle
+    await Driver.updateMany({ activeVehicle: vehicle._id }, { $set: { activeVehicle: null, isOnline: false, status: 'offline' } });
+
+    await Vehicle.findByIdAndDelete(vehicle._id);
+
+    res.json({ success: true, message: 'Vehicle deleted' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Vehicle-level document verification (rc/insurance/license/permit/fitness/machineRegistration/operatorLicense)
+const verifyVehicleDocument = async (req, res) => {
+  try {
+    const { documentType, status } = req.body;
+
+    const VERIFIABLE_VEHICLE_DOCS = ['rc', 'insurance', 'license', 'permit', 'fitness', 'machineRegistration', 'operatorLicense'];
+    if (!VERIFIABLE_VEHICLE_DOCS.includes(documentType)) {
+      return res.status(400).json({
+        success: false,
+        message: `documentType ek inme se hona chahiye: ${VERIFIABLE_VEHICLE_DOCS.join(', ')}`
+      });
+    }
+
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    vehicle.documents[documentType] = vehicle.documents[documentType] || {};
+    vehicle.documents[documentType].verified = status === 'verified';
+    vehicle.documents[documentType].verifiedAt = Date.now();
+    vehicle.documents[documentType].verifiedBy = req.user._id;
+
+    await vehicle.save();
+
+    res.json({
+      success: true,
+      message: 'Document verification updated',
+      data: vehicle
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
@@ -2708,7 +2901,8 @@ const getAllRides = async (req, res) => {
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 })
       .populate('customer', 'name email phone')
-      .populate({ path: 'provider', select: 'user vehicle rating', populate: { path: 'user', select: 'name phone' } });
+      .populate('vehicle')
+      .populate({ path: 'provider', select: 'user activeVehicle rating', populate: { path: 'user', select: 'name phone' } });
 
     const count = await Ride.countDocuments(query);
 
@@ -2732,7 +2926,8 @@ const getRideDetails = async (req, res) => {
   try {
     const ride = await Ride.findById(req.params.id)
       .populate('customer', 'name email phone profileImage')
-      .populate({ path: 'provider', select: 'user vehicle rating', populate: { path: 'user', select: 'name email phone profileImage' } });
+      .populate('vehicle')
+      .populate({ path: 'provider', select: 'user activeVehicle rating', populate: { path: 'user', select: 'name email phone profileImage' } });
 
     if (!ride) {
       return res.status(404).json({
@@ -2869,7 +3064,7 @@ const getOngoingRides = async (req, res) => {
       status: { $in: ACTIVE_RIDE_STATUSES }
     })
       .populate('customer', 'name phone')
-      .populate({ path: 'provider', select: 'user vehicle currentLocation', populate: { path: 'user', select: 'name phone' } })
+      .populate({ path: 'provider', select: 'user activeVehicle currentLocation', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
       .sort({ createdAt: -1 });
 
     res.json({
@@ -2889,7 +3084,7 @@ const trackRide = async (req, res) => {
   try {
     const ride = await Ride.findById(req.params.id)
       .select('status pickup drop provider')
-      .populate({ path: 'provider', select: 'user vehicle currentLocation', populate: { path: 'user', select: 'name phone' } });
+      .populate({ path: 'provider', select: 'user activeVehicle currentLocation', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] });
 
     if (!ride) {
       return res.status(404).json({
@@ -2919,11 +3114,19 @@ const getActiveDriversLocation = async (req, res) => {
       isBlocked: { $ne: true }
     })
       .populate('user', 'name phone')
-      .select('user vehicle currentLocation status');
+      .populate('activeVehicle')
+      .select('user activeVehicle currentLocation status');
+
+    // Dashboard 'vehicle' (singular) expect karta hai — activeVehicle ko alias kar do
+    const data = activeDrivers.map((d) => {
+      const obj = d.toObject();
+      obj.vehicle = obj.activeVehicle;
+      return obj;
+    });
 
     res.json({
       success: true,
-      data: activeDrivers
+      data
     });
   } catch (error) {
     res.status(500).json({
@@ -2956,7 +3159,7 @@ const getAllPayments = async (req, res) => {
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 })
       .populate('customer', 'name email phone')
-      .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name phone' } })
+      .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
       .select('customer provider vehicleType fare finalFare paymentMethod paymentStatus status createdAt');
 
     const count = await Ride.countDocuments(query);
@@ -3038,7 +3241,7 @@ const getPendingWithdrawals = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate({
         path: 'provider',
-        select: 'user vehicle wallet bankDetails',
+        select: 'user activeVehicle wallet bankDetails',
         populate: { path: 'user', select: 'name phone' },
       });
 
@@ -3249,7 +3452,7 @@ const getUserDetails = async (req, res) => {
     const rides = await Ride.find({ customer: user._id })
       .sort({ createdAt: -1 })
       .limit(10)
-      .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name' } });
+      .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name' }, { path: 'activeVehicle' }] });
 
     const stats = await Ride.aggregate([
       { $match: { customer: user._id } },
@@ -3583,7 +3786,7 @@ const exportReport = async (req, res) => {
       case 'rides':
         data = await Ride.find(query)
           .populate('customer', 'name email phone')
-          .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name phone' } })
+          .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
           .lean();
         filename = 'rides-report.csv';
         break;
@@ -3591,7 +3794,7 @@ const exportReport = async (req, res) => {
       case 'payments':
         data = await Ride.find({ ...query, status: 'completed' })
           .populate('customer', 'name email phone')
-          .populate({ path: 'provider', select: 'user vehicle', populate: { path: 'user', select: 'name phone' } })
+          .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
           .select('customer provider vehicleType fare finalFare paymentMethod paymentStatus createdAt')
           .lean();
         filename = 'payments-report.csv';
@@ -3838,6 +4041,13 @@ module.exports = {
   updateDriverStatus,
   deleteDriver,
   verifyDocument,
+  verifyBankDetails,
+  getAllVehicles,
+  getVehicleByIdAdmin,
+  approveVehicle,
+  rejectVehicle,
+  deleteVehicleAdmin,
+  verifyVehicleDocument,
   getDriverStats,
   getAllRides,
   getRideDetails,

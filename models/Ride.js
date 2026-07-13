@@ -13,6 +13,13 @@ const RideSchema = new mongoose.Schema(
       ref: "Provider",
     },
 
+    // Jo specific vehicle is ride pe thi — accept karte waqt provider.activeVehicle se set hoti hai
+    vehicle: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Vehicle",
+      default: null,
+    },
+
     pickup: {
       address: {
         type: String,
@@ -113,6 +120,12 @@ const RideSchema = new mongoose.Schema(
     },
 
     razorpayPaymentId: {
+      type: String,
+    },
+
+    // Cash ride complete hone ke baad driver app QR dikhata hai — customer
+    // kisi bhi UPI app se scan karke pay karta hai (Razorpay QR Codes API)
+    razorpayQrCodeId: {
       type: String,
     },
 

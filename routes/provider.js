@@ -23,6 +23,12 @@ const {
   updateFCMToken,
   uploadProfilePhoto,
   uploadDoc,
+  addVehicle,
+  getMyVehicles,
+  getVehicleById,
+  updateVehicle,
+  deleteVehicle,
+  uploadVehicleDocument,
 } = require('../controllers/providerController');
 
 const { sendPhoneOTP, verifyPhoneOTP } = require('../controllers/authController');
@@ -36,11 +42,12 @@ const photoUpload = createPhotoUpload('gaonconnect/profile');
 router.post('/send-phone-otp',   otpLimiter,   validate(schemas.sendPhoneOTP),   sendPhoneOTP);
 router.post('/verify-phone-otp', loginLimiter, validate(schemas.verifyPhoneOTP), verifyPhoneOTP);
 
-// Provider registration — naye driver ke paas token nahi hota
+// Provider registration (KYC + vehicle, ek hi request mein) — naye driver ke paas token nahi hota
 router.post('/register', docUpload.fields([
-  { name: 'profilePhoto', maxCount: 1 },
-  { name: 'licensePhoto', maxCount: 1 },
-  { name: 'rcPhoto',      maxCount: 1 },
+  { name: 'profilePhoto',  maxCount: 1 },
+  { name: 'aadhaarPhoto',  maxCount: 1 },
+  { name: 'licensePhoto',  maxCount: 1 },
+  { name: 'rcPhoto',       maxCount: 1 },
 ]), registerProvider);
 
 // Available providers near location
@@ -70,13 +77,21 @@ router.get('/earnings/weekly', protect, getWeeklyEarnings);
 router.put('/bank-details', protect, updateBankDetails);
 router.put('/preferences',  protect, updatePreferences);
 
-// Document upload
+// Document upload (Provider-level KYC — aadhaar)
 router.post('/documents/upload', protect, docUpload.single('document'), uploadDoc);
 
 // FCM token (push notifications)
 router.post('/fcm-token', protect, updateFCMToken);
 
-// ⚠️  Dynamic :id route MUST be last — warna /me, /stats sab catch ho jaate hain
+// ─── Vehicles (Step 3 — repeatable) ───────────────────────────────────────────
+router.post('/vehicles',                       protect, addVehicle);
+router.get('/vehicles',                        protect, getMyVehicles);
+router.get('/vehicles/:vehicleId',             protect, getVehicleById);
+router.put('/vehicles/:vehicleId',             protect, updateVehicle);
+router.delete('/vehicles/:vehicleId',          protect, deleteVehicle);
+router.post('/vehicles/:vehicleId/documents',  protect, docUpload.single('document'), uploadVehicleDocument);
+
+// ⚠️  Dynamic :id route MUST be last — warna /me, /stats, /vehicles sab catch ho jaate hain
 router.get('/:id', getProviderById);
 
 module.exports = router;
