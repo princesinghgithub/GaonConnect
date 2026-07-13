@@ -134,7 +134,8 @@ exports.verifyOTP = async (req, res) => {
     let providerData = null;
     if (user.role === 'provider') {
       providerData = await Provider.findOne({ user: user._id })
-        .select('vehicle documents rating stats status isApproved isOnline wallet');
+        .select('activeVehicle documents rating stats status isApproved isOnline wallet')
+        .populate('activeVehicle');
     }
 
     const payload = await buildTokenResponse(user, providerData);
@@ -225,7 +226,8 @@ exports.verifyPhoneOTP = async (req, res) => {
     let providerData = null;
     if (activeRole === 'provider') {
       providerData = await Provider.findOne({ user: user._id })
-        .select('vehicle documents rating stats status isApproved isOnline wallet');
+        .select('activeVehicle documents rating stats status isApproved isOnline wallet')
+        .populate('activeVehicle');
     }
 
     const payload = await buildTokenResponse(user, providerData, activeRole);

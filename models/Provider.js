@@ -7,84 +7,15 @@ const ProviderSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-  
-  vehicle: {
-    type: {
-      type: String,
-      required: true,
-      enum: ['auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb', 'ambulance', 'wedding']
-    },
-    number: {
-      type: String,
-      required: true,
-      unique: true,
-      uppercase: true,
-      trim: true
-    },
-    model: {
-      type: String,
-      trim: true
-    },
-    color: {
-      type: String,
-      trim: true
-    },
-    registrationYear: {
-      type: Number
-    }
+
+  // Vehicle jo abhi active/on-duty hai — Vehicle collection me actual vehicles hain (ek provider ke multiple ho sakte hain)
+  activeVehicle: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Vehicle',
+    default: null
   },
 
   documents: {
-    license: {
-      number: {
-        type: String,
-        trim: true
-      },
-      photo: String,
-      expiryDate: Date,
-      verified: {
-        type: Boolean,
-        default: false
-      },
-      verifiedAt: Date,
-      verifiedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-      }
-    },
-    rc: {
-      number: {
-        type: String,
-        trim: true
-      },
-      photo: String,
-      verified: {
-        type: Boolean,
-        default: false
-      },
-      verifiedAt: Date,
-      verifiedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-      }
-    },
-    insurance: {
-      number: {
-        type: String,
-        trim: true
-      },
-      photo: String,
-      expiryDate: Date,
-      verified: {
-        type: Boolean,
-        default: false
-      },
-      verifiedAt: Date,
-      verifiedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-      }
-    },
     aadhaar: {
       number: {
         type: String,
@@ -102,7 +33,7 @@ const ProviderSchema = new mongoose.Schema({
       }
     },
     photo: {
-      type: String // Driver's photo
+      type: String // Driver's selfie/profile photo
     }
   },
 
@@ -340,6 +271,7 @@ const ProviderSchema = new mongoose.Schema({
 // Create 2dsphere index for location queries
 ProviderSchema.index({ currentLocation: '2dsphere' });
 ProviderSchema.index({ status: 1, isApproved: 1, isOnline: 1 });
+ProviderSchema.index({ activeVehicle: 1 });
 
 // Update updatedAt before save
 ProviderSchema.pre('save', function(next) {
@@ -351,5 +283,15 @@ ProviderSchema.pre('save', function(next) {
 ProviderSchema.virtual('totalRides').get(function() {
   return this.stats.completedTrips + this.stats.cancelledTrips;
 });
+
+// Virtual populate — provider ki saari vehicles (Vehicle collection se), manual Vehicle.find() ki zaroorat nahi
+ProviderSchema.virtual('vehicles', {
+  ref: 'Vehicle',
+  localField: '_id',
+  foreignField: 'providerId'
+});
+
+ProviderSchema.set('toObject', { virtuals: true });
+ProviderSchema.set('toJSON', { virtuals: true });
 
 module.exports = mongoose.model('Provider', ProviderSchema);

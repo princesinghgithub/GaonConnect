@@ -2,8 +2,10 @@ const crypto   = require('crypto');
 const Razorpay = require('razorpay');
 const Ride         = require('../models/Ride');
 const Provider     = require('../models/Provider');
+const Vehicle      = require('../models/Vehicle');
 const User         = require('../models/User');
 const Notification = require('../models/Notification');
+const Transaction  = require('../models/Transaction');
 const { calculateFare }             = require('../utils/fareCalculator');
 const { getIO }                     = require('../socket');
 const { notify }                    = require('../utils/notifications');
@@ -131,6 +133,10 @@ exports.createRide = async (req, res) => {
     const pickupLng = pickup.longitude || pickup.location?.longitude;
     const pickupLat = pickup.latitude  || pickup.location?.latitude;
 
+    // Requested vehicleType ki verified+active vehicles dhoondo, phir unke drivers
+    const matchingVehicles = await Vehicle.find({ type: vehicleType, isVerified: true, isActive: true }).select('_id');
+    const matchingVehicleIds = matchingVehicles.map((v) => v._id);
+
     // MongoDB $near — location se sort karke 5 closest drivers
     let availableDrivers = [];
     if (pickupLat && pickupLng) {
@@ -139,7 +145,7 @@ exports.createRide = async (req, res) => {
         isApproved:      true,
         isBlocked:       { $ne: true },
         status:          'available',
-        'vehicle.type':  vehicleType,
+        activeVehicle:   { $in: matchingVehicleIds },
         currentLocation: {
           $near: {
             $geometry:    { type: 'Point', coordinates: [pickupLng, pickupLat] },
@@ -156,7 +162,7 @@ exports.createRide = async (req, res) => {
         isApproved:     true,
         isBlocked:      { $ne: true },
         status:         'available',
-        'vehicle.type': vehicleType,
+        activeVehicle:  { $in: matchingVehicleIds },
       }).select('_id deviceInfo').lean();
     }
 
@@ -248,7 +254,7 @@ exports.getCurrentRideCustomer = async (req, res) => {
 // ─── CURRENT RIDE — DRIVER ────────────────────────────────────────────────────
 exports.getCurrentRideDriver = async (req, res) => {
   try {
-    const provider = await Provider.findOne({ user: req.user.id });
+    const provider = await Provider.findOne({ user: req.user.id }).populate('activeVehicle');
     if (!provider) return res.status(404).json({ success: false, message: 'Provider not found' });
 
     let ride = await Ride.findOne({
@@ -258,11 +264,11 @@ exports.getCurrentRideDriver = async (req, res) => {
       .populate('customer', 'name phone profilePhoto')
       .sort({ createdAt: -1 });
 
-    if (!ride && provider.isOnline) {
+    if (!ride && provider.isOnline && provider.activeVehicle) {
       ride = await Ride.findOne({
         status:      'searching',
         provider:    null,
-        vehicleType: provider.vehicle.type,
+        vehicleType: provider.activeVehicle.type,
       })
         .populate('customer', 'name phone profilePhoto')
         .sort({ createdAt: 1 });
@@ -277,7 +283,7 @@ exports.getCurrentRideDriver = async (req, res) => {
 // ─── ACCEPT RIDE ──────────────────────────────────────────────────────────────
 exports.acceptRide = async (req, res) => {
   try {
-    const provider = await Provider.findOne({ user: req.user.id }).populate('user', 'name');
+    const provider = await Provider.findOne({ user: req.user.id }).populate('user', 'name').populate('activeVehicle');
     if (!provider) return res.status(403).json({ success: false, message: 'Unauthorized driver' });
     if (!provider.isApproved) return res.status(403).json({ success: false, message: 'Aapka account abhi admin se approve nahi hua' });
     if (provider.isBlocked) return res.status(403).json({ success: false, message: 'Aapka account block hai' });
@@ -288,7 +294,7 @@ exports.acceptRide = async (req, res) => {
     // hi jeete; baki ko turant "Ride not available" mile.
     const ride = await Ride.findOneAndUpdate(
       { _id: rideId, status: 'searching' },
-      { provider: provider._id, status: 'accepted', acceptedAt: new Date() },
+      { provider: provider._id, vehicle: provider.activeVehicle?._id || null, status: 'accepted', acceptedAt: new Date() },
       { new: true },
     );
     if (!ride) return res.status(404).json({ success: false, message: 'Ride not available' });
@@ -309,7 +315,7 @@ exports.acceptRide = async (req, res) => {
     if (customerFcm) {
       notify.rideAccepted(customerFcm, {
         driverName:  provider.user?.name || 'Driver',
-        vehicleType: provider.vehicle?.type,
+        vehicleType: provider.activeVehicle?.type,
         otp:         ride.otp,
       }).catch(() => {});
     }
@@ -441,6 +447,17 @@ exports.updateRideStatus = async (req, res) => {
       provider.wallet.balance        += driverEarning;
       provider.status = 'available';
       await provider.save();
+
+      // Wallet screen ki "Recent Transactions" ke liye ledger entry
+      Transaction.create({
+        provider:     provider._id,
+        ride:         ride._id,
+        type:         'credit',
+        amount:       driverEarning,
+        description:  `Ride fare — ₹${ride.fare} (commission ₹${commission} kaatke)`,
+        status:       'completed',
+        balanceAfter: provider.wallet.balance,
+      }).catch((err) => console.error('Transaction.create (ride credit) error:', err));
 
       // Driver ko wallet credit notification
       const driverFcm = provider.deviceInfo?.fcmToken;
@@ -689,13 +706,17 @@ exports.getSearchingRides = async (req, res) => {
 // ─── SCHEDULED RIDES — DRIVER ─────────────────────────────────────────────────
 exports.getScheduledRidesDriver = async (req, res) => {
   try {
-    const provider = await Provider.findOne({ user: req.user.id });
+    const provider = await Provider.findOne({ user: req.user.id }).populate('activeVehicle');
     if (!provider) return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    if (!provider.activeVehicle) {
+      return res.status(200).json({ success: true, data: [] });
+    }
 
     const rides = await Ride.find({
       bookingType:  'scheduled',
       status:       'scheduled',
-      vehicleType:  provider.vehicle.type,
+      vehicleType:  provider.activeVehicle.type,
       scheduledAt:  { $gte: new Date() },
     })
       .populate('customer', 'name phone')
@@ -771,5 +792,84 @@ exports.verifyRazorpayPayment = async (req, res) => {
   } catch (err) {
     console.error('verifyRazorpayPayment Error:', err);
     return res.status(500).json({ success: false, message: 'Payment verification failed' });
+  }
+};
+
+// ─── RAZORPAY: QR CODE FOR CASH RIDE COLLECTION ───────────────────────────────
+// Ride complete hone ke baad driver app yeh call karta hai — cash ride ko bhi
+// UPI QR se collect karne ke liye (Ola/Uber jaisa). Koi bhi UPI app (GPay/PhonePe/
+// Paytm) se scan ho sakta hai, kyunki yeh Razorpay ke "QR Codes" product se bana
+// raw UPI QR hai, Checkout order jaisa nahi.
+exports.createPaymentQrCode = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider) return res.status(403).json({ success: false, message: 'Unauthorized driver' });
+
+    const { rideId } = req.body;
+    const ride = await Ride.findById(rideId);
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride not found' });
+
+    if (!ride.provider || ride.provider.toString() !== provider._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized driver for this ride' });
+    }
+
+    if (ride.paymentStatus === 'paid') {
+      return res.status(400).json({ success: false, message: 'Fare already paid' });
+    }
+
+    // Pehle se bana QR ho aur abhi tak active ho to wahi reuse karo
+    if (ride.razorpayQrCodeId) {
+      const existing = await razorpay.qrCode.fetch(ride.razorpayQrCodeId);
+      if (existing.status === 'active') {
+        return res.json({ success: true, data: { imageUrl: existing.image_url } });
+      }
+    }
+
+    const amount = Math.round((ride.finalFare || ride.fare) * 100); // paise mein
+
+    const qrCode = await razorpay.qrCode.create({
+      type: 'upi_qr',
+      name: `Ride ${ride._id}`,
+      usage: 'single_use',
+      fixed_amount: true,
+      payment_amount: amount,
+      description: `GaonConnect ride fare`,
+      close_by: Math.floor(Date.now() / 1000) + 30 * 60, // 30 min mein expire
+      notes: { rideId: ride._id.toString() },
+    });
+
+    ride.razorpayQrCodeId = qrCode.id;
+    await ride.save();
+
+    return res.json({ success: true, data: { imageUrl: qrCode.image_url } });
+  } catch (err) {
+    console.error('createPaymentQrCode Error:', err);
+    return res.status(500).json({ success: false, message: 'QR code creation failed' });
+  }
+};
+
+// ─── RAZORPAY: QR PAYMENT STATUS POLL ─────────────────────────────────────────
+// Driver app har 3s isko poll karta hai — DB se hi padhta hai, Razorpay ko direct
+// hit nahi karta. Webhook (webhookController.js) hi asli status update karta hai.
+exports.getPaymentQrStatus = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider) return res.status(403).json({ success: false, message: 'Unauthorized driver' });
+
+    const { rideId } = req.query;
+    const ride = await Ride.findById(rideId);
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride not found' });
+
+    if (!ride.provider || ride.provider.toString() !== provider._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized driver for this ride' });
+    }
+
+    return res.json({
+      success: true,
+      data: { status: ride.paymentStatus === 'paid' ? 'paid' : 'pending' },
+    });
+  } catch (err) {
+    console.error('getPaymentQrStatus Error:', err);
+    return res.status(500).json({ success: false, message: err.message });
   }
 };

@@ -61,7 +61,16 @@ router.put('/drivers/:id/block', adminController.blockDriver);
 router.put('/drivers/:id/unblock', adminController.unblockDriver);
 router.put('/drivers/:id/status', adminController.updateDriverStatus);
 router.put('/drivers/:id/documents/verify', adminController.verifyDocument);
+router.put('/drivers/:id/bank-details/verify', adminController.verifyBankDetails);
 router.delete('/drivers/:id', adminController.deleteDriver);
+
+// ===== VEHICLES MANAGEMENT =====
+router.get('/vehicles', adminController.getAllVehicles);
+router.get('/vehicles/:id', adminController.getVehicleByIdAdmin);
+router.put('/vehicles/:id/approve', adminController.approveVehicle);
+router.put('/vehicles/:id/reject', adminController.rejectVehicle);
+router.put('/vehicles/:id/documents/verify', adminController.verifyVehicleDocument);
+router.delete('/vehicles/:id', adminController.deleteVehicleAdmin);
 
 // ===== RIDES MANAGEMENT =====
 router.get('/rides', adminController.getAllRides);
