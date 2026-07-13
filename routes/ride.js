@@ -22,6 +22,8 @@ const {
   getScheduledRidesDriver,
   createRazorpayOrder,
   verifyRazorpayPayment,
+  createPaymentQrCode,
+  getPaymentQrStatus,
 } = require('../controllers/rideController');
 
 // ─── Customer ─────────────────────────────────────────────────────────────────
@@ -45,6 +47,10 @@ router.post('/cancel', protect, cancelRide);
 // ─── Razorpay (Online Fare Payment) ───────────────────────────────────────────
 router.post('/:id/razorpay-order', protect, createRazorpayOrder);
 router.post('/razorpay-verify',    protect, verifyRazorpayPayment);
+
+// ─── Razorpay (Cash Ride QR Collection — Driver App) ──────────────────────────
+router.post('/payment/qr-code',        protect, createPaymentQrCode);
+router.get('/payment/qr-code/status',  protect, getPaymentQrStatus);
 
 // ─── Tractor/JCB Services List ────────────────────────────────────────────────
 router.get('/services/:vehicleType', protect, (req, res) => {

@@ -1225,6 +1225,7 @@
 
 
 const Provider = require('../models/Provider');
+const Vehicle = require('../models/Vehicle');
 const User = require('../models/User');
 const Ride = require('../models/Ride');
 const multer = require('multer');
@@ -1404,10 +1405,11 @@ exports.uploadProviderDocument = async (req, res) => {
     if (!req.file)
       return res.status(400).json({ success: false, message: 'Please upload a document' });
 
-    // Validate document type
-    const validTypes = ['license', 'rc', 'insurance', 'aadhaar'];
+    // Validate document type — sirf provider-level KYC yahan; vehicle docs (rc/insurance/license/etc)
+    // ab uploadVehicleDocument se jaate hain, kyunki wo vehicle-specific hote hain.
+    const validTypes = ['aadhaar'];
     if (!validTypes.includes(documentType))
-      return res.status(400).json({ success: false, message: 'Invalid document type' });
+      return res.status(400).json({ success: false, message: 'Invalid document type. Vehicle documents ke liye /provider/vehicles/:vehicleId/documents use karo.' });
 
     // Update document URL (Cloudinary secure URL)
     const documentUrl = req.file.path;
@@ -1448,11 +1450,15 @@ exports.getAvailableProviders = async (req, res) => {
       isOnline: true
     };
 
-    if (vehicleType) baseQuery['vehicle.type'] = vehicleType;
+    if (vehicleType) {
+      const matchingVehicles = await Vehicle.find({ type: vehicleType, isVerified: true, isActive: true }).select('_id');
+      baseQuery.activeVehicle = { $in: matchingVehicles.map((v) => v._id) };
+    }
 
     let query = Provider.find(baseQuery)
       .populate('user', 'name phone city profilePhoto')
-      .select('-documents.aadhaar -documents.license.number -documents.rc.number')
+      .populate('activeVehicle', 'type number model color')
+      .select('-documents.aadhaar')
       .lean();
 
     if (!isNaN(lat) && !isNaN(lng)) {
@@ -1478,6 +1484,7 @@ exports.getProviderById = async (req, res) => {
   try {
     const provider = await Provider.findById(req.params.id)
       .populate('user', 'name phone city profilePhoto')
+      .populate('activeVehicle')
       .select('-documents.aadhaar -bankDetails');
 
     if (!provider)
@@ -1544,13 +1551,10 @@ exports.getProviderById = async (req, res) => {
 // };
 
 
+// Step 2 — "Become Provider": sirf identity/KYC. Vehicle add karna alag step hai (POST /provider/vehicles).
 exports.registerProvider = async (req, res) => {
   try {
-    const {
-      name, email, phone, city,
-      vehicleType, vehicleNumber, vehicleModel, vehicleColor,
-      licenseNumber, rcNumber
-    } = req.body;
+    const { name, email, phone, city, vehicleType, vehicleNumber, vehicleModel } = req.body;
 
     // ── Validation ──────────────────────────────────────────────
     if (!name || !email || !phone) {
@@ -1566,16 +1570,18 @@ exports.registerProvider = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Is email ya phone se pehle se account hai' });
     }
 
-    // ── Duplicate Vehicle check ──────────────────────────────────
-    const existingVehicle = await Provider.findOne({ 'vehicle.number': vehicleNumber.trim().toUpperCase() });
+    // ── Duplicate Vehicle check ───────────────────────────────────
+    const normalizedVehicleNumber = vehicleNumber.trim().toUpperCase();
+    const existingVehicle = await Vehicle.findOne({ number: normalizedVehicleNumber });
     if (existingVehicle) {
-      return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
+      return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se register hai' });
     }
 
     // ── File paths (req.files se aate hain docUpload.fields se) ──
     const profilePhoto = req.files?.profilePhoto?.[0]?.path || '';
-    const licensePhoto = req.files?.licensePhoto?.[0]?.path || '';
-    const rcPhoto      = req.files?.rcPhoto?.[0]?.path      || '';
+    const aadhaarPhoto  = req.files?.aadhaarPhoto?.[0]?.path || '';
+    const licensePhoto  = req.files?.licensePhoto?.[0]?.path || '';
+    const rcPhoto       = req.files?.rcPhoto?.[0]?.path || '';
 
     // ── Step 1: User banao ───────────────────────────────────────
     const user = await User.create({
@@ -1587,26 +1593,14 @@ exports.registerProvider = async (req, res) => {
       roles: ['provider'],
     });
 
-    // ── Step 2: Provider banao — Provider model ke exact fields ──
+    // ── Step 2: Provider banao — KYC ──────────────────────────────
     const provider = await Provider.create({
       user: user._id,
 
-      vehicle: {
-        type:   vehicleType,
-        number: vehicleNumber.trim().toUpperCase(),
-        model:  vehicleModel  || '',
-        color:  vehicleColor  || '',
-      },
-
       documents: {
-        photo:   profilePhoto,                          // driver ki selfie
-        license: {
-          number: licenseNumber || '',
-          photo:  licensePhoto,
-        },
-        rc: {
-          number: rcNumber || '',
-          photo:  rcPhoto,
+        photo: profilePhoto, // driver ki selfie
+        aadhaar: {
+          photo: aadhaarPhoto,
         },
       },
 
@@ -1615,13 +1609,29 @@ exports.registerProvider = async (req, res) => {
       status:     'offline',
     });
 
+    // ── Step 3: Vehicle banao — license/RC isi ke saath ───────────
+    const vehicle = await Vehicle.create({
+      providerId: provider._id,
+      type:       vehicleType,
+      number:     normalizedVehicleNumber,
+      model:      vehicleModel || '',
+      documents: {
+        rc:      { photo: rcPhoto },
+        license: { photo: licensePhoto },
+      },
+    });
+
+    provider.activeVehicle = vehicle._id;
+    await provider.save();
+
     console.log(`✅ New provider registered: ${email}`);
 
     res.status(201).json({
       success: true,
-      message: 'Registration ho gayi! Admin approve karega — phir login kar sakte ho.',
+      message: 'Registration ho gayi! Admin approve karega.',
       data: {
         providerId: provider._id,
+        vehicleId:  vehicle._id,
         name:       user.name,
         email:      user.email,
       }
@@ -1644,10 +1654,23 @@ exports.registerProvider = async (req, res) => {
 // Update Status
 exports.updateProviderStatus = async (req, res) => {
   try {
-    const { status, isOnline } = req.body;
+    const { status, isOnline, vehicleId } = req.body;
 
     const provider = await Provider.findOne({ user: req.user.id });
     if (!provider) return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const goingOnline = isOnline === true || status === 'available';
+
+    // Online jaate waqt (ya already-online rehte hue vehicle switch karte waqt) vehicleId chahiye
+    if (vehicleId) {
+      const vehicle = await Vehicle.findOne({ _id: vehicleId, providerId: provider._id, isVerified: true, isActive: true });
+      if (!vehicle) {
+        return res.status(400).json({ success: false, message: 'Yeh vehicle available nahi hai — verified aur active honi chahiye' });
+      }
+      provider.activeVehicle = vehicle._id;
+    } else if (goingOnline && !provider.activeVehicle) {
+      return res.status(400).json({ success: false, message: 'Online jaane ke liye pehle vehicleId bhejo' });
+    }
 
     if (status) provider.status = status;
     if (typeof isOnline === 'boolean') provider.isOnline = isOnline;
@@ -1656,7 +1679,7 @@ exports.updateProviderStatus = async (req, res) => {
 
     res.json({
       success: true,
-      provider: { status: provider.status, isOnline: provider.isOnline }
+      provider: { status: provider.status, isOnline: provider.isOnline, activeVehicle: provider.activeVehicle }
     });
 
   } catch (err) {
@@ -1676,8 +1699,22 @@ exports.toggleDuty = async (req, res) => {
     if (!provider.isApproved)
       return res.status(403).json({ success: false, message: 'Provider not approved yet' });
 
-    provider.isOnline = !provider.isOnline;
-    provider.status = provider.isOnline ? 'available' : 'offline';
+    const goingOnline = !provider.isOnline;
+
+    if (goingOnline) {
+      const { vehicleId } = req.body;
+      if (!vehicleId) {
+        return res.status(400).json({ success: false, message: 'Online jaane ke liye vehicle select karo' });
+      }
+      const vehicle = await Vehicle.findOne({ _id: vehicleId, providerId: provider._id, isVerified: true, isActive: true });
+      if (!vehicle) {
+        return res.status(400).json({ success: false, message: 'Yeh vehicle available nahi hai — verified aur active honi chahiye' });
+      }
+      provider.activeVehicle = vehicle._id;
+    }
+
+    provider.isOnline = goingOnline;
+    provider.status = goingOnline ? 'available' : 'offline';
 
     await provider.save();
 
@@ -1685,6 +1722,7 @@ exports.toggleDuty = async (req, res) => {
       success: true,
       isOnline: provider.isOnline,
       status: provider.status,
+      activeVehicle: provider.activeVehicle,
       message: `You are now ${provider.isOnline ? 'online' : 'offline'}`
     });
 
@@ -1753,7 +1791,9 @@ exports.getProviderStats = async (req, res) => {
 exports.getProviderProfile = async (req, res) => {
   try {
     let provider = await Provider.findOne({ user: req.user.id })
-      .populate('user', 'name phone email city profilePhoto');
+      .populate('user', 'name phone email city profilePhoto')
+      .populate('activeVehicle')
+      .populate('vehicles');
 
     if (!provider)
       return res.status(404).json({ success: false, message: 'Provider not found' });
@@ -1761,9 +1801,6 @@ exports.getProviderProfile = async (req, res) => {
     provider = provider.toObject();
 
     provider.documents = provider.documents || {};
-    provider.documents.license = provider.documents.license || {};
-    provider.documents.rc = provider.documents.rc || {};
-    provider.documents.insurance = provider.documents.insurance || {};
     provider.documents.aadhaar = provider.documents.aadhaar || {};
     provider.documents.photo = provider.documents.photo || "";
 
@@ -1784,10 +1821,12 @@ exports.updateProviderProfile = async (req, res) => {
     if (!provider)
       return res.status(404).json({ success: false, message: 'Provider not found' });
 
-    Object.assign(provider.vehicle, {
-      model: req.body.vehicleModel || provider.vehicle.model,
-      color: req.body.vehicleColor || provider.vehicle.color
-    });
+    if (req.body.vehicleModel || req.body.vehicleColor) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vehicle details ab is endpoint se update nahi hoti — PUT /provider/vehicles/:vehicleId use karo'
+      });
+    }
 
     await provider.save();
 
@@ -1908,6 +1947,185 @@ exports.updateFCMToken = async (req, res) => {
     await provider.save();
 
     res.json({ success: true, message: 'FCM token updated' });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+// ================= VEHICLES (Step 3 — repeatable, ek provider ke multiple ho sakte hain) =================
+
+const VEHICLE_DOC_TYPES = ['rc', 'insurance', 'license', 'permit', 'fitness', 'machineRegistration', 'operatorLicense'];
+
+// Add Vehicle
+exports.addVehicle = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider)
+      return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const { vehicleType, vehicleNumber, vehicleModel, vehicleColor, registrationYear } = req.body;
+
+    if (!vehicleType || !vehicleNumber) {
+      return res.status(400).json({ success: false, message: 'Vehicle type aur number required hai' });
+    }
+
+    const existingVehicle = await Vehicle.findOne({ number: vehicleNumber.trim().toUpperCase() });
+    if (existingVehicle) {
+      return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
+    }
+
+    const vehicle = await Vehicle.create({
+      providerId: provider._id,
+      type:   vehicleType,
+      number: vehicleNumber.trim().toUpperCase(),
+      model:  vehicleModel || '',
+      color:  vehicleColor || '',
+      registrationYear,
+      isVerified: false,
+      isActive:   true,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Vehicle add ho gayi! Admin approve karega.',
+      data: vehicle
+    });
+
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
+    }
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Get My Vehicles
+exports.getMyVehicles = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider)
+      return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const vehicles = await Vehicle.find({ providerId: provider._id }).sort({ createdAt: -1 });
+
+    res.json({ success: true, data: vehicles });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Get Vehicle by ID (apni hi vehicle)
+exports.getVehicleById = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider)
+      return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const vehicle = await Vehicle.findById(req.params.vehicleId);
+    if (!vehicle)
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+
+    if (vehicle.providerId.toString() !== provider._id.toString())
+      return res.status(403).json({ success: false, message: 'Yeh vehicle aapki nahi hai' });
+
+    res.json({ success: true, data: vehicle });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Update Vehicle (model/color/registrationYear — type/number registration ke baad fix hai)
+exports.updateVehicle = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider)
+      return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const vehicle = await Vehicle.findById(req.params.vehicleId);
+    if (!vehicle)
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+
+    if (vehicle.providerId.toString() !== provider._id.toString())
+      return res.status(403).json({ success: false, message: 'Yeh vehicle aapki nahi hai' });
+
+    const { vehicleModel, vehicleColor, registrationYear } = req.body;
+    if (vehicleModel !== undefined) vehicle.model = vehicleModel;
+    if (vehicleColor !== undefined) vehicle.color = vehicleColor;
+    if (registrationYear !== undefined) vehicle.registrationYear = registrationYear;
+
+    await vehicle.save();
+
+    res.json({ success: true, message: 'Vehicle updated', data: vehicle });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Delete Vehicle
+exports.deleteVehicle = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider)
+      return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const vehicle = await Vehicle.findById(req.params.vehicleId);
+    if (!vehicle)
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+
+    if (vehicle.providerId.toString() !== provider._id.toString())
+      return res.status(403).json({ success: false, message: 'Yeh vehicle aapki nahi hai' });
+
+    if (provider.activeVehicle && provider.activeVehicle.toString() === vehicle._id.toString()) {
+      return res.status(400).json({ success: false, message: 'Active vehicle ko delete nahi kar sakte — pehle offline jao ya doosri vehicle select karo' });
+    }
+
+    await Vehicle.findByIdAndDelete(vehicle._id);
+
+    res.json({ success: true, message: 'Vehicle deleted' });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Upload Vehicle Document
+exports.uploadVehicleDocument = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider)
+      return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const { vehicleId, documentType } = req.body;
+
+    if (!documentType || !VEHICLE_DOC_TYPES.includes(documentType))
+      return res.status(400).json({ success: false, message: `documentType ek inme se hona chahiye: ${VEHICLE_DOC_TYPES.join(', ')}` });
+
+    if (!req.file)
+      return res.status(400).json({ success: false, message: 'Please upload a document' });
+
+    const vehicle = await Vehicle.findById(vehicleId || req.params.vehicleId);
+    if (!vehicle)
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+
+    if (vehicle.providerId.toString() !== provider._id.toString())
+      return res.status(403).json({ success: false, message: 'Yeh vehicle aapki nahi hai' });
+
+    vehicle.documents[documentType] = vehicle.documents[documentType] || {};
+    vehicle.documents[documentType].photo = req.file.path;
+    vehicle.documents[documentType].verified = false;
+
+    await vehicle.save();
+
+    res.json({
+      success: true,
+      message: 'Document uploaded successfully. Waiting for admin verification.',
+      data: { documentType, url: req.file.path, verified: false }
+    });
 
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

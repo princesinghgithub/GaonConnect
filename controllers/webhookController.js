@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const Ride   = require('../models/Ride');
+const { getIO } = require('../socket');
 
 // ─── RAZORPAY WEBHOOK ──────────────────────────────────────────────────────────
 // Razorpay dashboard se seedha server-to-server call aata hai (payment.captured /
@@ -38,6 +39,35 @@ exports.razorpayWebhook = async (req, res) => {
         if (event.event === 'payment.captured') ride.razorpayPaymentId = payment.id;
         await ride.save();
         console.log(`Razorpay webhook: ride ${ride._id} → ${ride.paymentStatus}`);
+      }
+    }
+
+    // Cash ride ka QR scan karke payment — driver app payment-collection flow
+    if (event.event === 'qr_code.credited') {
+      const qrCode = event.payload?.qr_code?.entity;
+      const payment = event.payload?.payment?.entity;
+      const qrCodeId = qrCode?.id;
+      if (!qrCodeId) return res.status(200).json({ success: true });
+
+      const ride = await Ride.findOne({ razorpayQrCodeId: qrCodeId });
+      if (ride) {
+        ride.paymentStatus = 'paid';
+        if (payment?.id) ride.razorpayPaymentId = payment.id;
+        await ride.save();
+        console.log(`Razorpay webhook: ride ${ride._id} QR paid`);
+
+        // Driver app ko turant push — 3s polling ka wait nahi karna padta (Rapido jaisa instant feel)
+        // DB save ho chuka hai — socket push fail bhi ho to webhook ko fail nahi dikhana (Razorpay
+        // warna isi payment ko baar-baar retry karega jabki wo already successfully process ho chuki hai)
+        if (ride.provider) {
+          try {
+            getIO().to(`driver_${ride.provider}`).emit('paymentReceived', {
+              rideId: ride._id.toString(),
+            });
+          } catch (socketErr) {
+            console.error('Razorpay webhook: socket push failed (non-fatal):', socketErr.message);
+          }
+        }
       }
     }
 

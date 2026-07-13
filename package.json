@@ -11,7 +11,9 @@
     "docker:down":    "docker-compose down",
     "docker:logs":    "docker-compose logs -f app",
     "seed":           "node utils/seedProviders.js",
-    "seed:providers": "node utils/seedProviders.js"
+    "seed:providers": "node utils/seedProviders.js",
+    "migrate:vehicles":         "node scripts/migrateVehicles.js",
+    "migrate:vehicles:dry-run": "node scripts/migrateVehicles.js --dry-run"
   },
   "keywords": [
     "gaonconnect",
