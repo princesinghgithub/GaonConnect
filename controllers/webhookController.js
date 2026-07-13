@@ -56,17 +56,23 @@ exports.razorpayWebhook = async (req, res) => {
         await ride.save();
         console.log(`Razorpay webhook: ride ${ride._id} QR paid`);
 
-        // Driver app ko turant push — 3s polling ka wait nahi karna padta (Rapido jaisa instant feel)
-        // DB save ho chuka hai — socket push fail bhi ho to webhook ko fail nahi dikhana (Razorpay
-        // warna isi payment ko baar-baar retry karega jabki wo already successfully process ho chuki hai)
-        if (ride.provider) {
-          try {
+        // Driver aur customer dono ko turant push — 3s polling ka wait nahi karna padta
+        // (Rapido jaisa instant feel). DB save ho chuka hai — socket push fail bhi ho to
+        // webhook ko fail nahi dikhana (Razorpay warna isi payment ko baar-baar retry
+        // karega jabki wo already successfully process ho chuki hai)
+        try {
+          if (ride.provider) {
             getIO().to(`driver_${ride.provider}`).emit('paymentReceived', {
               rideId: ride._id.toString(),
             });
-          } catch (socketErr) {
-            console.error('Razorpay webhook: socket push failed (non-fatal):', socketErr.message);
           }
+          if (ride.customer) {
+            getIO().to(`user_${ride.customer}`).emit('paymentConfirmed', {
+              rideId: ride._id.toString(),
+            });
+          }
+        } catch (socketErr) {
+          console.error('Razorpay webhook: socket push failed (non-fatal):', socketErr.message);
         }
       }
     }
