@@ -83,6 +83,8 @@
     "playStore": "Google Play पर पाएं",
     "appStore": "App Store से डाउनलोड करें",
     "comingSoon": "जल्द आ रहा है",
+    "customerTagline": "राइड बुक करें",
+    "driverTagline": "ड्राइव करें और कमाएं",
     "promo": "कोड GAON50 से अपनी पहली राइड पर ₹50 की छूट पाएं!"
   },
   "partner": {
@@ -140,6 +142,16 @@
     "privacy": "प्राइवेसी पॉलिसी",
     "terms": "नियम और शर्तें",
     "support": "सहायता",
+    "home": "होम",
+    "customerApp": "कस्टमर ऐप",
+    "driverApp": "ड्राइवर ऐप",
+    "installApp": "ऐप इंस्टॉल करें",
+    "becomeDriver": "ड्राइवर बनें",
+    "quickLinks": "क्विक लिंक्स",
+    "legal": "कानूनी जानकारी",
+    "followUs": "फॉलो करें",
+    "accountDeletion": "अकाउंट डिलीट करें",
+    "dataDeletion": "डेटा डिलीट करें",
     "copyright": "© 2026 GaonConnect. सर्वाधिकार सुरक्षित.",
     "tagline": "🛺 आपकी गाड़ी आपकी सेवा 🛺"
   }

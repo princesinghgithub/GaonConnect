@@ -116,7 +116,7 @@ export default defineConfig({
       },
 
       // ✅ Additional files jo cache mein include karni hain
-      includeAssets: ['gaonconnect-icon.svg', 'pwa-192x192.png', 'robots.txt']
+      includeAssets: ['gaonconnect-icon.png', 'gaonconnect-logo.png', 'pwa-192x192.png', 'robots.txt']
     })
   ]
 })

@@ -245,32 +245,34 @@ const GaonConnectLanding = () => {
       </section>
 
       {/* Download App Section */}
-      <section className="py-16 md:py-20 px-6 bg-white dark:bg-gray-950">
+      <section className="py-16 md:py-20 px-6 bg-gray-50 dark:bg-gray-950">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4 text-ink dark:text-white">
             📲 {t('download.heading')}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">{t('download.subheading')}</p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-6">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-stretch mb-6">
             <button
               onClick={handleDownloadApp}
-              className="w-full sm:w-auto flex items-center gap-3 bg-gray-900 dark:bg-gray-800 text-white px-6 py-4 rounded-xl font-semibold hover:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
+              className="relative flex-1 sm:flex-none sm:w-72 flex items-center gap-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-md hover:shadow-xl transition-shadow rounded-2xl px-5 py-4 text-left"
             >
-              <span className="text-2xl">▶️</span>
-              <span className="text-left">
-                <span className="block text-xs opacity-80">{t('download.comingSoon')}</span>
-                <span className="block text-base">{t('download.playStore')}</span>
+              <img src="/gaonconnect-icon.png" alt="GaonConnect" className="h-14 w-14 shrink-0" />
+              <span>
+                <span className="block font-bold text-ink dark:text-white text-lg">GaonConnect</span>
+                <span className="block text-gray-500 dark:text-gray-400 text-sm">{t('download.customerTagline')}</span>
               </span>
+              <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">{t('download.comingSoon')}</span>
             </button>
+
             <button
-              onClick={handleDownloadApp}
-              className="w-full sm:w-auto flex items-center gap-3 bg-gray-900 dark:bg-gray-800 text-white px-6 py-4 rounded-xl font-semibold hover:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
+              onClick={handleBecomeDriver}
+              className="relative flex-1 sm:flex-none sm:w-72 flex items-center gap-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-md hover:shadow-xl transition-shadow rounded-2xl px-5 py-4 text-left"
             >
-              <span className="text-2xl">🍎</span>
-              <span className="text-left">
-                <span className="block text-xs opacity-80">{t('download.comingSoon')}</span>
-                <span className="block text-base">{t('download.appStore')}</span>
+              <img src="/gaonconnect-icon.png" alt="GaonConnect Driver" className="h-14 w-14 shrink-0" />
+              <span>
+                <span className="block font-bold text-ink dark:text-white text-lg leading-tight">GaonConnect <span className="block text-sm font-semibold text-orange-500">Driver</span></span>
+                <span className="block text-gray-500 dark:text-gray-400 text-sm">{t('download.driverTagline')}</span>
               </span>
             </button>
           </div>
@@ -475,37 +477,82 @@ const GaonConnectLanding = () => {
       {/* Footer */}
       <footer className="bg-gray-900 dark:bg-black text-white py-12 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-8">
+          <div className="mb-10">
             <div className="text-2xl font-bold text-orange-400 mb-1">GaonConnect</div>
             <div className="text-gray-400 text-sm">gaon aur dehat ke liye transport app</div>
           </div>
 
-          <div className="flex flex-wrap justify-center gap-6 mb-8 text-sm">
-            <button onClick={() => scrollToSection('about')} className="hover:text-orange-400 transition-colors">{t('footer.about')}</button>
-            <button onClick={() => scrollToSection('contact')} className="hover:text-orange-400 transition-colors">{t('footer.contact')}</button>
-            <button onClick={() => navigate('/privacy-policy')} className="hover:text-orange-400 transition-colors">{t('footer.privacy')}</button>
-            <button onClick={() => scrollToSection('faqs')} className="hover:text-orange-400 transition-colors">{t('footer.terms')}</button>
-            <button onClick={() => scrollToSection('faqs')} className="hover:text-orange-400 transition-colors">{t('footer.support')}</button>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-8 text-sm">
+            <div>
+              <h4 className="font-semibold text-white mb-3">{t('footer.customerApp')}</h4>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleDownloadApp}
+                  className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 transition-colors text-white px-3 py-2 rounded-lg"
+                >
+                  <span className="text-lg">▶️</span>
+                  <span className="text-left leading-tight">
+                    <span className="block text-[10px] opacity-70">{t('download.comingSoon')}</span>
+                    <span className="block text-xs font-semibold">{t('download.playStore')}</span>
+                  </span>
+                </button>
+                <button
+                  onClick={handleDownloadApp}
+                  className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 transition-colors text-white px-3 py-2 rounded-lg"
+                >
+                  <span className="text-lg">🍎</span>
+                  <span className="text-left leading-tight">
+                    <span className="block text-[10px] opacity-70">{t('download.comingSoon')}</span>
+                    <span className="block text-xs font-semibold">{t('download.appStore')}</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-white mb-3">{t('footer.driverApp')}</h4>
+              <button onClick={handleBecomeDriver} className="text-gray-400 hover:text-orange-400 transition-colors text-left">
+                🚚 {t('footer.becomeDriver')}
+              </button>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-white mb-3">{t('footer.quickLinks')}</h4>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.home')}</button>
+                <button onClick={() => scrollToSection('services')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('nav.services')}</button>
+                <button onClick={() => scrollToSection('about')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.about')}</button>
+                <button onClick={() => scrollToSection('faqs')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('nav.faqs')}</button>
+                <button onClick={() => scrollToSection('contact')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.contact')}</button>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-white mb-3">{t('footer.legal')}</h4>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => navigate('/privacy-policy')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.privacy')}</button>
+                <button onClick={() => navigate('/account-deletion')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.accountDeletion')}</button>
+                <button onClick={() => navigate('/data-deletion')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.dataDeletion')}</button>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-white mb-3">{t('footer.followUs')}</h4>
+              <div className="flex items-center gap-4">
+                <a href="https://www.instagram.com/gaonconnect/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-gray-400 hover:text-white transition-colors">
+                  <FaInstagram size={20} />
+                </a>
+                <a href="https://facebook.com/profile.php?id=61591245161485" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-gray-400 hover:text-white transition-colors">
+                  <FaFacebook size={20} />
+                </a>
+                <a href="https://www.linkedin.com/company/133394201/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="text-gray-400 hover:text-white transition-colors">
+                  <FaLinkedin size={20} />
+                </a>
+              </div>
+            </div>
           </div>
 
-          {/* Social Media - with labels */}
-          <div className="flex flex-wrap justify-center gap-4 mb-8">
-            <a href="https://www.instagram.com/gaonconnect/" target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-white transition-opacity hover:opacity-80"
-              style={{ background: 'linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)' }}>
-              <FaInstagram size={16} /> Instagram
-            </a>
-            <a href="https://facebook.com/profile.php?id=61591245161485" target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors">
-              <FaFacebook size={16} /> Facebook
-            </a>
-            <a href="https://www.linkedin.com/company/133394201/" target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-blue-700 text-white hover:bg-blue-600 transition-colors">
-              <FaLinkedin size={16} /> LinkedIn
-            </a>
-          </div>
-
-          <div className="border-t border-gray-800 pt-6">
+          <div className="border-t border-gray-800 mt-10 pt-6">
             <p className="text-center text-gray-400 text-sm mb-2">{t('footer.copyright')}</p>
             <p className="text-center text-gray-500 text-sm">{t('footer.tagline')}</p>
           </div>

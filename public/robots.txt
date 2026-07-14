@@ -6,4 +6,4 @@ Disallow: /admin
 Disallow: /book-ride
 Disallow: /ride/
 
-Sitemap: https://gaonconnect.in/sitemap.xml
+Sitemap: https://www.gaonconnect.in/sitemap.xml

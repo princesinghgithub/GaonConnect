@@ -83,6 +83,8 @@
     "playStore": "Get it on Google Play",
     "appStore": "Download on App Store",
     "comingSoon": "Coming soon",
+    "customerTagline": "Book a Ride",
+    "driverTagline": "Drive & Earn",
     "promo": "Use code GAON50 to get ₹50 off on your first ride!"
   },
   "partner": {
@@ -140,6 +142,16 @@
     "privacy": "Privacy Policy",
     "terms": "Terms & Conditions",
     "support": "Support",
+    "home": "Home",
+    "customerApp": "Customer App",
+    "driverApp": "Driver App",
+    "installApp": "Install App",
+    "becomeDriver": "Become a Driver",
+    "quickLinks": "Quick Links",
+    "legal": "Legal",
+    "followUs": "Follow Us",
+    "accountDeletion": "Account Deletion",
+    "dataDeletion": "Data Deletion",
     "copyright": "© 2026 GaonConnect. All rights reserved.",
     "tagline": "🛺 Your Vehicle, Your Service 🛺"
   }

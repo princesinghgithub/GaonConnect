@@ -31,7 +31,7 @@ const Navbar = ({ onDownloadApp, scrollToSection }) => {
     <header className="sticky top-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md shadow-sm dark:shadow-gray-800">
       <div className="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between h-16">
         <div className="flex items-center gap-2 font-bold text-lg">
-          <img src="/gaonconnect-icon.svg" alt="GaonConnect" className="h-9 w-9" />
+          <img src="/gaonconnect-icon.png" alt="GaonConnect" className="h-9 w-9" />
           <span className="text-saffron dark:text-orange-300">GaonConnect</span>
         </div>
 
