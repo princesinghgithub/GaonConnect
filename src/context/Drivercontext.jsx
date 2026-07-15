@@ -227,8 +227,9 @@ export const DriverProvider = ({ children }) => {
   const pollingRef = useRef(null);
   const lastRideIdRef = useRef(null);
 
-  /* 🔓 INIT AUDIO (ONCE) */
+  /* 🔓 INIT AUDIO (ONCE) — only for logged-in drivers, not every homepage visitor */
   useEffect(() => {
+    if (!localStorage.getItem("token")) return;
     ringRef.current = new Audio("/sounds/gaonConnect.mp3");
     ringRef.current.loop = true;
     ringRef.current.preload = "auto";
