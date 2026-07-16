@@ -73,6 +73,14 @@ exports.register = async (req, res) => {
     });
   } catch (error) {
     console.error('Register Error:', error);
+
+    // Concurrent duplicate phone/email — dono ek saath 'existingUser' check paas kar sakte
+    // hain, DB ka unique index isi race ko yahan pakadta hai
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] || 'phone/email';
+      return res.status(400).json({ success: false, message: `Is ${field} se account already exist karta hai` });
+    }
+
     res.status(500).json({ success: false, message: 'Registration mein error', ...(isDev && { error: error.message }) });
   }
 };

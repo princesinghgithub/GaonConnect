@@ -2720,15 +2720,25 @@ const getVehicleByIdAdmin = async (req, res) => {
 
 const approveVehicle = async (req, res) => {
   try {
-    const vehicle = await Vehicle.findByIdAndUpdate(
-      req.params.id,
-      { isVerified: true, isRejected: false },
-      { new: true }
-    );
-
+    const vehicle = await Vehicle.findById(req.params.id);
     if (!vehicle) {
       return res.status(404).json({ success: false, message: 'Vehicle not found' });
     }
+
+    // License aur RC mandatory hain approve ke liye; Insurance optional hai
+    const missing = [];
+    if (!vehicle.documents?.license?.verified) missing.push('Driving License');
+    if (!vehicle.documents?.rc?.verified) missing.push('Vehicle RC');
+    if (missing.length) {
+      return res.status(400).json({
+        success: false,
+        message: `Approve karne se pehle in documents ko verify karna zaroori hai: ${missing.join(', ')}`
+      });
+    }
+
+    vehicle.isVerified = true;
+    vehicle.isRejected = false;
+    await vehicle.save();
 
     res.json({ success: true, message: 'Vehicle approved', data: vehicle });
   } catch (error) {
