@@ -22,7 +22,7 @@ const {
   getWeeklyEarnings,
   updateFCMToken,
   uploadProfilePhoto,
-  uploadDoc,
+  uploadProviderDocument,
   addVehicle,
   getMyVehicles,
   getVehicleById,
@@ -78,7 +78,7 @@ router.put('/bank-details', protect, updateBankDetails);
 router.put('/preferences',  protect, updatePreferences);
 
 // Document upload (Provider-level KYC — aadhaar)
-router.post('/documents/upload', protect, docUpload.single('document'), uploadDoc);
+router.post('/documents/upload', protect, docUpload.single('document'), uploadProviderDocument);
 
 // FCM token (push notifications)
 router.post('/fcm-token', protect, updateFCMToken);

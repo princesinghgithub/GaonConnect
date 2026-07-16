@@ -9,6 +9,13 @@ const mongoose   = require('mongoose');
 
 dotenv.config();
 
+// JWT_SECRET missing hone par har login/OTP-verify silently 500 dega, bina reason bataye —
+// isliye startup pe hi fail-fast karo taaki galti turant pakdi jaaye.
+if (!process.env.JWT_SECRET) {
+  console.error('❌ JWT_SECRET .env mein set nahi hai — server start nahi ho sakta.');
+  process.exit(1);
+}
+
 // Railway containers have no outbound IPv6 route; Gmail SMTP (and other hosts)
 // resolve to IPv6 first and hang/fail with ENETUNREACH unless IPv4 is preferred.
 dns.setDefaultResultOrder('ipv4first');

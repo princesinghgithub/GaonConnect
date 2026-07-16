@@ -1232,51 +1232,6 @@ const multer = require('multer');
 const path = require('path');
 
 
-// ================= PROFILE PHOTO UPLOAD HELPER =================
-
-exports.uploadProfilePhoto = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'No photo uploaded' 
-      });
-    }
-
-    // Database mein save karo
-    // const provider = await Provider.findByIdAndUpdate(
-    //   req.user.id, 
-    //   { profilePhoto: req.file.path },
-    //   { new: true }
-    // );
-
-    res.status(200).json({
-      success: true,
-      message: 'Profile photo uploaded successfully',
-      data: {
-        filename: req.file.filename,
-        path: req.file.path,
-        size: req.file.size,
-        url: `/uploads/profile/${req.file.filename}`
-      }
-    });
-  } catch (error) {
-    console.error('Photo upload error:', error);
-    
-    // Agar error hai toh file delete kar do
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    
-    res.status(500).json({ 
-      success: false,
-      message: 'Photo upload failed', 
-      error: error.message 
-    });
-  }
-};
-
-
 // ================= DOCUMENT UPLOAD HELPER =================
 
 // controllers/documentController.js
@@ -1307,60 +1262,6 @@ exports.uploadProfilePhoto = async (req, res) => {
 // };
 
 
-exports.uploadDoc = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'No document uploaded' 
-      });
-    }
-
-    if (!req.body.documentType) {
-      // File delete karo if documentType nahi hai
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      return res.status(400).json({ 
-        success: false,
-        message: 'Document type is required' 
-      });
-    }
-
-    // Database mein save karo
-    // const document = await Document.create({
-    //   userId: req.user.id,
-    //   documentType: req.body.documentType,
-    //   filePath: req.file.path,
-    //   filename: req.file.filename,
-    //   status: 'pending'
-    // });
-
-    res.status(200).json({
-      success: true,
-      message: 'Document uploaded successfully',
-      data: {
-        documentType: req.body.documentType,
-        filename: req.file.filename,
-        size: req.file.size,
-        url: req.file.path // Cloudinary secure URL
-      }
-    });
-  } catch (error) {
-    console.error('Document upload error:', error);
-    
-    // Agar error hai toh file delete kar do
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    
-    res.status(500).json({ 
-      success: false,
-      message: 'Document upload failed', 
-      error: error.message 
-    });
-  }
-};
 // ================= CONTROLLERS =================
 
 // Upload Profile Photo
@@ -1374,13 +1275,13 @@ exports.uploadProfilePhoto = async (req, res) => {
     if (!req.file)
       return res.status(400).json({ success: false, message: 'Please upload a photo' });
 
-    provider.profilePhoto = req.file.path; // Cloudinary secure URL
+    provider.documents.photo = req.file.path; // Cloudinary secure URL — schema me isi field pe driver selfie store hoti hai
     await provider.save();
 
     res.json({
       success: true,
       message: 'Profile photo updated successfully',
-      data: { profilePhoto: provider.profilePhoto }
+      data: { profilePhoto: provider.documents.photo }
     });
 
   } catch (err) {
@@ -1406,16 +1307,21 @@ exports.uploadProviderDocument = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please upload a document' });
 
     // Validate document type — sirf provider-level KYC yahan; vehicle docs (rc/insurance/license/etc)
-    // ab uploadVehicleDocument se jaate hain, kyunki wo vehicle-specific hote hain.
-    const validTypes = ['aadhaar'];
+    // /provider/vehicles/:vehicleId/documents se jaate hain, kyunki wo vehicle-specific hote hain.
+    const validTypes = ['aadhaar', 'photo'];
     if (!validTypes.includes(documentType))
       return res.status(400).json({ success: false, message: 'Invalid document type. Vehicle documents ke liye /provider/vehicles/:vehicleId/documents use karo.' });
 
     // Update document URL (Cloudinary secure URL)
     const documentUrl = req.file.path;
 
-    provider.documents[documentType].photo = documentUrl;
-    provider.documents[documentType].verified = false; // Reset verification
+    if (documentType === 'photo') {
+      // photo plain String field hai (driver ki selfie), aadhaar jaisa nested object nahi
+      provider.documents.photo = documentUrl;
+    } else {
+      provider.documents[documentType].photo = documentUrl;
+      provider.documents[documentType].verified = false; // Reset verification
+    }
 
     await provider.save();
 
@@ -1553,6 +1459,11 @@ exports.getProviderById = async (req, res) => {
 
 // Step 2 — "Become Provider": sirf identity/KYC. Vehicle add karna alag step hai (POST /provider/vehicles).
 exports.registerProvider = async (req, res) => {
+  // Beech mein fail hone par sirf isi request ke andar bana User rollback hota hai
+  // (existing customer ka account kabhi delete nahi hota, wo pehle se tha)
+  let newlyCreatedUser = null;
+  let createdProvider  = null;
+
   try {
     const { name, email, phone, city, vehicleType, vehicleNumber, vehicleModel } = req.body;
 
@@ -1564,10 +1475,33 @@ exports.registerProvider = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Vehicle type aur number required hai' });
     }
 
-    // ── Duplicate User check ─────────────────────────────────────
-    const existingUser = await User.findOne({ $or: [{ email: email.toLowerCase() }, { phone }] });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'Is email ya phone se pehle se account hai' });
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.trim();
+
+    if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
+      return res.status(400).json({ success: false, message: 'Valid 10-digit phone number daalo' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(400).json({ success: false, message: 'Valid email address daalo' });
+    }
+
+    // ── Phone hi login identity hai (OTP-based) — pehle usi se dekhte hain.
+    // Agar yeh phone pehle se kisi customer ka hai, to naya User nahi banate —
+    // wahi customer account ab driver bhi ban sakta hai (dual role).
+    const existingUserByPhone = await User.findOne({ phone: normalizedPhone });
+    let user;
+
+    if (existingUserByPhone) {
+      const existingProvider = await Provider.findOne({ user: existingUserByPhone._id });
+      if (existingProvider) {
+        return res.status(400).json({ success: false, message: 'Is phone number se pehle se driver register hai' });
+      }
+      user = existingUserByPhone;
+    } else {
+      const emailTaken = await User.findOne({ email: normalizedEmail });
+      if (emailTaken) {
+        return res.status(400).json({ success: false, message: 'Is email se pehle se account hai' });
+      }
     }
 
     // ── Duplicate Vehicle check ───────────────────────────────────
@@ -1583,59 +1517,71 @@ exports.registerProvider = async (req, res) => {
     const licensePhoto  = req.files?.licensePhoto?.[0]?.path || '';
     const rcPhoto       = req.files?.rcPhoto?.[0]?.path || '';
 
-    // ── Step 1: User banao ───────────────────────────────────────
-    const user = await User.create({
-      name:  name.trim(),
-      email: email.trim().toLowerCase(),
-      phone: phone.trim(),
-      city:  city || '',
-      role:  'provider',
-      roles: ['provider'],
-    });
+    if (!user) {
+      // ── Step 1: Naya User banao (koi existing customer nahi mila) ──
+      user = await User.create({
+        name:  name.trim(),
+        email: normalizedEmail,
+        phone: normalizedPhone,
+        city:  city || '',
+        role:  'provider',
+        roles: ['provider'],
+      });
+      newlyCreatedUser = user;
+    }
 
-    // ── Step 2: Provider banao — KYC ──────────────────────────────
-    const provider = await Provider.create({
-      user: user._id,
+    try {
+      // ── Step 2: Provider banao — KYC ──────────────────────────────
+      const provider = await Provider.create({
+        user: user._id,
 
-      documents: {
-        photo: profilePhoto, // driver ki selfie
-        aadhaar: {
-          photo: aadhaarPhoto,
+        documents: {
+          photo: profilePhoto, // driver ki selfie
+          aadhaar: {
+            photo: aadhaarPhoto,
+          },
         },
-      },
 
-      isApproved: false,
-      isOnline:   false,
-      status:     'offline',
-    });
+        isApproved: false,
+        isOnline:   false,
+        status:     'offline',
+      });
+      createdProvider = provider;
 
-    // ── Step 3: Vehicle banao — license/RC isi ke saath ───────────
-    const vehicle = await Vehicle.create({
-      providerId: provider._id,
-      type:       vehicleType,
-      number:     normalizedVehicleNumber,
-      model:      vehicleModel || '',
-      documents: {
-        rc:      { photo: rcPhoto },
-        license: { photo: licensePhoto },
-      },
-    });
-
-    provider.activeVehicle = vehicle._id;
-    await provider.save();
-
-    console.log(`✅ New provider registered: ${email}`);
-
-    res.status(201).json({
-      success: true,
-      message: 'Registration ho gayi! Admin approve karega.',
-      data: {
+      // ── Step 3: Vehicle banao — license/RC isi ke saath ───────────
+      const vehicle = await Vehicle.create({
         providerId: provider._id,
-        vehicleId:  vehicle._id,
-        name:       user.name,
-        email:      user.email,
-      }
-    });
+        type:       vehicleType,
+        number:     normalizedVehicleNumber,
+        model:      vehicleModel || '',
+        documents: {
+          rc:      { photo: rcPhoto },
+          license: { photo: licensePhoto },
+        },
+      });
+
+      provider.activeVehicle = vehicle._id;
+      await provider.save();
+
+      console.log(`✅ New provider registered: ${normalizedEmail}`);
+
+      return res.status(201).json({
+        success: true,
+        message: 'Registration ho gayi! Admin approve karega.',
+        data: {
+          providerId: provider._id,
+          vehicleId:  vehicle._id,
+          name:       user.name,
+          email:      user.email,
+        }
+      });
+    } catch (innerErr) {
+      // Provider/Vehicle step fail hua — jo bhi is request ke andar bana tha usko
+      // wapas hata do, taaki account permanently na phase aur dobara try ho sake
+      if (createdProvider) await Provider.findByIdAndDelete(createdProvider._id).catch(() => {});
+      if (newlyCreatedUser) await User.findByIdAndDelete(newlyCreatedUser._id).catch(() => {});
+      throw innerErr;
+    }
 
   } catch (error) {
     console.error('Register Provider Error:', error);

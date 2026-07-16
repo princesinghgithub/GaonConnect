@@ -16,6 +16,7 @@ const UserSchema = new mongoose.Schema({
     type:      String,
     trim:      true,
     lowercase: true,
+    unique:    true,
     sparse:    true, // null values pe unique conflict nahi
   },
   city: {
@@ -63,7 +64,6 @@ const UserSchema = new mongoose.Schema({
 
 // Index for faster lookups
 UserSchema.index({ phone: 1 });
-UserSchema.index({ email: 1 }, { sparse: true });
 UserSchema.index({ role: 1 });
 
 module.exports = mongoose.model('User', UserSchema);
