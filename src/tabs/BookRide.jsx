@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LocationSearchInput from './LocationSearchInput';
 import Map from './Map';
@@ -82,17 +82,45 @@ const VEHICLE_OPTIONS = [
 const BookRide = () => {
   const navigate = useNavigate();
 
+  // Carry forward whatever the landing page hero widget already had the
+  // user pick (pickup/drop/vehicle) before it bounced them to /auth to log
+  // in — otherwise they land here to a blank form and have to redo it all.
+  const [initialBooking] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('selectedService');
+      if (!raw) return null;
+      sessionStorage.removeItem('selectedService');
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  });
+  const initialVehicleType = initialBooking?.vehicleType || 'auto';
+  const initialIsTractorJcb = initialVehicleType === 'tractor' || initialVehicleType === 'jcb';
+  const initialServices = initialVehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES;
+
   // Location
-  const [pickup,  setPickup]  = useState(null);
-  const [dropoff, setDropoff] = useState(null);
-  const [mapMarkers, setMapMarkers] = useState([]);
+  const [pickup,  setPickup]  = useState(initialBooking?.pickup ?? null);
+  const [dropoff, setDropoff] = useState(initialBooking?.drop ?? null);
+  const [mapMarkers, setMapMarkers] = useState(() => {
+    const markers = [];
+    if (initialBooking?.pickup?.location) {
+      const { latitude, longitude } = initialBooking.pickup.location;
+      markers.push({ lat: latitude, lng: longitude, label: 'Pickup' });
+    }
+    if (initialBooking?.drop?.location) {
+      const { latitude, longitude } = initialBooking.drop.location;
+      markers.push({ lat: latitude, lng: longitude, label: 'Drop' });
+    }
+    return markers;
+  });
 
   // Vehicle
-  const [vehicleType, setVehicleType] = useState('auto');
+  const [vehicleType, setVehicleType] = useState(initialVehicleType);
 
   // Tractor / JCB service selection
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedSub,      setSelectedSub]      = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(initialIsTractorJcb ? initialServices[0] : null);
+  const [selectedSub,      setSelectedSub]      = useState(initialIsTractorJcb ? initialServices[0].sub[0] : null);
   const [selectedHours,    setSelectedHours]    = useState(2);
   const [workNote,         setWorkNote]         = useState('');
 
@@ -103,6 +131,10 @@ const BookRide = () => {
   // UI
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  // True while a hero-widget booking (bike/auto/car with pickup+drop already
+  // picked on the landing page) is being auto-confirmed — Rapido-style,
+  // no second form to fill.
+  const [autoBooking, setAutoBooking] = useState(false);
 
   const isTractorJcb = vehicleType === 'tractor' || vehicleType === 'jcb';
   const services     = vehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES;
@@ -180,6 +212,66 @@ const BookRide = () => {
     if (pickup) calculateFare(pickup, location);
   };
 
+  // Bike/auto/car came from the hero widget with pickup+drop already
+  // filled — book it straight away instead of making the user fill the
+  // same form again and press Confirm a second time. Tractor/JCB still
+  // need a service type picked here (hero doesn't collect that), so those
+  // only get prefilled and wait for a manual confirm.
+  useEffect(() => {
+    const type = initialBooking?.vehicleType;
+    const canAutoBook = pickup && dropoff && localStorage.getItem('token') &&
+      (type === 'bike' || type === 'auto' || type === 'car');
+
+    if (!canAutoBook) {
+      if (pickup && dropoff) calculateFare(pickup, dropoff);
+      return;
+    }
+
+    let cancelled = false;
+    setAutoBooking(true);
+
+    (async () => {
+      try {
+        const distRes = await locationAPI.calculateDistance(pickup.location, dropoff.location, type);
+        if (!distRes.data.success) throw new Error('Distance calculate nahi ho paya');
+
+        const distData = distRes.data.data;
+        const km = distData.distance.value / 1000;
+        const cfg = FARE_CONFIG[type] || FARE_CONFIG.auto;
+        const estimatedFare = Math.round(cfg.base + km * cfg.perKm);
+        if (cancelled) return;
+        setDistance(distData);
+        setFare(estimatedFare);
+
+        const response = await rideAPI.createRide({
+          pickup,
+          dropoff,
+          vehicleType: type,
+          bookingMode: 'distance',
+          distance: distData.distance,
+          estimatedDuration: Math.round(distData.duration.value / 60),
+          estimatedFare,
+          paymentMethod: 'cash',
+        });
+        if (cancelled) return;
+
+        if (response.data.success) {
+          toast.success('Ride book ho gayi! Driver dhundha ja raha hai...');
+          navigate(`/ride/${response.data.data.ride._id}`);
+        } else {
+          setAutoBooking(false);
+        }
+      } catch {
+        if (cancelled) return;
+        toast.error('Auto-booking fail hui, details check karke Confirm Booking dabao');
+        setAutoBooking(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Confirm ─────────────────────────────────────────────────────────────────
   const handleConfirmRide = async () => {
     if (!pickup) { toast.error('Pickup location select karo'); return; }
@@ -254,6 +346,21 @@ const BookRide = () => {
   // ── Render ───────────────────────────────────────────────────────────────────
   const displayFare = isTractorJcb ? calcTractorFare() : fare;
 
+  if (autoBooking) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center px-4">
+        <svg className="animate-spin h-12 w-12 text-orange-600" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+        <h2 className="text-xl font-bold text-gray-900">Aapki ride book ho rahi hai...</h2>
+        <p className="text-gray-500 text-sm">
+          {pickup?.addressLine1} → {dropoff?.addressLine1}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gray-50 py-4 lg:py-8">
       <div className="max-w-6xl mx-auto px-4">
@@ -266,9 +373,9 @@ const BookRide = () => {
             {/* Location */}
             <div className="bg-white rounded-xl shadow-sm p-6 space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">Where to?</h3>
-              <LocationSearchInput placeholder="Pickup Location" onSelectLocation={handlePickupSelect} />
+              <LocationSearchInput placeholder="Pickup Location" onSelectLocation={handlePickupSelect} value={pickup?.addressLine1 || ''} />
               {(!isTractorJcb || selectedCategory?.pricingType === 'per_km') && (
-                <LocationSearchInput placeholder="Drop Location" onSelectLocation={handleDropoffSelect} />
+                <LocationSearchInput placeholder="Drop Location" onSelectLocation={handleDropoffSelect} value={dropoff?.addressLine1 || ''} />
               )}
               {isTractorJcb && selectedCategory?.pricingType === 'hourly' && (
                 <p className="text-sm text-amber-600 bg-amber-50 rounded-lg px-3 py-2">

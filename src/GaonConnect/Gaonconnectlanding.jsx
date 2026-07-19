@@ -21,6 +21,10 @@ const FARE_FORMULAS = {
 // instead of name-matched so it works regardless of active language.
 const FARE_TYPE_BY_INDEX = ['auto', 'bike', 'car', null, null, null, null, null, null, null];
 
+// Maps the same services list to the vehicle types BookRide.jsx actually
+// supports post-login, so the hero selection can be carried forward.
+const VEHICLE_TYPE_BY_INDEX = ['auto', 'bike', 'car', 'tractor', null, null, null, 'jcb', null, null];
+
 const estimateFare = (serviceIndex, distanceKm) => {
   const type = FARE_TYPE_BY_INDEX[serviceIndex];
   if (!type || distanceKm == null) return null;
@@ -85,10 +89,13 @@ const GaonConnectLanding = () => {
   }, [heroPickup, heroDrop]);
 
   // Service selection handler - redirects to auth page with service data
-  const handleServiceSelect = (serviceName, basePrice) => {
+  const handleServiceSelect = (serviceName, basePrice, serviceIndex) => {
     sessionStorage.setItem('selectedService', JSON.stringify({
       service: serviceName,
-      price: basePrice
+      price: basePrice,
+      vehicleType: VEHICLE_TYPE_BY_INDEX[serviceIndex] ?? null,
+      pickup: heroPickup,
+      drop: heroDrop,
     }));
     navigate('/auth');
   };
@@ -244,7 +251,7 @@ const GaonConnectLanding = () => {
                 disabled={!heroPickup || !heroDrop || heroServiceIndex === ''}
                 onClick={() => {
                   const fare = estimateFare(Number(heroServiceIndex), heroDistanceKm) ?? basePrices[heroServiceIndex];
-                  handleServiceSelect(services[heroServiceIndex].name, fare);
+                  handleServiceSelect(services[heroServiceIndex].name, fare, Number(heroServiceIndex));
                 }}
                 className="w-full bg-cta hover:bg-saffron disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-xl font-bold text-lg shadow-md hover:shadow-lg transition-all duration-300"
               >
@@ -355,7 +362,7 @@ const GaonConnectLanding = () => {
             {services.map((service, index) => (
               <div
                 key={index}
-                onClick={() => handleServiceSelect(service.name, basePrices[index])}
+                onClick={() => handleServiceSelect(service.name, basePrices[index], index)}
                 className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md hover:shadow-2xl transform hover:scale-105 transition-all duration-300 cursor-pointer group"
               >
                 <div className="text-5xl mb-4 transform group-hover:scale-110 transition-transform duration-300">
