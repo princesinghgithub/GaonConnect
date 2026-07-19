@@ -146,7 +146,9 @@
 
 // export default App;
 import React, { useState } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import SeoCanonical from './components/SeoCanonical';
+import NotFound from './components/pages/NotFound';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 import LoginForm from './components/auth/LoginForm';
@@ -166,6 +168,11 @@ import WhatsAppFloat from "./components/pages/WhatsAppFloat";
 import PrivacyPolicy from "./components/pages/PrivacyPolicy";
 import AccountDeletion from "./components/pages/AccountDeletion";
 import DataDeletion from "./components/pages/DataDeletion";
+import Safety from "./components/pages/Safety";
+import Careers from "./components/pages/Careers";
+import Blog from "./components/pages/Blog";
+import Press from "./components/pages/Press";
+import ContactUs from "./components/pages/ContactUs";
 
 const AuthScreens = () => {
   const { login } = useAuth();
@@ -244,12 +251,14 @@ function App() {
   <AuthProvider>
       <RideProvider>
         <DriverProvider>
+          <SeoCanonical />
           <Routes>
             {/* LANDING PAGE - First thing users see */}
             <Route path="/" element={<GaonConnectLanding />} />
 
             {/* AUTH PAGE - Opens when user selects a service */}
             <Route path="/auth" element={<AuthScreens />} />
+            <Route path="/register" element={<Navigate to="/auth" replace />} />
 
             {/* CUSTOMER */}
             <Route
@@ -307,6 +316,16 @@ function App() {
             {/* ACCOUNT / DATA DELETION - Public pages for Play Store */}
             <Route path="/account-deletion" element={<AccountDeletion />} />
             <Route path="/data-deletion" element={<DataDeletion />} />
+
+            {/* MARKETING PAGES */}
+            <Route path="/safety" element={<Safety />} />
+            <Route path="/careers" element={<Careers />} />
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/press" element={<Press />} />
+            <Route path="/contact" element={<ContactUs />} />
+
+            {/* CATCH-ALL - avoids serving a blank 200 page for dead/unknown links */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </DriverProvider>
           <WhatsAppFloat /> 

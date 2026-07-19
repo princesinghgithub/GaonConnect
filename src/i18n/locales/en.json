@@ -1,20 +1,36 @@
 {
   "nav": {
+    "home": "Home",
     "services": "Services",
     "howItWorks": "How It Works",
     "whyUs": "Why Us",
     "about": "About Us",
+    "safety": "Safety",
+    "careers": "Careers",
+    "blog": "Blog",
+    "press": "Press",
     "reviews": "Reviews",
     "faqs": "FAQs",
-    "contact": "Contact",
+    "contact": "Contact Us",
     "downloadApp": "Download App",
     "becomePartner": "Become a Partner"
   },
   "hero": {
     "tagline": "Your Vehicle, Your Service",
+    "overline": "Village to City",
+    "headlineLine1": "Your Vehicle,",
+    "headlineLine2": "Your Service",
     "description": "India's first platform connecting villages and cities! From auto-rickshaws to tractors, every vehicle is now at your fingertips. Easy booking, affordable rates, trusted service!",
     "downloadCta": "Download App",
-    "howItWorksCta": "How It Works?"
+    "howItWorksCta": "How It Works?",
+    "servicePlaceholder": "Select Service",
+    "calculatingFare": "Calculating fare...",
+    "quoteOnRequest": "On Request",
+    "pickupPlaceholder": "Enter Pickup Location",
+    "dropPlaceholder": "Enter Drop Location",
+    "bookRideCta": "Book Ride",
+    "badgeVerified": "100% Verified Drivers",
+    "badgeFares": "Lowest Fares"
   },
   "features": {
     "heading": "Why Choose Gaon Connect?",
@@ -29,6 +45,7 @@
     ]
   },
   "howItWorks": {
+    "badge": "Process",
     "heading": "How It Works?",
     "subheading": "Book your vehicle in just 4 easy steps",
     "steps": [
@@ -39,6 +56,7 @@
     ]
   },
   "services": {
+    "badge": "Our Services",
     "heading": "Our Services",
     "subheading": "The right vehicle for every need — pick a service and get started!",
     "clickToSelect": "Click to select →",
@@ -96,12 +114,21 @@
     "cta": "Register as Partner"
   },
   "reviews": {
+    "badge": "Trusted By Thousands",
     "heading": "Customer Reviews",
     "subheading": "What our customers say about us",
     "items": [
       { "name": "Ramesh Kumar", "location": "Patna, Bihar", "text": "Booking a tractor used to take all day. Now I get one in minutes. Truly a game changer for farmers like me!", "rating": 5 },
       { "name": "Sunita Devi", "location": "Lucknow, UP", "text": "Affordable rates and the drivers are always polite and verified. I trust GaonConnect for all my travel needs.", "rating": 5 },
       { "name": "Anil Yadav", "location": "Jaipur, Rajasthan", "text": "Booked a JCB for our farmland in just a few clicks. Transparent pricing, no hidden charges.", "rating": 4 }
+    ]
+  },
+  "stats": {
+    "items": [
+      { "value": "500+", "label": "Villages Connected" },
+      { "value": "50+", "label": "Cities Covered" },
+      { "value": "10K+", "label": "Verified Drivers" },
+      { "value": "1M+", "label": "Rides Completed" }
     ]
   },
   "faqs": {
@@ -148,11 +175,108 @@
     "installApp": "Install App",
     "becomeDriver": "Become a Driver",
     "quickLinks": "Quick Links",
+    "company": "Company",
     "legal": "Legal",
     "followUs": "Follow Us",
     "accountDeletion": "Account Deletion",
     "dataDeletion": "Data Deletion",
     "copyright": "© 2026 GaonConnect. All rights reserved.",
     "tagline": "🛺 Your Vehicle, Your Service 🛺"
+  },
+  "blogPage": {
+    "heroTitle": "GaonConnect Blog",
+    "heroSubtitle": "Safety tips, farmer stories, and every update related to rural transport — read here.",
+    "readMore": "Read More →",
+    "readMoreAlert": "Full article coming soon. Follow us on Instagram for updates!",
+    "posts": [
+      { "tag": "Safety", "title": "5 things to keep in mind while traveling at night", "excerpt": "From trip sharing to emergency numbers — simple ways to make night travel safer." },
+      { "tag": "Farmers", "title": "How to book a tractor instantly during ploughing season", "excerpt": "Don't miss the right time for your crop — learn how to book a tractor for your field in just minutes." },
+      { "tag": "Driver Partner", "title": "How to increase your earnings as a GaonConnect driver partner", "excerpt": "Tips for earning extra income with your vehicle, straight from drivers who are already on board." },
+      { "tag": "Community", "title": "Village to city: how rural transport is changing", "excerpt": "How technology is now making it easier for villagers to reach cities and nearby areas." },
+      { "tag": "Payments", "title": "Cash, UPI, or Wallet — which payment method is right for you", "excerpt": "A complete guide to all payment options available on GaonConnect, in one place." },
+      { "tag": "Update", "title": "New features on GaonConnect — what's changed", "excerpt": "A look at recent improvements in the app and upcoming updates." }
+    ]
+  },
+  "careersPage": {
+    "heroTitle": "Be a part of our team.",
+    "heroSubtitle": "GaonConnect is on a mission to empower rural India through digital connectivity and services. We are looking for passionate individuals to join us in making a real difference in the villages. Find your role today.",
+    "openPositionsCta": "Open Positions",
+    "whyWorkHeading": "Why work with us",
+    "whyWork": [
+      { "title": "Meaningful Growth", "description": "We invest in careers by rewarding great work with real growth opportunities." },
+      { "title": "Flexible Hours", "description": "Flexible hours and values that respect your own rhythm and life outside work." },
+      { "title": "Inclusive Culture", "description": "We celebrate diverse backgrounds and enjoy the journey we're building together." }
+    ],
+    "testimonialsHeading": "What our employees say",
+    "testimonials": [
+      { "quote": "Being part of GaonConnect allows me to directly impact my community.", "name": "Rohan S.", "role": "Tech Support" },
+      { "quote": "The mission to bridge the gap is what drives me every day.", "name": "Sunita K.", "role": "Rural Outreach" },
+      { "quote": "I love that flexible hours let me balance fieldwork with family time.", "name": "Aman P.", "role": "Driver Partner Relations" }
+    ],
+    "teamsHeading": "🔍 Teams we're currently hiring for",
+    "teamsSubheading": "There's no specific opening publicly listed right now, but we're always looking for passionate people in these areas.",
+    "departments": ["Engineering", "Operations", "Marketing", "Customer Support", "Driver Partner Relations"],
+    "resumeHeading": "Send your resume",
+    "resumeText": "Email us your resume and which team you're interested in — we'll reach out when a matching role opens up.",
+    "resumeCta": "Send to gaonconnect.in@gmail.com"
+  },
+  "safetyPage": {
+    "heroTitle": "Your Safety, Our Priority",
+    "heroSubtitle": "Every ride on GaonConnect — whether auto or tractor — is built with safety in mind. Here's what we do to keep you safe.",
+    "points": [
+      { "title": "Driver Verification", "description": "Every driver's Aadhaar card, driving license, and vehicle documents are verified before onboarding." },
+      { "title": "Real-Time GPS Tracking", "description": "Every ride's live location is tracked, so you and your family can keep an eye on the whole journey." },
+      { "title": "Emergency Assistance", "description": "In case of any trouble, notify our support team instantly via WhatsApp or call." },
+      { "title": "Trip Sharing", "description": "Share your live ride details with family or friends, so they can follow your journey too." },
+      { "title": "Vehicle Inspection", "description": "Every vehicle's registration and fitness documents are checked before it's added to the platform." },
+      { "title": "24/7 Support", "description": "Our support team is available every day, all the time, to help you — by call or WhatsApp." }
+    ],
+    "concernHeading": "Have a safety concern?",
+    "concernText": "Reach out to our support team directly — we take every complaint seriously.",
+    "whatsappCta": "💬 Chat with Support on WhatsApp"
+  },
+  "pressPage": {
+    "heroTitle": "Press & Media",
+    "heroSubtitle": "Find information about GaonConnect, brand assets, and media inquiries on this page.",
+    "factsHeading": "Key facts about GaonConnect",
+    "facts": [
+      { "label": "Founded", "value": "2025" },
+      { "label": "Service Area", "value": "Madhya Pradesh (20+ cities/towns)" },
+      { "label": "Mission", "value": "Connecting villages and cities with trusted transport" },
+      { "label": "Services", "value": "Auto, Bike, Car, Tractor, JCB, Tempo, Thresher, Harvester" }
+    ],
+    "mediaKitTitle": "Media Kit",
+    "mediaKitText": "Download our logo and brand images for use in your story or coverage.",
+    "mediaKitCta": "Download Logo",
+    "inquiryTitle": "Media Inquiries",
+    "inquiryText": "Contact our team directly for interviews, quotes, or story collaboration.",
+    "footerNote": "As we grow, media coverage and mentions will be added here."
+  },
+  "contactPage": {
+    "heading": "Find Us Here",
+    "subheading": "Get help with your query here:",
+    "nameLabel": "Name",
+    "namePlaceholder": "Enter your name",
+    "emailLabel": "Email Address",
+    "emailPlaceholder": "Enter your email",
+    "mobileLabel": "Mobile Number",
+    "mobilePlaceholder": "Enter your mobile number",
+    "userTypeLabel": "Who are you",
+    "selectOption": "Select",
+    "customerOption": "Customer",
+    "driverOption": "Driver Partner",
+    "otherOption": "Other",
+    "messageLabel": "Message",
+    "messagePlaceholder": "Write your query",
+    "submitBtn": "Submit",
+    "sendingBtn": "Sending...",
+    "successMsg": "Thanks! Your message has been sent.",
+    "errorMsg": "Something went wrong. Please try again or email us directly.",
+    "officeTitle": "Registered Office Address:",
+    "officeValue": "GaonConnect — [Add your registered office address here]",
+    "phoneLabel": "Phone / WhatsApp",
+    "emailLabel2": "Email",
+    "serviceAreaLabel": "Service Area",
+    "serviceAreaValue": "Madhya Pradesh — Rewa, Satna, Jabalpur, Bhopal, Indore and surrounding areas"
   }
 }
