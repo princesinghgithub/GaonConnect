@@ -47,7 +47,7 @@ const SectionBadge = ({ children, inverted = false }) => (
 const GaonConnectLanding = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [openFaq, setOpenFaq] = useState(null);
   const [heroServiceIndex, setHeroServiceIndex] = useState('');
   const [heroPickup, setHeroPickup] = useState(null);
@@ -161,6 +161,25 @@ const GaonConnectLanding = () => {
   const reviews = t('reviews.items', { returnObjects: true });
   const faqItems = t('faqs.items', { returnObjects: true });
   const stats = t('stats.items', { returnObjects: true });
+
+  // FAQPage rich-result markup, kept in sync with the visible FAQ section
+  // above so it matches Google's structured-data content requirements.
+  useEffect(() => {
+    const faqScript = document.createElement('script');
+    faqScript.type = 'application/ld+json';
+    faqScript.id = 'faq-jsonld';
+    faqScript.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: t('faqs.items', { returnObjects: true }).map((item) => ({
+        '@type': 'Question',
+        name: item.q,
+        acceptedAnswer: { '@type': 'Answer', text: item.a },
+      })),
+    });
+    document.head.appendChild(faqScript);
+    return () => faqScript.remove();
+  }, [i18n.language, t]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-gradient-to-br dark:from-gray-950 dark:to-gray-900 transition-colors duration-300">
