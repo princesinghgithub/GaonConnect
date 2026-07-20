@@ -235,7 +235,7 @@ workNote: {
   },
 );
 
-// Index for faster queries
+// Index for otpServiceer queries
 RideSchema.index({ customer: 1, createdAt: -1 });
 RideSchema.index({ provider: 1, createdAt: -1 });
 RideSchema.index({ status: 1 });

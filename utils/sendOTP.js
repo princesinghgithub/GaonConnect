@@ -91,6 +91,10 @@ const sendViaMsg91 = (normalizedPhone, otp) => {
       resolve(false);
     });
 
+    req.setTimeout(10000, () => {
+      req.destroy(new Error('MSG91 request timed out'));
+    });
+
     req.write(body);
     req.end();
   });
@@ -124,7 +128,14 @@ const sendOTP = async (phone) => {
     if (process.env.NODE_ENV !== 'production') {
       console.log(`\n📱 [DEV] OTP for ${normalized}: ${otp}\n`);
     } else {
-      await sendViaMsg91(normalized, otp);
+      const sent = await sendViaMsg91(normalized, otp);
+      if (!sent) {
+        const cleanup = redis.pipeline();
+        cleanup.del(otpKey(normalized));
+        cleanup.del(sentAtKey(normalized));
+        await cleanup.exec();
+        return { success: false, message: 'OTP bhejne mein error. Dobara try karo.' };
+      }
     }
 
     return {
