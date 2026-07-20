@@ -80,7 +80,6 @@ const PromoCodeSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-PromoCodeSchema.index({ code: 1 });
 PromoCodeSchema.index({ isActive: 1, validUntil: 1 });
 
 module.exports = mongoose.model('PromoCode', PromoCodeSchema);

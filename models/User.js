@@ -63,7 +63,6 @@ const UserSchema = new mongoose.Schema({
 });
 
 // Index for faster lookups
-UserSchema.index({ phone: 1 });
 UserSchema.index({ role: 1 });
 
 module.exports = mongoose.model('User', UserSchema);
