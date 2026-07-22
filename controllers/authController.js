@@ -27,7 +27,7 @@ const buildTokenResponse = async (user, providerData = null, activeRole = null) 
   const role        = activeRole || user.role;
   const accessToken  = generateAccessToken(user._id, role);
   const refreshToken = generateRefreshToken();
-  await saveRefreshToken(user._id, refreshToken);
+  await saveRefreshToken(user._id, refreshToken, role);
 
   return {
     accessToken,

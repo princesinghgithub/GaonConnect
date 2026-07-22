@@ -20,12 +20,21 @@ const generateAccessToken = (userId, activeRole = 'customer') =>
 
 const generateRefreshToken = () => crypto.randomBytes(40).toString('hex');
 
+// Refresh token Redis value encodes "userId:activeRole" so that rotation
+// can re-issue an access token for the SAME app session (customer vs
+// provider) instead of falling back to the user's static profile role —
+// that fallback broke dual-role accounts (e.g. a customer who also drives)
+// once their access token expired mid-session. Legacy entries saved before
+// this change have no ":role" suffix; they're read with role=null and the
+// caller falls back to the user's profile role for that one rotation, then
+// self-heal into the new format since rotation always re-saves with role.
+
 // ─── Save ─────────────────────────────────────────────────────────────────────
-const saveRefreshToken = async (userId, token) => {
+const saveRefreshToken = async (userId, token, activeRole) => {
   const id = userId.toString();
   const pipeline = redis.pipeline();
-  // Token → userId mapping (to verify ownership)
-  pipeline.setex(refreshKey(token), REFRESH_TOKEN_EXPIRY_SEC, id);
+  // Token → "userId:role" mapping (to verify ownership + preserve app session role)
+  pipeline.setex(refreshKey(token), REFRESH_TOKEN_EXPIRY_SEC, `${id}:${activeRole}`);
   // userId → set of tokens (to revoke all on logout from all devices)
   pipeline.sadd(userTokenKey(id), token);
   pipeline.expire(userTokenKey(id), REFRESH_TOKEN_EXPIRY_SEC);
@@ -33,18 +42,23 @@ const saveRefreshToken = async (userId, token) => {
 };
 
 // ─── Verify ───────────────────────────────────────────────────────────────────
+// Returns { userId, role } (role is null for legacy pre-migration entries) or null
 const verifyRefreshToken = async (token) => {
-  const userId = await redis.get(refreshKey(token));
-  return userId || null; // returns userId string or null
+  const raw = await redis.get(refreshKey(token));
+  if (!raw) return null;
+  const sep = raw.indexOf(':');
+  return sep === -1
+    ? { userId: raw, role: null }
+    : { userId: raw.slice(0, sep), role: raw.slice(sep + 1) };
 };
 
 // ─── Revoke single token (logout current device) ──────────────────────────────
 const revokeRefreshToken = async (token) => {
-  const userId = await redis.get(refreshKey(token));
-  if (userId) {
+  const session = await verifyRefreshToken(token);
+  if (session) {
     const pipeline = redis.pipeline();
     pipeline.del(refreshKey(token));
-    pipeline.srem(userTokenKey(userId), token);
+    pipeline.srem(userTokenKey(session.userId), token);
     await pipeline.exec();
   }
 };
@@ -64,15 +78,15 @@ const revokeAllUserTokens = async (userId) => {
 
 // ─── Rotate (revoke old, issue new) ──────────────────────────────────────────
 const rotateRefreshToken = async (oldToken) => {
-  const userId = await verifyRefreshToken(oldToken);
-  if (!userId) return null;
+  const session = await verifyRefreshToken(oldToken);
+  if (!session) return null;
 
   await revokeRefreshToken(oldToken);
 
   const newToken = generateRefreshToken();
-  await saveRefreshToken(userId, newToken);
+  await saveRefreshToken(session.userId, newToken, session.role);
 
-  return { userId, newToken };
+  return { userId: session.userId, role: session.role, newToken };
 };
 
 module.exports = {

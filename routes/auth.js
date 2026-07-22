@@ -73,8 +73,14 @@ router.post('/refresh',
         return res.status(401).json({ success: false, message: 'Invalid ya expired refresh token. Dobara login karo.' });
       }
 
-      const user = await User.findById(result.userId);
-      const accessToken = generateAccessToken(result.userId, user?.role);
+      // Legacy pre-migration tokens carry no role — fall back to profile role just this once;
+      // the rotated token now carries the role, so this fallback won't fire again for this session.
+      let role = result.role;
+      if (!role) {
+        const user = await User.findById(result.userId).select('role');
+        role = user?.role;
+      }
+      const accessToken = generateAccessToken(result.userId, role);
 
       return res.status(200).json({
         success: true,
