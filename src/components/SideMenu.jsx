@@ -17,6 +17,12 @@ const FacebookIcon = () => (
   </svg>
 );
 
+const YoutubeIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M21.8 8.1a2.9 2.9 0 0 0-2-2C18.1 5.6 12 5.6 12 5.6s-6.1 0-7.8.5a2.9 2.9 0 0 0-2 2A30.4 30.4 0 0 0 1.6 12a30.4 30.4 0 0 0 .6 3.9 2.9 2.9 0 0 0 2 2c1.7.5 7.8.5 7.8.5s6.1 0 7.8-.5a2.9 2.9 0 0 0 2-2 30.4 30.4 0 0 0 .6-3.9 30.4 30.4 0 0 0-.6-3.9zM9.8 15.3V8.7l5.6 3.3z"/>
+  </svg>
+);
+
 const SideMenu = ({ showMenu, setShowMenu }) => {
   if (!showMenu) return null;
 
@@ -82,6 +88,16 @@ const SideMenu = ({ showMenu, setShowMenu }) => {
             >
               <FacebookIcon />
               Facebook
+            </a>
+            <a
+              href="https://www.youtube.com/@Gaonconnenct"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setShowMenu(false)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-medium bg-red-600"
+            >
+              <YoutubeIcon />
+              YouTube
             </a>
           </div>
         </div>
