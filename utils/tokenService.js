@@ -2,11 +2,12 @@ const jwt    = require('jsonwebtoken');
 const crypto = require('crypto');
 const redis  = require('../config/redis');
 
-const ACCESS_TOKEN_EXPIRY_SEC  = 15 * 60;           // 15 minutes
-const REFRESH_TOKEN_EXPIRY_SEC = 7 * 24 * 60 * 60;  // 7 days
+const ACCESS_TOKEN_EXPIRY_SEC  = 15 * 60;            // 15 minutes
+const REFRESH_TOKEN_EXPIRY_SEC = 60 * 24 * 60 * 60;  // 60 days — Rapido/Uber-style long session; /auth/logout-all is the safety net for a lost/stolen device
 
 // ─── Keys ────────────────────────────────────────────────────────────────────
 const refreshKey   = (token)  => `refresh:${token}`;
+const usedKey      = (token)  => `refresh_used:${token}`;
 const userTokenKey = (userId) => `user_tokens:${userId}`;
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
@@ -41,21 +42,30 @@ const saveRefreshToken = async (userId, token, activeRole) => {
   await pipeline.exec();
 };
 
-// ─── Verify ───────────────────────────────────────────────────────────────────
-// Returns { userId, role } (role is null for legacy pre-migration entries) or null
-const verifyRefreshToken = async (token) => {
-  const raw = await redis.get(refreshKey(token));
-  if (!raw) return null;
+const parseSession = (raw) => {
   const sep = raw.indexOf(':');
   return sep === -1
     ? { userId: raw, role: null }
     : { userId: raw.slice(0, sep), role: raw.slice(sep + 1) };
 };
 
+// ─── Verify ───────────────────────────────────────────────────────────────────
+// Returns { userId, role } (role is null for legacy pre-migration entries),
+// the string 'REUSED' if this token was already rotated away once before
+// (a strong signal of theft — the legitimate device would hold the NEW
+// token, not this one), or null if the token never existed / fully expired.
+const verifyRefreshToken = async (token) => {
+  const raw = await redis.get(refreshKey(token));
+  if (raw) return parseSession(raw);
+
+  const usedRaw = await redis.get(usedKey(token));
+  return usedRaw ? 'REUSED' : null;
+};
+
 // ─── Revoke single token (logout current device) ──────────────────────────────
 const revokeRefreshToken = async (token) => {
   const session = await verifyRefreshToken(token);
-  if (session) {
+  if (session && session !== 'REUSED') {
     const pipeline = redis.pipeline();
     pipeline.del(refreshKey(token));
     pipeline.srem(userTokenKey(session.userId), token);
@@ -77,11 +87,27 @@ const revokeAllUserTokens = async (userId) => {
 };
 
 // ─── Rotate (revoke old, issue new) ──────────────────────────────────────────
+// Returns { userId, role, newToken } on success, 'REUSED' if theft was
+// detected (all of that user's sessions are revoked as a precaution), or
+// null if the token is simply invalid/expired.
 const rotateRefreshToken = async (oldToken) => {
   const session = await verifyRefreshToken(oldToken);
+  if (session === 'REUSED') {
+    const usedRaw = await redis.get(usedKey(oldToken));
+    const { userId } = parseSession(usedRaw);
+    await revokeAllUserTokens(userId);
+    return 'REUSED';
+  }
   if (!session) return null;
 
-  await revokeRefreshToken(oldToken);
+  // Tombstone (not delete) the old token — a short record proving it was
+  // legitimately rotated once, so a later replay of this same token is
+  // recognized as reuse rather than a plain "expired" token.
+  const pipeline = redis.pipeline();
+  pipeline.setex(usedKey(oldToken), REFRESH_TOKEN_EXPIRY_SEC, `${session.userId}:${session.role}`);
+  pipeline.del(refreshKey(oldToken));
+  pipeline.srem(userTokenKey(session.userId), oldToken);
+  await pipeline.exec();
 
   const newToken = generateRefreshToken();
   await saveRefreshToken(session.userId, newToken, session.role);

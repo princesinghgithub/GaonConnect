@@ -69,6 +69,15 @@ router.post('/refresh',
       const { refreshToken } = req.body;
 
       const result = await rotateRefreshToken(refreshToken);
+      if (result === 'REUSED') {
+        // Already-rotated token replayed — likely theft. All sessions for
+        // this account were just revoked as a precaution.
+        return res.status(401).json({
+          success: false,
+          message: 'Suspicious activity detected. Sabhi devices se logout kar diya gaya hai — dobara login karo.',
+          code: 'TOKEN_REUSE_DETECTED',
+        });
+      }
       if (!result) {
         return res.status(401).json({ success: false, message: 'Invalid ya expired refresh token. Dobara login karo.' });
       }
