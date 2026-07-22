@@ -61,7 +61,9 @@ exports.register = async (req, res) => {
     await User.create({ name, phone, email, city: city || '', role: sanitizeRole(role), otp, otpExpiry, isVerified: false });
 
     if (!isDev) {
-      await sendOtpViaEmail(email, otp);
+      // Brevo API call ko await nahi karte — email delivery ki latency (kabhi-kabhi
+      // 5-10s tak) client ko register response ke liye block nahi karni chahiye.
+      sendOtpViaEmail(email, otp).catch((err) => console.error('Register OTP email failed:', err.message));
     } else {
       console.log(`\n🎉 [DEV] New User: ${name}\n📱 OTP: ${otp}\n`);
     }
