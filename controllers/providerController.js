@@ -1645,7 +1645,9 @@ exports.toggleDuty = async (req, res) => {
     if (!provider.isApproved)
       return res.status(403).json({ success: false, message: 'Provider not approved yet' });
 
-    const goingOnline = !provider.isOnline;
+    // goOnline: explicit boolean allows client to force a state instead of toggling.
+    // Useful when DB state got out of sync (e.g. crash without socket disconnect).
+    const goingOnline = req.body.goOnline !== undefined ? Boolean(req.body.goOnline) : !provider.isOnline;
 
     if (goingOnline) {
       const { vehicleId } = req.body;

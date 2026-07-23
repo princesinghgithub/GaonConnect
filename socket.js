@@ -1,4 +1,5 @@
 const { Server } = require('socket.io');
+const Provider    = require('./models/Provider');
 
 let io = null;
 
@@ -97,6 +98,9 @@ function initSocket(server) {
         if (sId === socket.id) {
           connectedDrivers.delete(driverId);
           console.log(`🔴 Driver offline: ${driverId}`);
+          // DB sync: socket cut hone pe driver ko offline mark karo taaki next
+          // createRide query mein stale 'isOnline:true' wale drivers na aayein.
+          Provider.findByIdAndUpdate(driverId, { isOnline: false, status: 'offline' }).catch(() => {});
           break;
         }
       }
