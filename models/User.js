@@ -50,6 +50,10 @@ const UserSchema = new mongoose.Schema({
     type:    Boolean,
     default: false,
   },
+  fcmToken: {
+    type:    String,
+    default: null,
+  },
   otp: {
     type: String,
     select: false, // GET requests mein auto-exclude

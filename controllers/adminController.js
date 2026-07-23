@@ -1,4 +1,4 @@
-// const User = require('../models/User');
+﻿// const User = require('../models/User');
 // const Provider = require('../models/Provider');
 // const Booking = require('../models/Booking');
 // const Rating = require('../models/Rating');
@@ -1030,7 +1030,7 @@
 //         },
 //         general: {
 //           currency: 'INR',
-//           currencySymbol: '₹',
+//           currencySymbol: 'â‚¹',
 //           timezone: 'Asia/Kolkata'
 //         }
 //       });
@@ -1814,7 +1814,7 @@ const getRecentActivity = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
 
-      // ✅ FIXED POPULATE
+      // âœ… FIXED POPULATE
       .populate('customer', 'name email phone')
       .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
 
@@ -1962,9 +1962,9 @@ const getDashboardMetrics = async (req, res) => {
   }
 };
 
-// ===== DASHBOARD OVERVIEW (single call — admin dashboard home page) =====
+// ===== DASHBOARD OVERVIEW (single call â€” admin dashboard home page) =====
 
-// Service categories jaise dashboard pe dikhte hain — vehicleType ko inme group karte hain
+// Service categories jaise dashboard pe dikhte hain â€” vehicleType ko inme group karte hain
 const VEHICLE_GROUPS = {
   auto_cab:  ['auto', 'car', 'bike'],
   tractor:   ['tractor'],
@@ -2034,7 +2034,7 @@ const getDashboardOverview = async (req, res) => {
         .select('vehicleType status customer provider createdAt'),
     ]);
 
-    // Service-wise booking count — vehicleType ko group mein daalo
+    // Service-wise booking count â€” vehicleType ko group mein daalo
     const serviceWiseBookings = Object.fromEntries(Object.keys(VEHICLE_GROUPS).map((g) => [g, 0]));
     serviceWiseAgg.forEach(({ _id: vehicleType, count }) => {
       const group = Object.keys(VEHICLE_GROUPS).find((g) => VEHICLE_GROUPS[g].includes(vehicleType));
@@ -2121,7 +2121,7 @@ const getAIAgentTasks = async (req, res) => {
       tasks.push({
         type: 'broadcast_ready',
         title: 'WhatsApp broadcast ready',
-        subtitle: `Naya ${newApprovedDrivers[0].vehicles?.[0]?.type || ''} driver join hua — customers ko batao`,
+        subtitle: `Naya ${newApprovedDrivers[0].vehicles?.[0]?.type || ''} driver join hua â€” customers ko batao`,
         count: newApprovedDrivers.length,
         drivers: newApprovedDrivers.map((d) => ({
           id: d._id,
@@ -2131,7 +2131,7 @@ const getAIAgentTasks = async (req, res) => {
       });
     }
 
-    // Kisan marketplace — yeh feature abhi backend mein nahi bana hai
+    // Kisan marketplace â€” yeh feature abhi backend mein nahi bana hai
     tasks.push({
       type: 'kisan_marketplace',
       title: 'Kisan marketplace',
@@ -2190,7 +2190,7 @@ const createDriver = async (req, res) => {
       status: 'offline',
     });
 
-    // Admin-onboarded driver — vehicle pre-verified aur turant active (kaam ke liye ready)
+    // Admin-onboarded driver â€” vehicle pre-verified aur turant active (kaam ke liye ready)
     const vehicle = await Vehicle.create({
       providerId: driver._id,
       type:   vehicleType,
@@ -2233,7 +2233,7 @@ const getAllDrivers = async (req, res) => {
       { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'user' } },
       { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
       { $lookup: { from: 'vehicles', localField: '_id', foreignField: 'providerId', as: 'vehicles' } },
-      // Admin dashboard listing sirf "current" vehicle dikhata hai — activeVehicle ko
+      // Admin dashboard listing sirf "current" vehicle dikhata hai â€” activeVehicle ko
       // 'vehicle' (singular) naam se attach karo taaki wo field seedha match ho jaye
       { $lookup: { from: 'vehicles', localField: 'activeVehicle', foreignField: '_id', as: 'vehicle' } },
       { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
@@ -2403,7 +2403,7 @@ const approveDriver = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Driver not found' });
     }
 
-    // Push notification — driver ko batao ki account approve ho gaya
+    // Push notification â€” driver ko batao ki account approve ho gaya
     const fcmToken = driver.deviceInfo?.fcmToken;
     if (fcmToken) {
       const { notify } = require('../utils/notifications');
@@ -2591,7 +2591,7 @@ const deleteDriver = async (req, res) => {
   }
 };
 
-// Provider-level KYC doc verification (aadhaar only — vehicle docs use verifyVehicleDocument)
+// Provider-level KYC doc verification (aadhaar only â€” vehicle docs use verifyVehicleDocument)
 const verifyDocument = async (req, res) => {
   try {
     const { documentType, status } = req.body;
@@ -2634,7 +2634,7 @@ const verifyDocument = async (req, res) => {
   }
 };
 
-// Bank details verify — bina isके withdrawal (/wallet/withdraw) kabhi allow nahi hota
+// Bank details verify â€” bina isà¤•à¥‡ withdrawal (/wallet/withdraw) kabhi allow nahi hota
 const verifyBankDetails = async (req, res) => {
   try {
     const { verified } = req.body;
@@ -3127,7 +3127,7 @@ const getActiveDriversLocation = async (req, res) => {
       .populate('activeVehicle')
       .select('user activeVehicle currentLocation status');
 
-    // Dashboard 'vehicle' (singular) expect karta hai — activeVehicle ko alias kar do
+    // Dashboard 'vehicle' (singular) expect karta hai â€” activeVehicle ko alias kar do
     const data = activeDrivers.map((d) => {
       const obj = d.toObject();
       obj.vehicle = obj.activeVehicle;
@@ -3153,7 +3153,7 @@ const getAllPayments = async (req, res) => {
   try {
     const { page = 1, limit = 20, status, method, startDate, endDate } = req.query;
 
-    // Ride hi payment record hai — fare/paymentMethod/paymentStatus usi mein hain
+    // Ride hi payment record hai â€” fare/paymentMethod/paymentStatus usi mein hain
     const query = {};
 
     if (status) query.paymentStatus = status;
@@ -3292,7 +3292,7 @@ const processWithdrawal = async (req, res) => {
         $inc: { 'wallet.pendingAmount': -txn.amount, 'wallet.totalWithdrawals': txn.amount },
       });
     } else {
-      // Failed — amount wapas balance mein refund karo
+      // Failed â€” amount wapas balance mein refund karo
       await Driver.findByIdAndUpdate(txn.provider, {
         $inc: { 'wallet.balance': txn.amount, 'wallet.pendingAmount': -txn.amount },
       });
@@ -3591,7 +3591,7 @@ const getSettings = async (req, res) => {
 };
 
 // PUT /api/admin/settings
-// Body: partial settings object — jo bhejo woh update hoga
+// Body: partial settings object â€” jo bhejo woh update hoga
 const updateSettings = async (req, res) => {
   try {
     const settings = await Setting.findOneAndUpdate(
@@ -3600,7 +3600,7 @@ const updateSettings = async (req, res) => {
       { new: true, upsert: true, runValidators: true }
     );
 
-    // Cache invalidate karo — next request pe fresh data aayega
+    // Cache invalidate karo â€” next request pe fresh data aayega
     await invalidateSettingsCache();
 
     res.json({ success: true, message: 'Settings update ho gayi!', data: settings });
@@ -3654,10 +3654,10 @@ const updatePricing = async (req, res) => {
       { new: true, upsert: true }
     );
 
-    // Cache invalidate — fare calculator fresh rates lo
+    // Cache invalidate â€” fare calculator fresh rates lo
     await invalidateSettingsCache();
 
-    res.json({ success: true, message: 'Pricing update ho gayi! 🎉', data: settings });
+    res.json({ success: true, message: 'Pricing update ho gayi! ðŸŽ‰', data: settings });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Pricing update error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
@@ -3967,7 +3967,7 @@ const sendNotification = async (req, res) => {
       const provider = await Provider.findById(recipientId).select('deviceInfo');
       fcmToken = provider?.deviceInfo?.fcmToken || null;
     } else {
-      // Customer — future mein User model mein fcmToken add karna hoga
+      // Customer â€” future mein User model mein fcmToken add karna hoga
       const user = await User.findById(recipientId).select('fcmToken');
       fcmToken = user?.fcmToken || null;
     }
@@ -4033,6 +4033,92 @@ const sendBulkNotification = async (req, res) => {
   }
 };
 
+// ===== PROMO CODES =====
+const PromoCode = require('../models/PromoCode');
+
+const getAllPromos = async (req, res) => {
+  try {
+    const promos = await PromoCode.find().sort({ createdAt: -1 });
+    res.json({ success: true, data: promos });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+const createPromo = async (req, res) => {
+  try {
+    const { code, description, discountType, discountValue, maxDiscount, minFare, maxUses, maxUsesPerUser, firstRideOnly, applicableVehicles, validFrom, validUntil } = req.body;
+    if (!code || !discountType || !discountValue || !validUntil) {
+      return res.status(400).json({ success: false, message: 'code, discountType, discountValue aur validUntil required hai' });
+    }
+    const promo = await PromoCode.create({
+      code: String(code).toUpperCase().trim(),
+      description: description || '',
+      discountType,
+      discountValue: Number(discountValue),
+      maxDiscount: maxDiscount ? Number(maxDiscount) : null,
+      minFare: Number(minFare || 0),
+      maxUses: maxUses ? Number(maxUses) : null,
+      maxUsesPerUser: Number(maxUsesPerUser || 1),
+      firstRideOnly: !!firstRideOnly,
+      applicableVehicles: applicableVehicles || [],
+      validFrom: validFrom ? new Date(validFrom) : new Date(),
+      validUntil: new Date(validUntil),
+      createdBy: req.user._id,
+    });
+    res.status(201).json({ success: true, message: `Promo code "${promo.code}" create ho gaya!`, data: promo });
+  } catch (error) {
+    if (error.code === 11000) return res.status(400).json({ success: false, message: 'Ye promo code already exist karta hai' });
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const updatePromo = async (req, res) => {
+  try {
+    const promo = await PromoCode.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (!promo) return res.status(404).json({ success: false, message: 'Promo not found' });
+    res.json({ success: true, message: 'Promo updated!', data: promo });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const deletePromo = async (req, res) => {
+  try {
+    const promo = await PromoCode.findByIdAndDelete(req.params.id);
+    if (!promo) return res.status(404).json({ success: false, message: 'Promo not found' });
+    res.json({ success: true, message: `Promo "${promo.code}" delete ho gaya` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ===== DB FIX â€” roles array =====
+const fixUserRoles = async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const providerFix = await User.updateMany(
+      { role: 'provider', roles: { $nin: ['provider'] } },
+      { $set: { roles: ['provider'] } }
+    );
+    const adminFix = await User.updateMany(
+      { role: 'admin', roles: { $nin: ['admin'] } },
+      { $set: { roles: ['admin'] } }
+    );
+    const customerFix = await User.updateMany(
+      { role: 'customer', roles: { $nin: ['customer'] } },
+      { $set: { roles: ['customer'] } }
+    );
+    res.json({
+      success: true,
+      message: 'Roles fix ho gaye!',
+      fixed: { providers: providerFix.modifiedCount, admins: adminFix.modifiedCount, customers: customerFix.modifiedCount }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Export all functions
 module.exports = {
   getStats,
@@ -4084,5 +4170,10 @@ module.exports = {
   exportReport,
   getDriverPerformance,
   sendNotification,
-  sendBulkNotification
+  sendBulkNotification,
+  getAllPromos,
+  createPromo,
+  updatePromo,
+  deletePromo,
+  fixUserRoles
 };
