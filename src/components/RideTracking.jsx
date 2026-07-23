@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { rideAPI, ratingAPI } from '../services/api';
 import Map from '../tabs/Map';
 import { FaSpinner, FaCar, FaPhone, FaStar, FaMapMarkerAlt } from 'react-icons/fa';
 import { toast } from 'react-hot-toast';
+import { io } from 'socket.io-client';
+
+const SOCKET_URL = (import.meta.env.VITE_API_URL || 'https://gaonconnect-backend.onrender.com/api').replace('/api', '');
 
 const loadRazorpayScript = () =>
   new Promise((resolve) => {
@@ -22,19 +25,41 @@ const RideTracking = () => {
   const [driver, setDriver] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mapMarkers, setMapMarkers] = useState([]);
+  const [driverMarker, setDriverMarker] = useState(null);
   const [paying, setPaying] = useState(false);
   const [stars, setStars] = useState(0);
   const [review, setReview] = useState('');
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [submittingRating, setSubmittingRating] = useState(false);
+  const socketRef = useRef(null);
 
   useEffect(() => {
     fetchRideDetails();
-    
-    // Poll for ride updates every 3 seconds
-    const interval = setInterval(fetchRideDetails, 3000);
-    
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchRideDetails, 6000);
+
+    // Socket.io — real-time driver location
+    const token = localStorage.getItem('token');
+    const sock = io(SOCKET_URL, {
+      auth: token ? { token } : undefined,
+      transports: ['websocket'],
+    });
+    sock.on('connect', () => {
+      sock.emit('join-ride', { rideId });
+    });
+    sock.on('location_update', ({ lat, lng }) => {
+      if (lat && lng) {
+        setDriverMarker({ lat, lng, label: '🚗 Driver' });
+      }
+    });
+    sock.on('ride_status_update', ({ status }) => {
+      if (status) setRide(prev => prev ? { ...prev, status } : prev);
+    });
+    socketRef.current = sock;
+
+    return () => {
+      clearInterval(interval);
+      sock.disconnect();
+    };
   }, [rideId]);
 
   useEffect(() => {
@@ -71,23 +96,29 @@ const RideTracking = () => {
 
   const updateMapMarkers = () => {
     const markers = [];
-    
+
     if (ride?.pickup?.coordinates) {
       markers.push({
         lat: ride.pickup.coordinates.latitude,
         lng: ride.pickup.coordinates.longitude,
-        label: 'Pickup'
+        label: '🟢 Pickup',
       });
     }
-    
+
     if (ride?.drop?.coordinates) {
       markers.push({
         lat: ride.drop.coordinates.latitude,
         lng: ride.drop.coordinates.longitude,
-        label: 'Drop'
+        label: '🔴 Drop',
       });
     }
-    
+
+    // Driver's last known location from polling
+    const driverLoc = ride?.provider?.currentLocation;
+    if (driverLoc?.latitude && driverLoc?.longitude) {
+      markers.push({ lat: driverLoc.latitude, lng: driverLoc.longitude, label: '🚗 Driver' });
+    }
+
     setMapMarkers(markers);
   };
 
@@ -223,7 +254,10 @@ const RideTracking = () => {
                 ride.pickup.coordinates.longitude
               ]}
               zoom={13}
-              markers={mapMarkers}
+              markers={[
+                ...mapMarkers.filter(m => !m.label?.includes('Driver')),
+                ...(driverMarker ? [driverMarker] : mapMarkers.filter(m => m.label?.includes('Driver'))),
+              ]}
             />
           </div>
         </div>
