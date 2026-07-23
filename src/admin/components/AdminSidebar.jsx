@@ -10,6 +10,7 @@ import {
   FaTags,
   FaBell,
   FaCog,
+  FaPercent,
 } from "react-icons/fa";
 
 const menu = [
@@ -21,6 +22,7 @@ const menu = [
   { key: "customers",    label: "Customers",    icon: <FaUsers /> },
   { key: "analytics",    label: "Analytics",    icon: <FaChartBar /> },
   { key: "pricing",      label: "Pricing",      icon: <FaTags /> },
+  { key: "promos",       label: "Promo Codes",  icon: <FaPercent /> },
   { key: "notifications",label: "Notifications",icon: <FaBell /> },
   { key: "settings",     label: "Settings",     icon: <FaCog /> },
 ];

@@ -9,6 +9,7 @@ import Payments from "../admin/pages/Payments";
 import Customers from "../admin/pages/Customers";
 import Analytics from "../admin/pages/Analytics";
 import Pricing from "../admin/pages/Pricing";
+import Promos from "../admin/pages/Promos";
 import Notifications from "../admin/pages/Notifications";
 import Settings from "../admin/pages/Settings";
 
@@ -24,6 +25,7 @@ const AdminTab = () => {
       case "customers":     return <Customers />;
       case "analytics":     return <Analytics />;
       case "pricing":       return <Pricing />;
+      case "promos":        return <Promos />;
       case "notifications": return <Notifications />;
       case "settings":      return <Settings />;
       default:              return <Dashboard />;
