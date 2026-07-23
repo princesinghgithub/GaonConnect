@@ -2223,10 +2223,21 @@ const createDriver = async (req, res) => {
 
 const getAllDrivers = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, search } = req.query;
+    const { page = 1, limit = 20, status, search, isApproved, isRejected, isBlocked } = req.query;
 
     const matchStage = {};
-    if (status) matchStage.status = status;
+    if (status === 'online') {
+      matchStage.status = { $in: ['available', 'busy'] };
+    } else if (status) {
+      matchStage.status = status;
+    }
+    if (isApproved !== undefined) matchStage.isApproved = isApproved === 'true';
+    if (isRejected !== undefined) matchStage.isRejected = isRejected === 'true';
+    if (isBlocked !== undefined) matchStage.isBlocked = isBlocked === 'true';
+    if (isApproved === 'false' && isRejected === undefined && isBlocked === undefined) {
+      matchStage.isRejected = false;
+      matchStage.isBlocked = false;
+    }
 
     const pipeline = [
       { $match: matchStage },
@@ -3407,14 +3418,19 @@ const createUser = async (req, res) => {
 
 const getAllUsers = async (req, res) => {
   try {
-    const { page = 1, limit = 20, search } = req.query;
+    const { page = 1, limit = 20, search, isBlocked, isVerified } = req.query;
 
     // 'customer' role wale ya dual-role mein customer wale users
     const customerFilter = { $or: [{ role: 'customer' }, { roles: 'customer' }] };
+    const extra = {};
+    if (isBlocked !== undefined) extra.isBlocked = isBlocked === 'true';
+    if (isVerified !== undefined) extra.isVerified = isVerified === 'true';
+
     const query = search
       ? {
           $and: [
             customerFilter,
+            extra,
             { $or: [
               { name: { $regex: search, $options: 'i' } },
               { email: { $regex: search, $options: 'i' } },
@@ -3422,7 +3438,7 @@ const getAllUsers = async (req, res) => {
             ] }
           ]
         }
-      : customerFilter;
+      : { ...customerFilter, ...extra };
 
     const users = await User.find(query)
       .limit(limit * 1)
