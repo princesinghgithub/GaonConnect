@@ -1642,6 +1642,9 @@ exports.toggleDuty = async (req, res) => {
     if (!provider)
       return res.status(404).json({ success: false, message: 'Provider not found' });
 
+    if (provider.isBlocked)
+      return res.status(403).json({ success: false, message: 'Aapka account block hai. Support se sampark karein.' });
+
     if (!provider.isApproved)
       return res.status(403).json({ success: false, message: 'Provider not approved yet' });
 
@@ -1682,21 +1685,25 @@ exports.toggleDuty = async (req, res) => {
 
 
 exports.updateProviderLocation = async (req, res) => {
-  const { lat, lng } = req.body;
+  try {
+    const { lat, lng } = req.body;
+    if (!lat || !lng) return res.status(400).json({ success: false, message: 'lat aur lng required hain' });
 
-  const provider = await Provider.findOne({ user: req.user.id });
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider) return res.status(404).json({ success: false, message: 'Provider not found' });
 
-  provider.currentLocation = {
-    type: 'Point',
-    coordinates: [Number(lng), Number(lat)]
-  };
+    // Only update location — never override isOnline/status here.
+    // toggleDuty is the single source of truth for online/offline state.
+    provider.currentLocation = {
+      type: 'Point',
+      coordinates: [Number(lng), Number(lat)],
+    };
 
-  provider.isOnline = true;
-  provider.status = 'available';
-
-  await provider.save();
-
-  res.json({ success: true });
+    await provider.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 };
 
 
