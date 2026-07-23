@@ -114,6 +114,18 @@ router.post('/promos', adminController.createPromo);
 router.put('/promos/:id', adminController.updatePromo);
 router.delete('/promos/:id', adminController.deletePromo);
 
+// ===== MANUAL DRIVER ASSIGN =====
+router.put('/rides/:id/assign', adminController.assignDriverToRide);
+
+// ===== EXPIRING DOCUMENTS =====
+router.get('/vehicles/expiring', adminController.getExpiringDocuments);
+
+// ===== COMPLAINTS =====
+router.get('/complaints', adminController.getAllComplaints);
+router.post('/complaints', adminController.createComplaint);
+router.put('/complaints/:id', adminController.updateComplaint);
+router.delete('/complaints/:id', adminController.deleteComplaint);
+
 // ===== DB FIX =====
 router.post('/fix/roles', adminController.fixUserRoles);
 
