@@ -108,4 +108,13 @@ router.get('/reports/export', adminController.exportReport);
 router.post('/notifications/send', adminController.sendNotification);
 router.post('/notifications/bulk', adminController.sendBulkNotification);
 
+// ===== PROMO CODES =====
+router.get('/promos', adminController.getAllPromos);
+router.post('/promos', adminController.createPromo);
+router.put('/promos/:id', adminController.updatePromo);
+router.delete('/promos/:id', adminController.deletePromo);
+
+// ===== DB FIX =====
+router.post('/fix/roles', adminController.fixUserRoles);
+
 module.exports = router;
