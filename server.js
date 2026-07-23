@@ -89,6 +89,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth',     require('./routes/auth'));
+app.use('/api/user',     require('./routes/auth')); // user app calls /user/fcm-token
 app.use('/api/provider', require('./routes/provider'));
 app.use('/api/create',   require('./routes/ride'));
 app.use('/api/ride',     require('./routes/ride'));

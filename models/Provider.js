@@ -152,9 +152,9 @@ const ProviderSchema = new mongoose.Schema({
 
 
   currentLocation: {
-  type: { type: String, enum: ['Point'] },
-  coordinates: { type: [Number], index: '2dsphere' }
-},
+    type: { type: String, enum: ['Point'] },
+    coordinates: { type: [Number] },
+  },
 
   isApproved: {
     type: Boolean,

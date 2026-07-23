@@ -142,4 +142,17 @@ router.get('/profile',  protect, getProfile);
 router.put('/profile',  protect, validate(schemas.updateProfile), updateProfile);
 router.post('/profile/photo', protect, photoUpload.single('photo'), uploadProfilePhoto);
 
+// ─── User FCM Token (user app ke liye) ───────────────────────────────────────
+// POST /api/auth/fcm-token  OR  POST /api/user/fcm-token (dono mounted hain)
+router.post('/fcm-token', protect, async (req, res) => {
+  try {
+    const { fcmToken } = req.body;
+    if (!fcmToken) return res.status(400).json({ success: false, message: 'fcmToken required hai' });
+    await User.findByIdAndUpdate(req.user.id, { fcmToken });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;

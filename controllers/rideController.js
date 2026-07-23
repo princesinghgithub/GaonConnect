@@ -27,8 +27,12 @@ const getProviderFcm = async (providerId) => {
 
 // ─── Helper: customer ka FCM token lo ────────────────────────────────────────
 const getCustomerFcm = async (userId) => {
-  // User model mein fcmToken field nahi hai abhi, future ke liye placeholder
-  return null;
+  try {
+    const u = await User.findById(userId).select('fcmToken');
+    return u?.fcmToken || null;
+  } catch {
+    return null;
+  }
 };
 
 // ─── Helper: customer ke liye in-app notification persist karo ──────────────
