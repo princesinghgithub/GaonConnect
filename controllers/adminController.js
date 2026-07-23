@@ -4049,6 +4049,135 @@ const sendBulkNotification = async (req, res) => {
   }
 };
 
+// ===== MANUAL DRIVER ASSIGN =====
+const assignDriverToRide = async (req, res) => {
+  try {
+    const { driverId } = req.body;
+    if (!driverId) return res.status(400).json({ success: false, message: 'driverId required hai' });
+
+    const ride = await Ride.findById(req.params.id).populate('customer', 'name phone');
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
+    if (ride.status !== 'searching') return res.status(400).json({ success: false, message: `Ride abhi "${ride.status}" status mein hai — assign nahi ho sakti` });
+
+    const driver = await Driver.findById(driverId).populate('user', 'name phone');
+    if (!driver) return res.status(404).json({ success: false, message: 'Driver nahi mila' });
+    if (!driver.isApproved) return res.status(400).json({ success: false, message: 'Driver approved nahi hai' });
+    if (driver.isBlocked) return res.status(400).json({ success: false, message: 'Driver blocked hai' });
+
+    ride.provider = driverId;
+    ride.status = 'accepted';
+    await ride.save();
+
+    res.json({ success: true, message: `${driver.user?.name || 'Driver'} ko ride assign kar diya!`, data: { driverName: driver.user?.name, driverPhone: driver.user?.phone } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ===== EXPIRING DOCUMENTS =====
+const getExpiringDocuments = async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+    const cutoff = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const Vehicle = require('../models/Vehicle');
+
+    const vehicles = await Vehicle.find({ isActive: true })
+      .populate({ path: 'providerId', populate: { path: 'user', select: 'name phone' } })
+      .select('number type documents providerId');
+
+    const DOC_LABELS = { rc: 'RC', insurance: 'Insurance', license: 'Driving License', permit: 'Permit', fitness: 'Fitness Certificate', machineRegistration: 'Machine Registration' };
+    const alerts = [];
+
+    for (const v of vehicles) {
+      for (const [key, label] of Object.entries(DOC_LABELS)) {
+        const doc = v.documents?.[key];
+        if (!doc?.expiryDate) continue;
+        const expiry = new Date(doc.expiryDate);
+        if (expiry <= cutoff) {
+          const daysLeft = Math.ceil((expiry - Date.now()) / (1000 * 60 * 60 * 24));
+          alerts.push({
+            vehicleId: v._id,
+            vehicleNumber: v.number,
+            vehicleType: v.type,
+            driverName: v.providerId?.user?.name || '—',
+            driverPhone: v.providerId?.user?.phone || '—',
+            driverId: v.providerId?._id,
+            docType: label,
+            docKey: key,
+            expiryDate: expiry,
+            daysLeft,
+            expired: daysLeft < 0,
+          });
+        }
+      }
+    }
+
+    alerts.sort((a, b) => a.daysLeft - b.daysLeft);
+    res.json({ success: true, data: alerts, total: alerts.length });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ===== COMPLAINTS =====
+const Complaint = require('../models/Complaint');
+
+const getAllComplaints = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20 } = req.query;
+    const filter = status ? { status } : {};
+    const complaints = await Complaint.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .populate('complainant', 'name phone')
+      .populate('against', 'name phone')
+      .populate('ride', 'status vehicleType fare');
+    const total = await Complaint.countDocuments(filter);
+    res.json({ success: true, data: complaints, total, totalPages: Math.ceil(total / limit), currentPage: Number(page) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const createComplaint = async (req, res) => {
+  try {
+    const { description, category, type, complainantName, complainantPhone, againstName, priority, ride } = req.body;
+    if (!description?.trim()) return res.status(400).json({ success: false, message: 'Description required hai' });
+    const c = await Complaint.create({ description, category, type, complainantName, complainantPhone, againstName, priority, ride: ride || undefined });
+    res.status(201).json({ success: true, message: 'Complaint register ho gayi!', data: c });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const updateComplaint = async (req, res) => {
+  try {
+    const { status, resolution, priority } = req.body;
+    const update = { status, priority };
+    if (status === 'resolved' || status === 'dismissed') {
+      update.resolution = resolution;
+      update.resolvedBy = req.user._id;
+      update.resolvedAt = new Date();
+    }
+    const c = await Complaint.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!c) return res.status(404).json({ success: false, message: 'Complaint nahi mili' });
+    res.json({ success: true, message: `Complaint ${status} kar di!`, data: c });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const deleteComplaint = async (req, res) => {
+  try {
+    const c = await Complaint.findByIdAndDelete(req.params.id);
+    if (!c) return res.status(404).json({ success: false, message: 'Complaint nahi mili' });
+    res.json({ success: true, message: 'Complaint delete ho gayi' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ===== PROMO CODES =====
 const PromoCode = require('../models/PromoCode');
 
@@ -4191,5 +4320,11 @@ module.exports = {
   createPromo,
   updatePromo,
   deletePromo,
-  fixUserRoles
+  fixUserRoles,
+  assignDriverToRide,
+  getExpiringDocuments,
+  getAllComplaints,
+  createComplaint,
+  updateComplaint,
+  deleteComplaint,
 };
