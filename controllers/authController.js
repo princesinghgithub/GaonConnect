@@ -218,25 +218,22 @@ exports.verifyPhoneOTP = async (req, res) => {
       if (changed) await user.save();
     }
 
-    // Provider App se login — approval check
+    // Provider App se login — profile exist karna chahiye, approval nahi
+    // (Rapido style: login allow karo, online toggle pe approval check hoga)
+    let providerData = null;
     if (activeRole === 'provider') {
       const provider = await Provider.findOne({ user: user._id });
       if (!provider)
         return res.status(404).json({ success: false, message: 'Driver profile nahi mili. Pehle register karo.' });
-      if (!provider.isApproved)
-        return res.status(403).json({ success: false, message: 'Aapka account abhi admin se approve nahi hua.' });
 
-      // Provider profile confirm ho gaya — ab hi roles mein 'provider' add karo
-      if (!user.roles.includes('provider')) {
+      // Approved providers ke liye hi 'provider' role add karo
+      if (provider.isApproved && !user.roles.includes('provider')) {
         user.roles.push('provider');
         await user.save();
       }
-    }
 
-    let providerData = null;
-    if (activeRole === 'provider') {
       providerData = await Provider.findOne({ user: user._id })
-        .select('activeVehicle documents rating stats status isApproved isOnline wallet')
+        .select('activeVehicle documents rating stats status isApproved isOnline wallet isBlocked')
         .populate('activeVehicle');
     }
 
