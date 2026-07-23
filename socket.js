@@ -53,6 +53,13 @@ function initSocket(server) {
       console.log(`📦 Booking room joined: ${bookingId}`);
     });
 
+    // ─── User App join-ride (object format) ─────────────────────────────────
+    socket.on('join-ride', ({ rideId } = {}) => {
+      if (!rideId) return;
+      socket.join(`booking_${rideId}`);
+      console.log(`📍 Ride room joined: ${rideId}`);
+    });
+
     // ─── Driver Live Location ────────────────────────────────────────────────
     socket.on('driverLocation', ({ bookingId, driverId, lat, lng }) => {
       if (!bookingId || lat === undefined || lng === undefined) return;
