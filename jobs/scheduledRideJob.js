@@ -4,12 +4,13 @@
 const cron     = require('node-cron');
 const Ride     = require('../models/Ride');
 const Provider = require('../models/Provider');
+const Vehicle  = require('../models/Vehicle');
 const User     = require('../models/User');
 const { getIO } = require('../socket');
 const { notify } = require('../utils/notifications');
 
 const startScheduledRideJob = () => {
-  // Har 2 minute mein check karo
+  // Har 2 minute mein scheduled rides check karo
   cron.schedule('*/2 * * * *', async () => {
     try {
       const now  = new Date();
@@ -29,11 +30,14 @@ const startScheduledRideJob = () => {
         // push notification chahiye (jaise tractor/JCB waale jo hamesha
         // app khole nahi baithte). Sirf 'busy' (kisi aur ride pe) waalon
         // ko skip karo.
+        const matchingVehicles = await Vehicle.find({ type: ride.vehicleType, isVerified: true }).select('_id');
+        const matchingVehicleIds = matchingVehicles.map((v) => v._id);
+
         const drivers = await Provider.find({
-          isApproved:     true,
-          isBlocked:      { $ne: true },
-          status:         { $ne: 'busy' },
-          'vehicle.type': ride.vehicleType,
+          isApproved:    true,
+          isBlocked:     { $ne: true },
+          status:        { $ne: 'busy' },
+          activeVehicle: { $in: matchingVehicleIds },
         }).populate('user', 'name phone');
 
         const io = getIO();
@@ -92,6 +96,44 @@ const startScheduledRideJob = () => {
   });
 
   console.log('✅ Scheduled ride cron job started (every 2 min)');
+
+  // Har 5 minute mein: 'searching' rides jo 10+ min purani hain unhe auto-cancel karo
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const cutoff = new Date(Date.now() - 10 * 60 * 1000);
+      const stale = await Ride.find({
+        status:    'searching',
+        provider:  null,
+        createdAt: { $lt: cutoff },
+      });
+
+      if (!stale.length) return;
+
+      const io = getIO();
+      for (const ride of stale) {
+        ride.status             = 'cancelled';
+        ride.cancelledBy        = 'admin';
+        ride.cancellationReason = 'Koi driver available nahi mila (auto-cancel)';
+        ride.cancelledAt        = new Date();
+        await ride.save();
+
+        io.to(`user_${ride.customer}`).emit('rideCancelled', { rideId: ride._id, reason: 'Koi driver nahi mila. Dobara try karein.' });
+        console.log(`🚫 Auto-cancelled stale ride: ${ride._id}`);
+      }
+    } catch (err) {
+      console.error('Auto-cancel cron error:', err.message);
+    }
+  });
+
+  // Roz midnight pe todayEarnings reset karo
+  cron.schedule('0 0 * * *', async () => {
+    try {
+      await Provider.updateMany({}, { 'stats.todayEarnings': 0 });
+      console.log('🔄 todayEarnings reset for all providers');
+    } catch (err) {
+      console.error('Earnings reset cron error:', err.message);
+    }
+  });
 };
 
 module.exports = { startScheduledRideJob };
