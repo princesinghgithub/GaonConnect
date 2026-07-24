@@ -448,6 +448,7 @@ exports.updateRideStatus = async (req, res) => {
       provider.stats.completedTrips  += 1;
       provider.stats.totalTrips      += 1;
       provider.stats.totalEarnings   += driverEarning;
+      provider.stats.todayEarnings   += driverEarning;
       provider.wallet.balance        += driverEarning;
       provider.status = 'available';
       await provider.save();
