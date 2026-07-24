@@ -6,7 +6,8 @@ const Vehicle      = require('../models/Vehicle');
 const User         = require('../models/User');
 const Notification = require('../models/Notification');
 const Transaction  = require('../models/Transaction');
-const { calculateFare }             = require('../utils/fareCalculator');
+const { calculateFare, calculateHourlyFare } = require('../utils/fareCalculator');
+const { getDynamicFare }            = require('../utils/dynamicFare');
 const { getIO }                     = require('../socket');
 const { notify }                    = require('../utils/notifications');
 const { applyPromoToRide }          = require('./promoController');
@@ -54,7 +55,7 @@ exports.createRide = async (req, res) => {
     const {
       pickup, drop, dropoff,
       vehicleType,
-      distance, estimatedFare, fare, estimatedDuration,
+      distance, estimatedDuration,
       paymentMethod  = 'cash',
       bookingType    = 'instant',
       scheduledAt    = null,
@@ -75,9 +76,20 @@ exports.createRide = async (req, res) => {
     }
 
     const otp          = crypto.randomInt(1000, 9999).toString();
-    let   finalFare    = fare || estimatedFare || 0;
     const finalDist    = typeof distance === 'object' ? distance.value : (distance || 0);
     const finalDur     = estimatedDuration || 30;
+
+    // Fare — client jo bhi bheje usse IGNORE karo, hamesha server-side calculate karo.
+    // (client-supplied fare/estimatedFare trust karna price tampering allow karta tha)
+    let finalFare = 0;
+    if (serviceCategory && serviceType) {
+      const hourlyResult = calculateHourlyFare(vehicleType, serviceCategory, serviceType, estimatedHours, finalDist);
+      finalFare = hourlyResult.fare || 0;
+    }
+    if (!finalFare) {
+      const fareBreakdown = await getDynamicFare(finalDist, vehicleType);
+      finalFare = fareBreakdown.totalFare;
+    }
 
     // Promo code apply karo
     let promoDiscount = 0;
@@ -110,6 +122,9 @@ exports.createRide = async (req, res) => {
       paymentMethod,
       otp,
       status:        bookingType === 'scheduled' ? 'scheduled' : 'searching',
+      // Instant ride turant 'searching' mein jaati hai — cutoff yahin se shuru.
+      // Scheduled ride ke liye yeh cron job set karega jab activate hogi.
+      searchingSince: bookingType === 'scheduled' ? null : new Date(),
       bookingType,
       scheduledAt:   scheduledAt ? new Date(scheduledAt) : null,
       scheduledNote: scheduledNote || '',

@@ -1,9 +1,11 @@
 const { Server } = require('socket.io');
-const Provider    = require('./models/Provider');
+const jwt         = require('jsonwebtoken');
+const Provider     = require('./models/Provider');
+const Ride          = require('./models/Ride');
 
 let io = null;
 
-// driverId → socketId mapping
+// providerId → socketId mapping (sirf online drivers)
 const connectedDrivers = new Map();
 
 function initSocket(server) {
@@ -29,80 +31,95 @@ function initSocket(server) {
     pingInterval: 25000,
   });
 
+  // ─── Auth middleware ──────────────────────────────────────────────────────
+  // Pehle koi bhi client kisi bhi driverId/userId/bookingId se connect ho
+  // sakta tha (OTP leak, fake ride offers, driver hijacking — dekho audit).
+  // Ab connect karte waqt valid JWT (handshake.auth.token) chahiye hi hoga,
+  // aur uske baad driverId/userId client se nahi, TOKEN se derive hote hain.
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+      if (!token) return next(new Error('Authentication required'));
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.userId = String(decoded.id);
+      socket.role   = decoded.role;
+
+      if (decoded.role === 'provider') {
+        const provider = await Provider.findOne({ user: decoded.id }).select('_id');
+        if (!provider) return next(new Error('Provider profile not found'));
+        socket.providerId = String(provider._id);
+      }
+
+      next();
+    } catch (err) {
+      next(new Error('Authentication failed'));
+    }
+  });
+
   io.on('connection', (socket) => {
-    console.log(`🚖 Socket connected: ${socket.id}`);
+    console.log(`🚖 Socket connected: ${socket.id} (user ${socket.userId}${socket.providerId ? `, provider ${socket.providerId}` : ''})`);
+
+    // ─── Booking room join helper — sirf apni khud ki ride ke liye ──────────
+    const joinBookingRoom = async (bookingId) => {
+      if (!bookingId) return;
+      try {
+        const ride = await Ride.findById(bookingId).select('customer provider');
+        if (!ride) return;
+        const ownsAsCustomer = String(ride.customer) === socket.userId;
+        const ownsAsDriver   = socket.providerId && ride.provider && String(ride.provider) === socket.providerId;
+        if (!ownsAsCustomer && !ownsAsDriver) {
+          console.log(`⛔ Booking room join blocked: ${bookingId} (user ${socket.userId})`);
+          return;
+        }
+        socket.join(`booking_${bookingId}`);
+        console.log(`📦 Booking room joined: ${bookingId}`);
+      } catch (err) {
+        console.error('joinBookingRoom error:', err.message);
+      }
+    };
 
     // ─── Driver Online ──────────────────────────────────────────────────────
-    socket.on('driverOnline', ({ driverId }) => {
-      if (!driverId) return;
-      connectedDrivers.set(String(driverId), socket.id);
-      socket.join(`driver_${driverId}`);
-      console.log(`🟢 Driver online: ${driverId}`);
+    socket.on('driverOnline', () => {
+      if (!socket.providerId) return; // sirf provider-role token waale
+      connectedDrivers.set(socket.providerId, socket.id);
+      socket.join(`driver_${socket.providerId}`);
+      console.log(`🟢 Driver online: ${socket.providerId}`);
     });
 
     // ─── User Joins Room ────────────────────────────────────────────────────
-    socket.on('user_join', (userId) => {
-      if (!userId) return;
-      socket.join(`user_${userId}`);
-      console.log(`👤 User joined: ${userId}`);
+    socket.on('user_join', () => {
+      socket.join(`user_${socket.userId}`);
+      console.log(`👤 User joined: ${socket.userId}`);
     });
 
     // ─── User Joins Booking Room ────────────────────────────────────────────
-    socket.on('join_booking', (bookingId) => {
-      if (!bookingId) return;
-      socket.join(`booking_${bookingId}`);
-      console.log(`📦 Booking room joined: ${bookingId}`);
-    });
+    socket.on('join_booking', (bookingId) => joinBookingRoom(bookingId));
 
     // ─── User App join-ride (object format) ─────────────────────────────────
-    socket.on('join-ride', ({ rideId } = {}) => {
-      if (!rideId) return;
-      socket.join(`booking_${rideId}`);
-      console.log(`📍 Ride room joined: ${rideId}`);
-    });
+    socket.on('join-ride', ({ rideId } = {}) => joinBookingRoom(rideId));
 
     // ─── Driver Live Location ────────────────────────────────────────────────
-    socket.on('driverLocation', ({ bookingId, driverId, lat, lng }) => {
-      if (!bookingId || lat === undefined || lng === undefined) return;
-      io.to(`booking_${bookingId}`).emit('location_update', { driverId, lat, lng });
-    });
-
-    // ─── Assign Ride to Driver ───────────────────────────────────────────────
-    socket.on('assignRide', ({ driverId, booking }) => {
-      if (!driverId || !booking) return;
-      const driverSocket = connectedDrivers.get(String(driverId));
-      if (driverSocket) {
-        io.to(driverSocket).emit('newRideRequest', booking);
-        console.log(`📩 Ride sent to driver: ${driverId}`);
-      } else {
-        console.log(`⚠️  Driver not online: ${driverId}`);
+    socket.on('driverLocation', async ({ bookingId, lat, lng }) => {
+      if (!socket.providerId || !bookingId || lat === undefined || lng === undefined) return;
+      try {
+        const ride = await Ride.findById(bookingId).select('provider');
+        if (!ride || !ride.provider || String(ride.provider) !== socket.providerId) return;
+        io.to(`booking_${bookingId}`).emit('location_update', { driverId: socket.providerId, lat, lng });
+      } catch (err) {
+        console.error('driverLocation error:', err.message);
       }
-    });
-
-    // ─── Driver Accept / Reject ──────────────────────────────────────────────
-    socket.on('rideResponse', ({ bookingId, driverId, status }) => {
-      if (!bookingId) return;
-      io.to(`booking_${bookingId}`).emit('ride_status_update', { bookingId, driverId, status });
-    });
-
-    // ─── Live Ride Tracking ──────────────────────────────────────────────────
-    socket.on('rideTracking', ({ bookingId, lat, lng }) => {
-      if (!bookingId || lat === undefined || lng === undefined) return;
-      io.to(`booking_${bookingId}`).emit('track_update', { lat, lng });
     });
 
     // ─── Disconnect ──────────────────────────────────────────────────────────
     socket.on('disconnect', () => {
       console.log(`❌ Socket disconnected: ${socket.id}`);
-      for (const [driverId, sId] of connectedDrivers.entries()) {
-        if (sId === socket.id) {
-          connectedDrivers.delete(driverId);
-          console.log(`🔴 Driver offline: ${driverId}`);
-          // DB sync: socket cut hone pe driver ko offline mark karo taaki next
-          // createRide query mein stale 'isOnline:true' wale drivers na aayein.
-          Provider.findByIdAndUpdate(driverId, { isOnline: false, status: 'offline' }).catch(() => {});
-          break;
-        }
+      if (socket.providerId && connectedDrivers.get(socket.providerId) === socket.id) {
+        connectedDrivers.delete(socket.providerId);
+        console.log(`🔴 Driver offline: ${socket.providerId}`);
+        // DB sync: socket cut hone pe driver ko offline mark karo taaki next
+        // createRide query mein stale 'isOnline:true' wale drivers na aayein.
+        Provider.findByIdAndUpdate(socket.providerId, { isOnline: false, status: 'offline' }).catch(() => {});
       }
     });
   });
