@@ -86,8 +86,11 @@ const startScheduledRideJob = () => {
           console.log(`🔔 Scheduled ride → ${driver.user?.name} | ${scheduledTime}`);
         });
 
-        // Status update karo
+        // Status update karo — searchingSince ABHI set karo, createdAt (jo
+        // booking-time hai, ghanto/din purana ho sakta hai) nahi. Neeche wala
+        // auto-cancel job isi field se stale rides pehchanta hai.
         ride.status = 'searching';
+        ride.searchingSince = new Date();
         await ride.save();
       }
     } catch (err) {
@@ -102,9 +105,16 @@ const startScheduledRideJob = () => {
     try {
       const cutoff = new Date(Date.now() - 10 * 60 * 1000);
       const stale = await Ride.find({
-        status:    'searching',
-        provider:  null,
-        createdAt: { $lt: cutoff },
+        status:   'searching',
+        provider: null,
+        // searchingSince = jab ride actually searching mein aayi (instant ride
+        // ke liye creation time, scheduled ride ke liye activation time).
+        // Purani (pre-migration) rides jinme yeh field nahi hai unke liye
+        // createdAt pe fallback karo.
+        $or: [
+          { searchingSince: { $lt: cutoff } },
+          { searchingSince: null, createdAt: { $lt: cutoff } },
+        ],
       });
 
       if (!stale.length) return;

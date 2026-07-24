@@ -27,7 +27,7 @@ const {
 } = require('../controllers/rideController');
 
 // ─── Customer ─────────────────────────────────────────────────────────────────
-router.post('/create',          protect, createRide);
+router.post('/create',          protect, validate(schemas.createRide), createRide);
 router.get('/current/customer', protect, getCurrentRideCustomer);
 router.get('/history/customer', protect, getRideHistoryCustomer);
 

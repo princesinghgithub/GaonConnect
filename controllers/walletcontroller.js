@@ -183,19 +183,29 @@ exports.requestWithdrawal = async (req, res) => {
       });
     }
 
-    // Check if sufficient balance
-    if (provider.wallet.balance < amount) {
-      return res.status(400).json({
-        success: false,
-        message: 'Insufficient balance'
-      });
-    }
-
     // Minimum withdrawal amount
     if (amount < 100) {
       return res.status(400).json({
         success: false,
         message: 'Minimum withdrawal amount is ₹100'
+      });
+    }
+
+    // Balance check + deduct ek hi atomic operation mein — do concurrent
+    // withdrawal requests (2 devices, double-tap) alag-alag "read balance,
+    // check, save" steps se dono pass ho ke wallet negative kar sakte the.
+    // $gte guard yeh ensure karta hai ki dusra request tabhi fail ho jab
+    // balance already pehle waale ne le liya ho.
+    const updatedProvider = await Provider.findOneAndUpdate(
+      { _id: provider._id, 'wallet.balance': { $gte: amount } },
+      { $inc: { 'wallet.balance': -amount, 'wallet.pendingAmount': amount } },
+      { new: true }
+    );
+
+    if (!updatedProvider) {
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient balance'
       });
     }
 
@@ -212,11 +222,6 @@ exports.requestWithdrawal = async (req, res) => {
         bankName: provider.bankDetails.bankName
       }
     });
-
-    // Update wallet
-    provider.wallet.balance -= amount;
-    provider.wallet.pendingAmount += amount;
-    await provider.save();
 
     return res.status(200).json({
       success: true,

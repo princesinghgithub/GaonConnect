@@ -16,6 +16,18 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+// Placeholder webhook secret ke saath Razorpay ka HAR real webhook call
+// signature-mismatch pe silently 400 ho jaayega — payment confirmation ka
+// backup safety net (jab client-side verify call miss ho jaaye) dead rahega.
+// Server start hona nahi rokta (cash-only chalane ke liye zaroori nahi),
+// lekin production mein yeh loud warning zaroor dikhni chahiye.
+if (process.env.NODE_ENV === 'production') {
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
+  if (!webhookSecret || webhookSecret.toLowerCase().includes('change_me') || webhookSecret.toLowerCase().includes('test_')) {
+    console.error('⚠️⚠️⚠️  RAZORPAY_WEBHOOK_SECRET placeholder/missing hai production mein! Razorpay dashboard se real webhook secret le kar .env update karo — nahi toh saare payment webhooks fail honge.');
+  }
+}
+
 // Railway containers have no outbound IPv6 route; Gmail SMTP (and other hosts)
 // resolve to IPv6 first and hang/fail with ENETUNREACH unless IPv4 is preferred.
 dns.setDefaultResultOrder('ipv4first');

@@ -219,6 +219,11 @@ workNote: {
       default: Date.now,
     },
 
+    // Ride kab 'searching' status mein aayi (instant ride ke liye createRide
+    // pe turant, scheduled ride ke liye jab cron job usse activate karta hai).
+    // Auto-cancel cutoff isi field se naapa jaata hai, createdAt se nahi —
+    // warna scheduled/pre-booked rides turant auto-cancel ho jaati thi.
+    searchingSince: Date,
     acceptedAt: Date,
     arrivedAt: Date,
     startedAt: Date,

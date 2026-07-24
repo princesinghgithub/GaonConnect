@@ -71,34 +71,44 @@ const schemas = {
   }),
 
   // Ride
+  // NOTE: pickup/drop yahan flat {address, latitude, longitude} hain — yeh
+  // dono apps (userApp confirm-booking.tsx aur tractor-booking.tsx) jo bhejte
+  // hain usse match karta hai. `fare`/`estimatedFare` accept karte hain sirf
+  // backward-compat ke liye — server inhe IGNORE karta hai aur khud fare
+  // calculate karta hai (dekho rideController.js createRide).
   createRide: Joi.object({
     pickup: Joi.object({
-      address:     Joi.string().required(),
-      coordinates: Joi.object({
-        latitude:  Joi.number().min(-90).max(90).required(),
-        longitude: Joi.number().min(-180).max(180).required(),
-      }).required(),
+      address:   Joi.string().required(),
+      latitude:  Joi.number().min(-90).max(90).required(),
+      longitude: Joi.number().min(-180).max(180).required(),
     }).required(),
     drop: Joi.object({
-      address:     Joi.string().required(),
-      coordinates: Joi.object({
-        latitude:  Joi.number().min(-90).max(90).required(),
-        longitude: Joi.number().min(-180).max(180).required(),
-      }).required(),
-    }).required(),
+      address:   Joi.string().required(),
+      latitude:  Joi.number().min(-90).max(90).required(),
+      longitude: Joi.number().min(-180).max(180).required(),
+    }),
+    dropoff: Joi.object({
+      address:   Joi.string().required(),
+      latitude:  Joi.number().min(-90).max(90).required(),
+      longitude: Joi.number().min(-180).max(180).required(),
+    }),
     vehicleType:        Joi.string().valid('auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb', 'ambulance', 'wedding').required(),
-    distance:           Joi.number().positive().required(),
-    estimatedDuration:  Joi.number().positive().required(),
-    fare:               Joi.number().positive().required(),
+    distance:           Joi.number().min(0).required(),
+    estimatedDuration:  Joi.number().min(0).required(),
+    fare:               Joi.number().min(0).optional(),
+    estimatedFare:      Joi.number().min(0).optional(),
     paymentMethod:      Joi.string().valid('cash', 'online', 'wallet').default('cash'),
     bookingType:        Joi.string().valid('instant', 'scheduled').default('instant'),
     scheduledAt:        Joi.date().iso().optional().allow(null),
+    scheduledNote:      Joi.string().max(500).optional().allow(''),
     bookingMode:        Joi.string().valid('distance', 'hourly').default('distance'),
     serviceCategory:    Joi.string().optional().allow(''),
     serviceType:        Joi.string().optional().allow(''),
     estimatedHours:     Joi.number().min(0).optional(),
+    hourlyRate:         Joi.number().min(0).optional(),
     workNote:           Joi.string().max(500).optional().allow(''),
-  }),
+    promoCode:          Joi.string().optional().allow(null, ''),
+  }).or('drop', 'dropoff'),
 
   // Wallet
   requestWithdrawal: Joi.object({
