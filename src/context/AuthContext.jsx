@@ -20,9 +20,11 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       setIsAuthenticated(true);
 
-      // Redirect to correct dashboard based on role if on login page
+      // Redirect to correct dashboard based on role if on the landing page,
+      // or if already logged in but sent back to /auth (e.g. clicking
+      // "Book Ride" on the landing hero widget) — no need to log in again.
       const currentPath = window.location.pathname;
-      if (currentPath === '/') {
+      if (currentPath === '/' || currentPath === '/auth') {
         redirectToDashboard(userData.role);
       }
     }

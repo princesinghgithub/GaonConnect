@@ -88,7 +88,9 @@ const GaonConnectLanding = () => {
     };
   }, [heroPickup, heroDrop]);
 
-  // Service selection handler - redirects to auth page with service data
+  // Service selection handler - already logged-in users go straight to
+  // booking (Rapido-style, no redundant login screen); only signed-out
+  // users get sent to /auth, and land on booking right after.
   const handleServiceSelect = (serviceName, basePrice, serviceIndex) => {
     sessionStorage.setItem('selectedService', JSON.stringify({
       service: serviceName,
@@ -97,7 +99,7 @@ const GaonConnectLanding = () => {
       pickup: heroPickup,
       drop: heroDrop,
     }));
-    navigate('/auth');
+    navigate(localStorage.getItem('token') ? '/customer' : '/auth');
   };
 
   const handleDownloadApp = () => {

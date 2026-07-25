@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LocationSearchInput from './LocationSearchInput';
 import Map from './Map';
@@ -133,8 +133,23 @@ const BookRide = () => {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   // True while a hero-widget booking (bike/auto/car with pickup+drop already
   // picked on the landing page) is being auto-confirmed — Rapido-style,
-  // no second form to fill.
-  const [autoBooking, setAutoBooking] = useState(false);
+  // no second form to fill. Computed lazily from initialBooking so the
+  // spinner shows on the very first render — starting this at `false` and
+  // flipping it inside the effect let the full form flash for one frame
+  // before switching over, which looked like a second manual booking step.
+  const [autoBooking, setAutoBooking] = useState(() => {
+    const type = initialBooking?.vehicleType;
+    return !!(
+      initialBooking?.pickup && initialBooking?.drop &&
+      localStorage.getItem('token') &&
+      (type === 'bike' || type === 'auto' || type === 'car')
+    );
+  });
+  // Guards against duplicate rides from a fast double-click/tap: `loading`
+  // only disables the button after React re-renders, so two clicks in the
+  // same tick can both slip through before that happens. This ref blocks
+  // synchronously, the instant the second click is handled.
+  const submittingRef = useRef(false);
 
   const isTractorJcb = vehicleType === 'tractor' || vehicleType === 'jcb';
   const services     = vehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES;
@@ -274,6 +289,7 @@ const BookRide = () => {
 
   // ── Confirm ─────────────────────────────────────────────────────────────────
   const handleConfirmRide = async () => {
+    if (submittingRef.current) return;
     if (!pickup) { toast.error('Pickup location select karo'); return; }
     if (!isTractorJcb && !dropoff) { toast.error('Drop location select karo'); return; }
     if (!localStorage.getItem('token')) {
@@ -290,6 +306,7 @@ const BookRide = () => {
       return;
     }
 
+    submittingRef.current = true;
     setLoading(true);
     try {
       let rideData;
@@ -339,6 +356,7 @@ const BookRide = () => {
         toast.error(error.response?.data?.message || 'Booking fail ho gayi, dobara try karo');
       }
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
