@@ -11,7 +11,7 @@ const { getDynamicFare }            = require('../utils/dynamicFare');
 const { getIO }                     = require('../socket');
 const { notify }                    = require('../utils/notifications');
 const { applyPromoToRide }          = require('./promoController');
-const { buildAndSendInvoice }       = require('../utils/invoiceGenerator');
+const { buildInvoiceHTML, sendInvoice } = require('../utils/invoiceGenerator');
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -492,7 +492,7 @@ exports.updateRideStatus = async (req, res) => {
       const populatedRide = await Ride.findById(ride._id)
         .populate('customer', 'name phone email')
         .populate({ path: 'provider', populate: { path: 'user', select: 'name phone' } });
-      buildAndSendInvoice(populatedRide).catch(() => {});
+      sendInvoice(populatedRide).catch(() => {});
     }
 
     if (status === 'cancelled') {
@@ -698,7 +698,7 @@ exports.getRideInvoice = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Unauthorized' });
     }
 
-    const result = await buildAndSendInvoice(ride);
+    const result = await buildInvoiceHTML(ride);
     if (!result) return res.status(500).json({ success: false, message: 'Invoice generate nahi ho paya' });
 
     // HTML as response (browser mein render hoga ya frontend iframe mein show kar sakta hai)
