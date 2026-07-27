@@ -1698,6 +1698,7 @@ exports.updateProviderLocation = async (req, res) => {
       type: 'Point',
       coordinates: [Number(lng), Number(lat)],
     };
+    provider.locationUpdatedAt = new Date();
 
     await provider.save();
     res.json({ success: true });
@@ -2007,6 +2008,9 @@ exports.updateVehicle = async (req, res) => {
     if (vehicle.providerId.toString() !== provider._id.toString())
       return res.status(403).json({ success: false, message: 'Yeh vehicle aapki nahi hai' });
 
+    if (vehicle.isVerified)
+      return res.status(400).json({ success: false, message: 'Verified vehicle ki details lock hain. "Change Request" bhejein, admin review karega.' });
+
     const { vehicleModel, vehicleColor, registrationYear } = req.body;
     if (vehicleModel !== undefined) vehicle.model = vehicleModel;
     if (vehicleColor !== undefined) vehicle.color = vehicleColor;
@@ -2015,6 +2019,43 @@ exports.updateVehicle = async (req, res) => {
     await vehicle.save();
 
     res.json({ success: true, message: 'Vehicle updated', data: vehicle });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Verified vehicle ki details driver seedhe edit nahi kar sakta — iske bajaye
+// yahan se admin ko ek change-request bhej deta hai, jise admin dashboard pe
+// review karke khud vehicle update kar sakta hai.
+exports.requestVehicleChange = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider)
+      return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const vehicle = await Vehicle.findById(req.params.vehicleId);
+    if (!vehicle)
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+
+    if (vehicle.providerId.toString() !== provider._id.toString())
+      return res.status(403).json({ success: false, message: 'Yeh vehicle aapki nahi hai' });
+
+    const { message } = req.body;
+    if (!message || !message.trim())
+      return res.status(400).json({ success: false, message: 'Kya badalna hai, likh kar bhejein' });
+
+    if (vehicle.changeRequest?.status === 'pending')
+      return res.status(400).json({ success: false, message: 'Aapki pichli request abhi bhi pending hai, admin jald review karega' });
+
+    vehicle.changeRequest = {
+      message: message.trim(),
+      requestedAt: new Date(),
+      status: 'pending',
+    };
+    await vehicle.save();
+
+    res.json({ success: true, message: 'Request bhej di gayi hai, admin isko review karega', data: vehicle });
 
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

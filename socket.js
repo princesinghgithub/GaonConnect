@@ -112,14 +112,18 @@ function initSocket(server) {
     });
 
     // ─── Disconnect ──────────────────────────────────────────────────────────
+    // Socket disconnect hone par isOnline:false NAHI karte — app background
+    // ya thodi der ke liye kill hone par (jaisa aksar hota hai jab driver
+    // phone lock kar de) driver turant naye ride-matching se bahar ho jaata
+    // tha, aur FCM push bhi kabhi nahi milta tha (createRide sirf isOnline:true
+    // waale drivers ko dekhta hai). Ab isOnline sirf explicit duty-toggle se
+    // control hota hai; reachability locationUpdatedAt (background location
+    // task) se decide hoti hai — dekho createRide.
     socket.on('disconnect', () => {
       console.log(`❌ Socket disconnected: ${socket.id}`);
       if (socket.providerId && connectedDrivers.get(socket.providerId) === socket.id) {
         connectedDrivers.delete(socket.providerId);
-        console.log(`🔴 Driver offline: ${socket.providerId}`);
-        // DB sync: socket cut hone pe driver ko offline mark karo taaki next
-        // createRide query mein stale 'isOnline:true' wale drivers na aayein.
-        Provider.findByIdAndUpdate(socket.providerId, { isOnline: false, status: 'offline' }).catch(() => {});
+        console.log(`🔴 Driver socket disconnected: ${socket.providerId}`);
       }
     });
   });

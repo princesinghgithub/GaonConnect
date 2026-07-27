@@ -156,6 +156,21 @@ exports.createRide = async (req, res) => {
     const matchingVehicles = await Vehicle.find({ type: vehicleType, isVerified: true, isActive: true }).select('_id');
     const matchingVehicleIds = matchingVehicles.map((v) => v._id);
 
+    // isOnline ab socket se decouple hai (dekho socket.js) — asli reachability
+    // yahan check hoti hai: background location task (foreground service ke
+    // through) jab tak recent ping bhej raha hai, driver "reachable" maana
+    // jaata hai, chahe abhi socket connected ho ya nahi (app background/kill
+    // ho gaya ho). Kabhi ping hi nahi bheja (abhi-abhi online hua, race
+    // window) — usko bhi allow karo, warna fresh-online drivers turant miss ho jaate.
+    const REACHABLE_WINDOW_MS = 10 * 60 * 1000; // 10 minute
+    const reachableSince = new Date(Date.now() - REACHABLE_WINDOW_MS);
+    const reachabilityFilter = {
+      $or: [
+        { locationUpdatedAt: { $gte: reachableSince } },
+        { locationUpdatedAt: { $exists: false } },
+      ],
+    };
+
     // MongoDB $near — location se sort karke 5 closest drivers
     let availableDrivers = [];
     if (pickupLat && pickupLng) {
@@ -165,6 +180,7 @@ exports.createRide = async (req, res) => {
         isBlocked:       { $ne: true },
         status:          'available',
         activeVehicle:   { $in: matchingVehicleIds },
+        ...reachabilityFilter,
         currentLocation: {
           $near: {
             $geometry:    { type: 'Point', coordinates: [pickupLng, pickupLat] },
@@ -182,7 +198,15 @@ exports.createRide = async (req, res) => {
         isBlocked:      { $ne: true },
         status:         'available',
         activeVehicle:  { $in: matchingVehicleIds },
+        ...reachabilityFilter,
       }).select('_id deviceInfo').lean();
+    }
+
+    // Baad mein (jab koi accept kar le) baaki notified drivers ko
+    // "ride no longer available" bhejne ke liye yeh list chahiye.
+    if (availableDrivers.length) {
+      ride.notifiedDrivers = availableDrivers.map((d) => d._id);
+      await ride.save();
     }
 
     const ridePayload = {
@@ -323,6 +347,19 @@ exports.acceptRide = async (req, res) => {
 
     // Socket notify
     const io = getIO();
+
+    // Baaki jitne bhi drivers ko yeh request bheji gayi thi, unko turant
+    // batao ki ride ja chuki hai — unki screen se request hat jaani chahiye
+    // (chahe wo abhi socket se connected ho ya sirf FCM se pending pada ho).
+    if (ride.notifiedDrivers?.length) {
+      ride.notifiedDrivers.forEach((driverId) => {
+        if (String(driverId) === String(provider._id)) return;
+        io.to(`driver_${driverId}`).emit('rideNoLongerAvailable', {
+          rideId: ride._id.toString(),
+        });
+      });
+    }
+
     io.to(`user_${ride.customer}`).emit('rideAccepted', {
       rideId:   ride._id,
       driverId: provider._id,

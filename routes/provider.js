@@ -29,6 +29,7 @@ const {
   updateVehicle,
   deleteVehicle,
   uploadVehicleDocument,
+  requestVehicleChange,
 } = require('../controllers/providerController');
 
 const { sendPhoneOTP, verifyPhoneOTP } = require('../controllers/authController');
@@ -90,6 +91,7 @@ router.get('/vehicles/:vehicleId',             protect, getVehicleById);
 router.put('/vehicles/:vehicleId',             protect, updateVehicle);
 router.delete('/vehicles/:vehicleId',          protect, deleteVehicle);
 router.post('/vehicles/:vehicleId/documents',  protect, docUpload.single('document'), uploadVehicleDocument);
+router.post('/vehicles/:vehicleId/request-change', protect, requestVehicleChange);
 
 // ⚠️  Dynamic :id route MUST be last — warna /me, /stats, /vehicles sab catch ho jaate hain
 router.get('/:id', getProviderById);
