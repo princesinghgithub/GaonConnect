@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FaFacebook, FaInstagram, FaLinkedin, FaYoutube } from 'react-icons/fa';
 
@@ -36,7 +36,7 @@ const Footer = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-8 text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-8 text-sm">
           <div>
             <h4 className="font-semibold text-white mb-3">{t('footer.customerApp')}</h4>
             <div className="flex flex-col gap-2">
@@ -68,6 +68,17 @@ const Footer = () => {
             <button onClick={handleBecomeDriver} className="text-gray-400 hover:text-orange-400 transition-colors text-left">
               🚚 {t('footer.becomeDriver')}
             </button>
+          </div>
+
+          <div>
+            <h4 className="font-semibold text-white mb-3">Services</h4>
+            <div className="flex flex-col gap-2">
+              <Link to="/tractor-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Tractor Booking</Link>
+              <Link to="/jcb-rental" className="text-gray-400 hover:text-orange-400 transition-colors">JCB Rental</Link>
+              <Link to="/farm-equipment" className="text-gray-400 hover:text-orange-400 transition-colors">Farm Equipment Rental</Link>
+              <Link to="/village-transport" className="text-gray-400 hover:text-orange-400 transition-colors">Village Transport</Link>
+              <Link to="/agriculture-logistics" className="text-gray-400 hover:text-orange-400 transition-colors">Agriculture Logistics</Link>
+            </div>
           </div>
 
           <div>

@@ -145,34 +145,50 @@
 // }
 
 // export default App;
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import SeoCanonical from './components/SeoCanonical';
 import NotFound from './components/pages/NotFound';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
-import LoginForm from './components/auth/LoginForm';
-import RegisterForm from './components/auth/RegisterForm';
-
-import CustomerDashboard from './dashboards/CustomerDashboard';
-import ProviderDashboard from './dashboards/ProviderDashboard';
-import AdminDashboard from './dashboards/AdminDashboard';
-
 import ProtectedRoute from './context/ProtectedRoute';
 import { RideProvider } from './context/RideContext';
 import { DriverProvider } from './context/Drivercontext';
-import BookRide from './tabs/BookRide';
-import RideTracking from './components/RideTracking';
 import GaonConnectLanding from './GaonConnect/Gaonconnectlanding'
 import WhatsAppFloat from "./components/pages/WhatsAppFloat";
-import PrivacyPolicy from "./components/pages/PrivacyPolicy";
-import AccountDeletion from "./components/pages/AccountDeletion";
-import DataDeletion from "./components/pages/DataDeletion";
-import Safety from "./components/pages/Safety";
-import Careers from "./components/pages/Careers";
-import Blog from "./components/pages/Blog";
-import Press from "./components/pages/Press";
-import ContactUs from "./components/pages/ContactUs";
+
+// Everything below the homepage is code-split: the / route is what almost
+// every visitor and every crawler hits first, so its bundle should carry
+// only what that page needs. Dashboards, tracking (leaflet/socket.io) and
+// admin (chart.js) pull in the heaviest deps, and marketing/blog pages are
+// only ever reached by direct navigation - none of it needs to sit in the
+// initial homepage chunk.
+const LoginForm = lazy(() => import('./components/auth/LoginForm'));
+const RegisterForm = lazy(() => import('./components/auth/RegisterForm'));
+
+const CustomerDashboard = lazy(() => import('./dashboards/CustomerDashboard'));
+const ProviderDashboard = lazy(() => import('./dashboards/ProviderDashboard'));
+const AdminDashboard = lazy(() => import('./dashboards/AdminDashboard'));
+
+const BookRide = lazy(() => import('./tabs/BookRide'));
+const RideTracking = lazy(() => import('./components/RideTracking'));
+
+const PrivacyPolicy = lazy(() => import('./components/pages/PrivacyPolicy'));
+const AccountDeletion = lazy(() => import('./components/pages/AccountDeletion'));
+const DataDeletion = lazy(() => import('./components/pages/DataDeletion'));
+const Safety = lazy(() => import('./components/pages/Safety'));
+const Careers = lazy(() => import('./components/pages/Careers'));
+const Blog = lazy(() => import('./components/pages/Blog'));
+const BlogPost = lazy(() => import('./components/pages/BlogPost'));
+const ServiceLanding = lazy(() => import('./components/pages/ServiceLanding'));
+const Press = lazy(() => import('./components/pages/Press'));
+const ContactUs = lazy(() => import('./components/pages/ContactUs'));
+
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-950">
+    <div className="h-10 w-10 rounded-full border-4 border-orange-200 border-t-saffron animate-spin" />
+  </div>
+);
 
 const AuthScreens = () => {
   const { login } = useAuth();
@@ -252,6 +268,7 @@ function App() {
       <RideProvider>
         <DriverProvider>
           <SeoCanonical />
+          <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* LANDING PAGE - First thing users see */}
             <Route path="/" element={<GaonConnectLanding />} />
@@ -321,12 +338,21 @@ function App() {
             <Route path="/safety" element={<Safety />} />
             <Route path="/careers" element={<Careers />} />
             <Route path="/blog" element={<Blog />} />
+            <Route path="/blog/:slug" element={<BlogPost />} />
+
+            {/* SEO SERVICE LANDING PAGES - commercial-intent, distinct from /blog articles */}
+            <Route path="/tractor-booking" element={<ServiceLanding slugKey="tractor-booking" />} />
+            <Route path="/jcb-rental" element={<ServiceLanding slugKey="jcb-rental" />} />
+            <Route path="/farm-equipment" element={<ServiceLanding slugKey="farm-equipment" />} />
+            <Route path="/village-transport" element={<ServiceLanding slugKey="village-transport" />} />
+            <Route path="/agriculture-logistics" element={<ServiceLanding slugKey="agriculture-logistics" />} />
             <Route path="/press" element={<Press />} />
             <Route path="/contact" element={<ContactUs />} />
 
             {/* CATCH-ALL - avoids serving a blank 200 page for dead/unknown links */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </DriverProvider>
           <WhatsAppFloat /> 
       </RideProvider>

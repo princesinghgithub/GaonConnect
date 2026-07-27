@@ -7,6 +7,7 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 import LocationSearchInput from '../tabs/LocationSearchInput';
 import { locationAPI } from '../services/api';
+import { TRACTOR_SERVICES, JCB_SERVICES, HOURS_OPTIONS } from '../constants/tractorJcbServices';
 
 // Same fare formula CustomerBooking.jsx uses once a real ride is booked —
 // keeping the hero estimate consistent with what the app actually charges.
@@ -54,6 +55,13 @@ const GaonConnectLanding = () => {
   const [heroDrop, setHeroDrop] = useState(null);
   const [heroDistanceKm, setHeroDistanceKm] = useState(null);
   const [heroDistanceLoading, setHeroDistanceLoading] = useState(false);
+  // Tractor/JCB need a service picked before they can auto-book too — see
+  // handleServiceSelect below.
+  const [heroCategory, setHeroCategory] = useState(null);
+  const [heroSub, setHeroSub] = useState(null);
+  const [heroHours, setHeroHours] = useState(2);
+  const heroVehicleType = heroServiceIndex === '' ? null : VEHICLE_TYPE_BY_INDEX[Number(heroServiceIndex)];
+  const heroIsTractorJcb = heroVehicleType === 'tractor' || heroVehicleType === 'jcb';
   const contactFormRef = useRef(null);
   const [contactStatus, setContactStatus] = useState('idle'); // idle | sending | success | error
 
@@ -88,16 +96,38 @@ const GaonConnectLanding = () => {
     };
   }, [heroPickup, heroDrop]);
 
+  // Default to the first category/sub whenever a Tractor/JCB service is
+  // picked (or clear it when switching away) — the user can still change
+  // the selection with the picker rendered below the service list.
+  useEffect(() => {
+    if (!heroIsTractorJcb) {
+      setHeroCategory(null);
+      setHeroSub(null);
+      return;
+    }
+    const svcs = heroVehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES;
+    setHeroCategory(svcs[0]);
+    setHeroSub(svcs[0].sub[0]);
+    setHeroHours(2);
+  }, [heroServiceIndex, heroIsTractorJcb, heroVehicleType]);
+
   // Service selection handler - already logged-in users go straight to
   // booking (Rapido-style, no redundant login screen); only signed-out
   // users get sent to /auth, and land on booking right after.
   const handleServiceSelect = (serviceName, basePrice, serviceIndex) => {
+    const type = VEHICLE_TYPE_BY_INDEX[serviceIndex] ?? null;
+    const isTJ = type === 'tractor' || type === 'jcb';
     sessionStorage.setItem('selectedService', JSON.stringify({
       service: serviceName,
       price: basePrice,
-      vehicleType: VEHICLE_TYPE_BY_INDEX[serviceIndex] ?? null,
+      vehicleType: type,
       pickup: heroPickup,
       drop: heroDrop,
+      ...(isTJ ? {
+        serviceCategory: heroCategory?.id,
+        serviceType: heroSub?.id,
+        estimatedHours: heroCategory?.pricingType === 'hourly' ? heroHours : 0,
+      } : {}),
     }));
     navigate(localStorage.getItem('token') ? '/customer' : '/auth');
   };
@@ -267,9 +297,93 @@ const GaonConnectLanding = () => {
                 </div>
               )}
 
+              {/* Tractor/JCB need a specific job picked before they can
+                  auto-book too, same as Bike/Auto/Car — defaulting this
+                  silently to "Ploughing" for someone who actually wanted
+                  Spraying would book the wrong job. */}
+              {heroIsTractorJcb && (
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-3 space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                      Kaam ka Prakar
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(heroVehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES).map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => { setHeroCategory(cat); setHeroSub(cat.sub[0]); }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                            heroCategory?.id === cat.id
+                              ? 'bg-orange-50 dark:bg-gray-700 border-saffron dark:border-orange-400 text-ink dark:text-white'
+                              : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-gray-300'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {heroCategory && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                        Service
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {heroCategory.sub.map((sub) => (
+                          <button
+                            key={sub.id}
+                            type="button"
+                            onClick={() => setHeroSub(sub)}
+                            className={`text-left px-3 py-2 rounded-lg border text-xs transition ${
+                              heroSub?.id === sub.id
+                                ? 'border-saffron dark:border-orange-400 bg-orange-50 dark:bg-gray-700'
+                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            <span className="block font-medium text-ink dark:text-white">{sub.label}</span>
+                            <span className="text-india-green dark:text-green-400 font-semibold">
+                              ₹{sub.rate}/{heroCategory.pricingType === 'hourly' ? 'hr' : 'km'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {heroCategory?.pricingType === 'hourly' && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                        Kitne Ghante
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {HOURS_OPTIONS.map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => setHeroHours(h)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                              heroHours === h
+                                ? 'bg-saffron border-saffron text-white'
+                                : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-gray-300'
+                            }`}
+                          >
+                            {h} {h === 1 ? 'Ghanta' : 'Ghante'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 type="button"
-                disabled={!heroPickup || !heroDrop || heroServiceIndex === ''}
+                disabled={
+                  !heroPickup || !heroDrop || heroServiceIndex === '' ||
+                  (heroIsTractorJcb && (!heroCategory || !heroSub))
+                }
                 onClick={() => {
                   const fare = estimateFare(Number(heroServiceIndex), heroDistanceKm) ?? basePrices[heroServiceIndex];
                   handleServiceSelect(services[heroServiceIndex].name, fare, Number(heroServiceIndex));
@@ -289,11 +403,16 @@ const GaonConnectLanding = () => {
           </div>
 
           <div className="relative">
-            <img
-              src="/gaonconnect_banner.png"
-              alt="GaonConnect - auto, bike aur car ek saath"
-              className="relative rounded-[2rem] shadow-2xl w-full h-auto object-contain"
-            />
+            <picture>
+              <source srcSet="/gaonconnect_banner.webp" type="image/webp" />
+              <img
+                src="/gaonconnect_banner.png"
+                alt="GaonConnect - auto, bike aur car ek saath"
+                className="relative rounded-[2rem] shadow-2xl w-full h-auto object-contain"
+                fetchPriority="high"
+                decoding="async"
+              />
+            </picture>
             <span className="absolute top-4 left-16 sm:top-6 sm:left-20 inline-flex items-center gap-1.5 bg-white dark:bg-gray-800 px-3 py-2 rounded-full shadow-lg text-xs font-bold text-ink dark:text-white">
               <CheckCircle2 size={16} className="text-india-green dark:text-green-400 shrink-0" />
               {t('hero.badgeVerified')}
