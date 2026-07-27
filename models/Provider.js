@@ -156,6 +156,16 @@ const ProviderSchema = new mongoose.Schema({
     coordinates: { type: [Number] },
   },
 
+  // Location ping ka last time — socket disconnect se ab isOnline false nahi
+  // hota (app background/killed hone par turant "offline" gayab ho jaata
+  // tha, FCM push bhi kabhi nahi milta tha). Ab reachability isse decide
+  // hoti hai: background location task jab tak chal raha hai (foreground
+  // service ke through, app fully swipe kiye jaane ke baad bhi kuch der),
+  // tab tak driver "reachable" maana jaata hai.
+  locationUpdatedAt: {
+    type: Date,
+  },
+
   isApproved: {
     type: Boolean,
     default: false

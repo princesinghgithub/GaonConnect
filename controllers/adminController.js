@@ -2223,7 +2223,7 @@ const createDriver = async (req, res) => {
 
 const getAllDrivers = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, search, isApproved, isRejected, isBlocked } = req.query;
+    const { page = 1, limit = 20, status, search, isApproved, isRejected, isBlocked, hasChangeRequest } = req.query;
 
     const matchStage = {};
     if (status === 'online') {
@@ -2249,6 +2249,13 @@ const getAllDrivers = async (req, res) => {
       { $lookup: { from: 'vehicles', localField: 'activeVehicle', foreignField: '_id', as: 'vehicle' } },
       { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
     ];
+
+    // Driver ke kisi bhi vehicle pe pending change-request ho, use match karo —
+    // 'vehicles' lookup ke baad hi ye field available hota hai, isliye matchStage
+    // (jo pipeline se pehle Driver root fields pe chalta hai) mein nahi daala.
+    if (hasChangeRequest === 'true') {
+      pipeline.push({ $match: { 'vehicles.changeRequest.status': 'pending' } });
+    }
 
     if (search) {
       pipeline.push({
@@ -2301,7 +2308,10 @@ const getAllDrivers = async (req, res) => {
 
 const getDriverById = async (req, res) => {
   try {
-    const driver = await Driver.findById(req.params.id).populate('user', '-password').populate('vehicles');
+    const driver = await Driver.findById(req.params.id)
+      .populate('user', '-password')
+      .populate('activeVehicle')
+      .populate('vehicles');
 
     if (!driver) {
       return res.status(404).json({
@@ -2328,10 +2338,16 @@ const getDriverById = async (req, res) => {
       }
     ]);
 
+    // Dashboard purane single-vehicle model se 'vehicle' (singular) bhi expect karta
+    // hai — activeVehicle ko alias kar do (jaisa getActiveDriversLocation mein hai),
+    // 'vehicles' (plural, virtual populate) poori list ke liye rehta hai.
+    const obj = driver.toObject();
+    obj.vehicle = obj.activeVehicle;
+
     res.json({
       success: true,
       data: {
-        ...driver.toObject(),
+        ...obj,
         stats: rideStats[0] || {
           totalRides: 0,
           completedRides: 0,
@@ -2683,6 +2699,95 @@ const verifyBankDetails = async (req, res) => {
   }
 };
 
+// Driver khud apna profile (naam/phone/email/city) edit nahi kar sakta app se —
+// typo ya galat detail ho to admin yahan se User document seedhe update kar deta hai.
+const updateDriverProfileAdmin = async (req, res) => {
+  try {
+    const driver = await Driver.findById(req.params.id).populate('user');
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+    if (!driver.user) {
+      return res.status(404).json({ success: false, message: 'Driver ka user account nahi mila' });
+    }
+
+    const { name, phone, email, city } = req.body;
+    if (name !== undefined) driver.user.name = name.trim();
+    if (phone !== undefined) driver.user.phone = phone.trim();
+    if (email !== undefined) driver.user.email = email.trim().toLowerCase();
+    if (city !== undefined) driver.user.city = city;
+
+    await driver.user.save();
+
+    res.json({ success: true, message: 'Driver profile updated', data: driver.user });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Yeh phone ya email pehle se kisi aur account mein use ho raha hai' });
+    }
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Bank details verify (upar) sirf true/false flip karta hai — driver ne galat
+// account number/IFSC daal diya ho aur khud fix na kar paaye to admin ye fields
+// seedhe edit kar sakta hai (edit hone par verified reset ho jaata hai, dobara verify karna hoga).
+const updateBankDetailsAdmin = async (req, res) => {
+  try {
+    const driver = await Driver.findById(req.params.id);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    const { accountHolderName, accountNumber, ifscCode, bankName } = req.body;
+    driver.bankDetails = driver.bankDetails || {};
+    if (accountHolderName !== undefined) driver.bankDetails.accountHolderName = accountHolderName;
+    if (accountNumber !== undefined) driver.bankDetails.accountNumber = accountNumber;
+    if (ifscCode !== undefined) driver.bankDetails.ifscCode = ifscCode.toUpperCase();
+    if (bankName !== undefined) driver.bankDetails.bankName = bankName;
+    driver.bankDetails.verified = false; // details badli hain, dobara verify karna zaroori hai
+
+    await driver.save();
+
+    res.json({ success: true, message: 'Bank details updated, verification reset ho gayi', data: driver.bankDetails });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Driver khud upload nahi kar pa raha (phone/camera issue, confusion, etc.) —
+// admin uski taraf se seedhe aadhaar/photo upload kar deta hai.
+const uploadDriverDocumentAdmin = async (req, res) => {
+  try {
+    const driver = await Driver.findById(req.params.id);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    const { documentType } = req.body;
+    const validTypes = ['aadhaar', 'photo'];
+    if (!documentType || !validTypes.includes(documentType)) {
+      return res.status(400).json({ success: false, message: `documentType ek inme se hona chahiye: ${validTypes.join(', ')}` });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload a document' });
+    }
+
+    if (documentType === 'photo') {
+      driver.documents.photo = req.file.path;
+    } else {
+      driver.documents[documentType] = driver.documents[documentType] || {};
+      driver.documents[documentType].photo = req.file.path;
+      driver.documents[documentType].verified = false;
+    }
+
+    await driver.save();
+
+    res.json({ success: true, message: 'Document uploaded', data: { documentType, url: req.file.path } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
 // ===== VEHICLES MANAGEMENT =====
 
 const getAllVehicles = async (req, res) => {
@@ -2710,6 +2815,46 @@ const getAllVehicles = async (req, res) => {
       total: count
     });
   } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Driver kisi wajah se khud driverApp se vehicle add nahi kar pa raha (app issue,
+// confusion, etc.) — admin uski taraf se seedhe vehicle bana deta hai. Baaki flow
+// wahi rehta hai: unverified create hoti hai, docs upload aur approval baad mein.
+const addVehicleAdmin = async (req, res) => {
+  try {
+    const driver = await Driver.findById(req.params.id);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    const { vehicleType, vehicleNumber, vehicleModel, vehicleColor, registrationYear } = req.body;
+    if (!vehicleType || !vehicleNumber) {
+      return res.status(400).json({ success: false, message: 'Vehicle type aur number required hai' });
+    }
+
+    const existingVehicle = await Vehicle.findOne({ number: vehicleNumber.trim().toUpperCase() });
+    if (existingVehicle) {
+      return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
+    }
+
+    const vehicle = await Vehicle.create({
+      providerId: driver._id,
+      type: vehicleType,
+      number: vehicleNumber.trim().toUpperCase(),
+      model: vehicleModel || '',
+      color: vehicleColor || '',
+      registrationYear,
+      isVerified: false,
+      isActive: true,
+    });
+
+    res.status(201).json({ success: true, message: 'Vehicle add ho gayi', data: vehicle });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
+    }
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
@@ -2823,6 +2968,88 @@ const verifyVehicleDocument = async (req, res) => {
       message: 'Document verification updated',
       data: vehicle
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Driver khud upload nahi kar pa raha to admin uski vehicle ke docs (license/rc/
+// insurance/etc) seedhe upload kar deta hai — providerController.uploadVehicleDocument
+// jaisa hi, bas provider-ownership check yahan nahi (admin kisi bhi vehicle pe kar sakta hai).
+const VEHICLE_DOC_TYPES_ADMIN = ['rc', 'insurance', 'license', 'permit', 'fitness', 'machineRegistration', 'operatorLicense'];
+const uploadVehicleDocumentAdmin = async (req, res) => {
+  try {
+    const { documentType } = req.body;
+    if (!documentType || !VEHICLE_DOC_TYPES_ADMIN.includes(documentType)) {
+      return res.status(400).json({ success: false, message: `documentType ek inme se hona chahiye: ${VEHICLE_DOC_TYPES_ADMIN.join(', ')}` });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please upload a document' });
+    }
+
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    vehicle.documents[documentType] = vehicle.documents[documentType] || {};
+    vehicle.documents[documentType].photo = req.file.path;
+    vehicle.documents[documentType].verified = false;
+
+    await vehicle.save();
+
+    res.json({ success: true, message: 'Document uploaded', data: { documentType, url: req.file.path } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Admin hi verified vehicle ki details edit kar sakta hai (driver ke liye ye
+// driverApp mein locked hain — wo sirf change-request bhej sakta hai, admin
+// yahan se seedhe fields update kar deta hai).
+const updateVehicleAdmin = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+
+    const { type, number, model, color, registrationYear } = req.body;
+    if (type !== undefined) vehicle.type = type;
+    if (number !== undefined) vehicle.number = number.trim().toUpperCase();
+    if (model !== undefined) vehicle.model = model;
+    if (color !== undefined) vehicle.color = color;
+    if (registrationYear !== undefined) vehicle.registrationYear = registrationYear;
+
+    await vehicle.save();
+
+    res.json({ success: true, message: 'Vehicle updated', data: vehicle });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
+    }
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+// Driver ki change-request ko resolved mark karo — admin isse pehle updateVehicleAdmin
+// (ya vehicle ke doc/approve flow) se zaroori badlav kar chuka hoga.
+const resolveVehicleChangeRequest = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+    if (vehicle.changeRequest?.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Koi pending change request nahi hai' });
+    }
+
+    vehicle.changeRequest.status = 'resolved';
+    vehicle.changeRequest.resolvedAt = new Date();
+    vehicle.changeRequest.resolvedBy = req.user._id;
+    await vehicle.save();
+
+    res.json({ success: true, message: 'Change request resolve ho gayi', data: vehicle });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
@@ -4283,12 +4510,19 @@ module.exports = {
   deleteDriver,
   verifyDocument,
   verifyBankDetails,
+  updateDriverProfileAdmin,
+  updateBankDetailsAdmin,
+  uploadDriverDocumentAdmin,
   getAllVehicles,
+  addVehicleAdmin,
   getVehicleByIdAdmin,
   approveVehicle,
   rejectVehicle,
   deleteVehicleAdmin,
   verifyVehicleDocument,
+  uploadVehicleDocumentAdmin,
+  updateVehicleAdmin,
+  resolveVehicleChangeRequest,
   getDriverStats,
   getAllRides,
   getRideDetails,

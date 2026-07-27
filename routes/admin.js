@@ -34,6 +34,7 @@ const express = require('express');
 const router = express.Router();
 const { protect, admin } = require('../middleware/auth');
 const adminController = require('../controllers/adminController');
+const { docUpload } = require('../middleware/upload');
 
 // All routes are protected and admin-only
 router.use(protect);
@@ -61,8 +62,12 @@ router.put('/drivers/:id/block', adminController.blockDriver);
 router.put('/drivers/:id/unblock', adminController.unblockDriver);
 router.put('/drivers/:id/status', adminController.updateDriverStatus);
 router.put('/drivers/:id/documents/verify', adminController.verifyDocument);
+router.post('/drivers/:id/documents/upload', docUpload.single('document'), adminController.uploadDriverDocumentAdmin);
 router.put('/drivers/:id/bank-details/verify', adminController.verifyBankDetails);
+router.put('/drivers/:id/bank-details', adminController.updateBankDetailsAdmin);
+router.put('/drivers/:id/profile', adminController.updateDriverProfileAdmin);
 router.delete('/drivers/:id', adminController.deleteDriver);
+router.post('/drivers/:id/vehicles', adminController.addVehicleAdmin);
 
 // ===== VEHICLES MANAGEMENT =====
 router.get('/vehicles', adminController.getAllVehicles);
@@ -70,6 +75,9 @@ router.get('/vehicles/:id', adminController.getVehicleByIdAdmin);
 router.put('/vehicles/:id/approve', adminController.approveVehicle);
 router.put('/vehicles/:id/reject', adminController.rejectVehicle);
 router.put('/vehicles/:id/documents/verify', adminController.verifyVehicleDocument);
+router.post('/vehicles/:id/documents/upload', docUpload.single('document'), adminController.uploadVehicleDocumentAdmin);
+router.put('/vehicles/:id', adminController.updateVehicleAdmin);
+router.put('/vehicles/:id/change-request/resolve', adminController.resolveVehicleChangeRequest);
 router.delete('/vehicles/:id', adminController.deleteVehicleAdmin);
 
 // ===== RIDES MANAGEMENT =====

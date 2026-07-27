@@ -20,6 +20,16 @@ const RideSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Jitne bhi drivers ko is ride ki request bheji gayi thi (socket/FCM) —
+    // koi accept kar le to baakiyon ko "ride no longer available" bhejne ke
+    // liye chahiye, taaki unki screen se request turant hat jaaye.
+    notifiedDrivers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Provider",
+      },
+    ],
+
     pickup: {
       address: {
         type: String,

@@ -75,6 +75,23 @@ const VehicleSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+
+  // Verified vehicles ki details driver seedhe edit nahi kar sakta (Ola/Uber/Rapido
+  // jaisa hi — verified papers kisi aur vehicle detail se match na ho jaayein). Driver
+  // yahan se admin ko change ki request bhej sakta hai, admin dashboard pe review karega.
+  changeRequest: {
+    message: String,
+    requestedAt: Date,
+    status: {
+      type: String,
+      enum: ['pending', 'resolved'],
+    },
+    resolvedAt: Date,
+    resolvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
   }
 }, {
   timestamps: true
