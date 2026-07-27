@@ -7,59 +7,7 @@ import { toast } from 'react-hot-toast';
 import { FaMotorcycle, FaCarSide, FaTractor } from 'react-icons/fa';
 import { MdDirectionsRun } from 'react-icons/md';
 import { GiMineTruck } from 'react-icons/gi';
-
-// ── Tractor / JCB Services ────────────────────────────────────────────────────
-const TRACTOR_SERVICES = [
-  {
-    id: 'farming', label: '🌾 Farming (Khet ka Kaam)', pricingType: 'hourly',
-    sub: [
-      { id: 'ploughing',    label: 'Ploughing — Hal Chalana',      rate: 800 },
-      { id: 'rotavator',   label: 'Rotavator — Jutai',             rate: 900 },
-      { id: 'cultivator',  label: 'Cultivator',                    rate: 700 },
-      { id: 'seed_drill',  label: 'Seed Drill — Beej Bona',        rate: 700 },
-      { id: 'laser',       label: 'Laser Land Leveler',            rate: 1000 },
-      { id: 'reaper',      label: 'Reaper — Katai',                rate: 1100 },
-      { id: 'thresher',    label: 'Thresher',                      rate: 1000 },
-    ],
-  },
-  {
-    id: 'transport', label: '🚛 Transport — Trolley / Dhalai', pricingType: 'per_km',
-    sub: [
-      { id: 'crop_transport', label: 'Crop / Fasal',               rate: 20 },
-      { id: 'sand_brick',     label: 'Sand / Brick — Ret/Eent',    rate: 25 },
-      { id: 'goods',          label: 'Goods — Saman Dhona',        rate: 22 },
-    ],
-  },
-  {
-    id: 'spraying', label: '💧 Spraying / Dawai', pricingType: 'hourly',
-    sub: [
-      { id: 'spray',        label: 'Spray — Dawai Chhidkao',       rate: 500 },
-      { id: 'grass_cut',    label: 'Grass Cutting',                rate: 600 },
-    ],
-  },
-  {
-    id: 'custom', label: '⚙️ Custom / Koi Bhi Kaam', pricingType: 'hourly',
-    sub: [{ id: 'custom_request', label: 'Custom Request',         rate: 800 }],
-  },
-];
-
-const JCB_SERVICES = [
-  {
-    id: 'construction', label: '🏗️ Construction / Khudai', pricingType: 'hourly',
-    sub: [
-      { id: 'digging',   label: 'Digging — Khudai',               rate: 1500 },
-      { id: 'leveling',  label: 'Leveling — Samatlana',            rate: 1200 },
-      { id: 'loading',   label: 'Loading — Maal Uthaana',          rate: 1300 },
-      { id: 'construct', label: 'Construction — Nirmaan',          rate: 1400 },
-    ],
-  },
-  {
-    id: 'custom', label: '⚙️ Custom / Koi Bhi Kaam', pricingType: 'hourly',
-    sub: [{ id: 'custom_request', label: 'Custom Request',        rate: 1500 }],
-  },
-];
-
-const HOURS_OPTIONS = [1, 2, 3, 4, 6, 8, 12];
+import { TRACTOR_SERVICES, JCB_SERVICES, HOURS_OPTIONS } from '../constants/tractorJcbServices';
 
 // ── Fare configs (non-tractor/JCB) ───────────────────────────────────────────
 const FARE_CONFIG = {
@@ -98,6 +46,16 @@ const BookRide = () => {
   const initialVehicleType = initialBooking?.vehicleType || 'auto';
   const initialIsTractorJcb = initialVehicleType === 'tractor' || initialVehicleType === 'jcb';
   const initialServices = initialVehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES;
+  // If the hero widget already had the user pick a category/sub-service,
+  // carry that forward instead of silently defaulting to the first one —
+  // picking Ploughing for someone who chose Spraying would auto-book the
+  // wrong job.
+  const initialCategory = initialIsTractorJcb
+    ? initialServices.find((c) => c.id === initialBooking?.serviceCategory) || initialServices[0]
+    : null;
+  const initialSub = initialCategory
+    ? initialCategory.sub.find((s) => s.id === initialBooking?.serviceType) || initialCategory.sub[0]
+    : null;
 
   // Location
   const [pickup,  setPickup]  = useState(initialBooking?.pickup ?? null);
@@ -119,10 +77,10 @@ const BookRide = () => {
   const [vehicleType, setVehicleType] = useState(initialVehicleType);
 
   // Tractor / JCB service selection
-  const [selectedCategory, setSelectedCategory] = useState(initialIsTractorJcb ? initialServices[0] : null);
-  const [selectedSub,      setSelectedSub]      = useState(initialIsTractorJcb ? initialServices[0].sub[0] : null);
-  const [selectedHours,    setSelectedHours]    = useState(2);
-  const [workNote,         setWorkNote]         = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
+  const [selectedSub,      setSelectedSub]      = useState(initialSub);
+  const [selectedHours,    setSelectedHours]    = useState(initialBooking?.estimatedHours || 2);
+  const [workNote,         setWorkNote]         = useState(initialBooking?.workNote || '');
 
   // Distance / Fare
   const [distance, setDistance] = useState(null);
@@ -139,10 +97,12 @@ const BookRide = () => {
   // before switching over, which looked like a second manual booking step.
   const [autoBooking, setAutoBooking] = useState(() => {
     const type = initialBooking?.vehicleType;
+    const isTJ = type === 'tractor' || type === 'jcb';
     return !!(
       initialBooking?.pickup && initialBooking?.drop &&
       localStorage.getItem('token') &&
-      (type === 'bike' || type === 'auto' || type === 'car')
+      (type === 'bike' || type === 'auto' || type === 'car' ||
+        (isTJ && initialCategory && initialSub))
     );
   });
   // Guards against duplicate rides from a fast double-click/tap: `loading`
@@ -227,15 +187,16 @@ const BookRide = () => {
     if (pickup) calculateFare(pickup, location);
   };
 
-  // Bike/auto/car came from the hero widget with pickup+drop already
-  // filled — book it straight away instead of making the user fill the
-  // same form again and press Confirm a second time. Tractor/JCB still
-  // need a service type picked here (hero doesn't collect that), so those
-  // only get prefilled and wait for a manual confirm.
+  // Every vehicle type coming from the hero widget already has pickup+drop
+  // (and for tractor/jcb, a service already picked there too) — book it
+  // straight away instead of making the user fill the same form again and
+  // press Confirm a second time.
   useEffect(() => {
     const type = initialBooking?.vehicleType;
+    const isTJ = type === 'tractor' || type === 'jcb';
     const canAutoBook = pickup && dropoff && localStorage.getItem('token') &&
-      (type === 'bike' || type === 'auto' || type === 'car');
+      (type === 'bike' || type === 'auto' || type === 'car' ||
+        (isTJ && selectedCategory && selectedSub));
 
     if (!canAutoBook) {
       if (pickup && dropoff) calculateFare(pickup, dropoff);
@@ -247,27 +208,64 @@ const BookRide = () => {
 
     (async () => {
       try {
-        const distRes = await locationAPI.calculateDistance(pickup.location, dropoff.location, type);
-        if (!distRes.data.success) throw new Error('Distance calculate nahi ho paya');
+        let rideData;
 
-        const distData = distRes.data.data;
-        const km = distData.distance.value / 1000;
-        const cfg = FARE_CONFIG[type] || FARE_CONFIG.auto;
-        const estimatedFare = Math.round(cfg.base + km * cfg.perKm);
-        if (cancelled) return;
-        setDistance(distData);
-        setFare(estimatedFare);
+        if (isTJ) {
+          const hourly = selectedCategory.pricingType === 'hourly';
+          let distData = null;
+          if (!hourly) {
+            const distRes = await locationAPI.calculateDistance(pickup.location, dropoff.location, type);
+            if (!distRes.data.success) throw new Error('Distance calculate nahi ho paya');
+            distData = distRes.data.data;
+          }
+          const km = distData ? distData.distance.value / 1000 : 0;
+          const finalFare = hourly
+            ? selectedHours * selectedSub.rate
+            : Math.max(Math.ceil(km * selectedSub.rate / 10) * 10, 150);
+          if (cancelled) return;
+          if (distData) setDistance(distData);
 
-        const response = await rideAPI.createRide({
-          pickup,
-          dropoff,
-          vehicleType: type,
-          bookingMode: 'distance',
-          distance: distData.distance,
-          estimatedDuration: Math.round(distData.duration.value / 60),
-          estimatedFare,
-          paymentMethod: 'cash',
-        });
+          rideData = {
+            pickup,
+            dropoff: dropoff || pickup,
+            vehicleType: type,
+            bookingMode:       hourly ? 'hourly' : 'distance',
+            serviceCategory:   selectedCategory.id,
+            serviceType:       selectedSub.id,
+            estimatedHours:    hourly ? selectedHours : 0,
+            hourlyRate:        selectedSub.rate,
+            workNote,
+            distance:          hourly ? 0 : km,
+            estimatedDuration: hourly ? selectedHours * 60 : (distData ? Math.round(distData.duration.value / 60) : 60),
+            estimatedFare:     finalFare,
+            fare:              finalFare,
+            paymentMethod:     'cash',
+          };
+        } else {
+          const distRes = await locationAPI.calculateDistance(pickup.location, dropoff.location, type);
+          if (!distRes.data.success) throw new Error('Distance calculate nahi ho paya');
+
+          const distData = distRes.data.data;
+          const km = distData.distance.value / 1000;
+          const cfg = FARE_CONFIG[type] || FARE_CONFIG.auto;
+          const estimatedFare = Math.round(cfg.base + km * cfg.perKm);
+          if (cancelled) return;
+          setDistance(distData);
+          setFare(estimatedFare);
+
+          rideData = {
+            pickup,
+            dropoff,
+            vehicleType: type,
+            bookingMode: 'distance',
+            distance: distData.distance,
+            estimatedDuration: Math.round(distData.duration.value / 60),
+            estimatedFare,
+            paymentMethod: 'cash',
+          };
+        }
+
+        const response = await rideAPI.createRide(rideData);
         if (cancelled) return;
 
         if (response.data.success) {
