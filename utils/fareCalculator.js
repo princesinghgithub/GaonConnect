@@ -209,61 +209,27 @@ exports.getAllFareEstimates = (distance, options = {}) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HOURLY RATES — Tractor & JCB
+// Rates ab DB (Setting.hourlyRates) se aate hain, admin panel se editable.
+// Yahan ke defaults sirf fallback hain jab settings load na ho paaye.
 // ─────────────────────────────────────────────────────────────────────────────
-const HOURLY_RATES = {
-  tractor: {
-    farming: {
-      ploughing:  { rate: 800,  minimumHours: 1, label: 'Ploughing (Hal Chalana)'   },
-      rotavator:  { rate: 900,  minimumHours: 1, label: 'Rotavator (Jutai)'          },
-      seed_drill: { rate: 700,  minimumHours: 1, label: 'Seed Drill (Beej Bona)'     },
-      harvesting: { rate: 1200, minimumHours: 1, label: 'Harvesting (Katai)'         },
-    },
-    transport: {
-      crop_transport: { rate: 20, label: 'Crop Transport (Fasal Dhona)' },
-      sand_brick:     { rate: 25, label: 'Sand / Brick (Ret/Eent)'      },
-      goods:          { rate: 22, label: 'Goods (Saman Dhona)'          },
-    },
-    spraying: {
-      spray:         { rate: 500, minimumHours: 1, label: 'Spray (Dawai Chhidkao)'      },
-      grass_cutting: { rate: 600, minimumHours: 1, label: 'Grass Cutting (Ghaas Katna)' },
-      cleaning:      { rate: 400, minimumHours: 1, label: 'Cleaning (Safai)'            },
-    },
-    water: {
-      tanker:     { rate: 700, minimumHours: 1, label: 'Tanker (Paani Dhona)' },
-      irrigation: { rate: 600, minimumHours: 1, label: 'Irrigation (Sinchai)' },
-    },
-    custom: {
-      custom_request: { rate: 800, minimumHours: 1, label: 'Custom Request' },
-    },
-  },
-  jcb: {
-    construction: {
-      digging:      { rate: 1500, minimumHours: 1, label: 'Digging (Khudai)'       },
-      leveling:     { rate: 1200, minimumHours: 1, label: 'Leveling (Samatlana)'   },
-      loading:      { rate: 1300, minimumHours: 1, label: 'Loading (Maal Uthaana)' },
-      construction: { rate: 1400, minimumHours: 1, label: 'Construction (Nirmaan)' },
-    },
-    custom: {
-      custom_request: { rate: 1500, minimumHours: 1, label: 'Custom Request' },
-    },
-  },
-};
+const DEFAULT_HOURLY_RATES = require('../config/hourlyRatesDefaults');
 
-exports.calculateHourlyFare = (vehicleType, category, service, hours = 1, distance = 0) => {
-  const vehicleRates  = HOURLY_RATES[vehicleType];
-  if (!vehicleRates)  return { fare: 0, rateType: 'hourly', rate: 0 };
+// categories: array of { id, label, emoji, pricingType, sub: [{ id, label, rate, minimumHours }] }
+exports.calculateHourlyFare = (vehicleType, category, service, hours = 1, distance = 0, hourlyRatesConfig = DEFAULT_HOURLY_RATES) => {
+  const categories = hourlyRatesConfig?.[vehicleType];
+  if (!categories) return { fare: 0, rateType: 'hourly', rate: 0 };
 
-  const categoryRates = vehicleRates[category];
-  if (!categoryRates) return { fare: 0, rateType: 'hourly', rate: 0 };
+  const categoryConf = categories.find((c) => c.id === category);
+  if (!categoryConf) return { fare: 0, rateType: 'hourly', rate: 0 };
 
-  const serviceRate   = categoryRates[service];
-  if (!serviceRate)   return { fare: 0, rateType: 'hourly', rate: 0 };
+  const serviceRate = categoryConf.sub?.find((s) => s.id === service);
+  if (!serviceRate) return { fare: 0, rateType: 'hourly', rate: 0 };
 
-  const isTransport = category === 'transport';
+  const isPerKm = categoryConf.pricingType === 'per_km';
   let fare = 0;
-  let rateType = isTransport ? 'per_km' : 'hourly';
+  const rateType = isPerKm ? 'per_km' : 'hourly';
 
-  if (isTransport) {
+  if (isPerKm) {
     fare = Math.max(distance * serviceRate.rate, 150);
   } else {
     fare = Math.max(hours, serviceRate.minimumHours || 1) * serviceRate.rate;
@@ -273,5 +239,7 @@ exports.calculateHourlyFare = (vehicleType, category, service, hours = 1, distan
   return { fare, rateType, rate: serviceRate.rate, label: serviceRate.label };
 };
 
-exports.getServicesForVehicle = (vehicleType) => HOURLY_RATES[vehicleType] || null;
-exports.HOURLY_RATES = HOURLY_RATES;
+exports.getServicesForVehicle = (vehicleType, hourlyRatesConfig = DEFAULT_HOURLY_RATES) =>
+  hourlyRatesConfig?.[vehicleType] || null;
+
+exports.DEFAULT_HOURLY_RATES = DEFAULT_HOURLY_RATES;

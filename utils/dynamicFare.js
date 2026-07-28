@@ -1,7 +1,9 @@
 const redis                  = require('../config/redis');
 const Setting                = require('../models/Setting');
 const { getFareBreakdown,
-        getAllFareEstimates } = require('./fareCalculator');
+        getAllFareEstimates,
+        getServicesForVehicle,
+        calculateHourlyFare } = require('./fareCalculator');
 
 const SETTINGS_CACHE_KEY = 'app:settings';
 const SETTINGS_CACHE_TTL = 300; // 5 minutes
@@ -49,6 +51,18 @@ const getAllDynamicFares = async (distance, options = {}) => {
   return getAllFareEstimates(distance, { ...options, settings });
 };
 
+// ─── Tractor/JCB services list (DB rates, admin ke edits ke saath) ───────────
+const getDynamicServices = async (vehicleType) => {
+  const settings = await getSettings();
+  return getServicesForVehicle(vehicleType, settings?.hourlyRates);
+};
+
+// ─── Tractor/JCB hourly fare (booking create karte waqt server-side use hota hai) ─
+const getDynamicHourlyFare = async (vehicleType, category, service, hours, distance) => {
+  const settings = await getSettings();
+  return calculateHourlyFare(vehicleType, category, service, hours, distance, settings?.hourlyRates);
+};
+
 // ─── Current surge status (App mein dikhao) ───────────────────────────────────
 const getCurrentSurgeInfo = async () => {
   const settings = await getSettings();
@@ -92,4 +106,6 @@ module.exports = {
   getDynamicFare,
   getAllDynamicFares,
   getCurrentSurgeInfo,
+  getDynamicServices,
+  getDynamicHourlyFare,
 };
