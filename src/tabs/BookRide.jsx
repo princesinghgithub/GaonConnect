@@ -7,7 +7,7 @@ import { toast } from 'react-hot-toast';
 import { FaMotorcycle, FaCarSide, FaTractor } from 'react-icons/fa';
 import { MdDirectionsRun } from 'react-icons/md';
 import { GiMineTruck } from 'react-icons/gi';
-import { TRACTOR_SERVICES, JCB_SERVICES, HOURS_OPTIONS } from '../constants/tractorJcbServices';
+import { HOURS_OPTIONS } from '../constants/tractorJcbServices';
 
 // ── Fare configs (non-tractor/JCB) ───────────────────────────────────────────
 const FARE_CONFIG = {
@@ -45,17 +45,6 @@ const BookRide = () => {
   });
   const initialVehicleType = initialBooking?.vehicleType || 'auto';
   const initialIsTractorJcb = initialVehicleType === 'tractor' || initialVehicleType === 'jcb';
-  const initialServices = initialVehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES;
-  // If the hero widget already had the user pick a category/sub-service,
-  // carry that forward instead of silently defaulting to the first one —
-  // picking Ploughing for someone who chose Spraying would auto-book the
-  // wrong job.
-  const initialCategory = initialIsTractorJcb
-    ? initialServices.find((c) => c.id === initialBooking?.serviceCategory) || initialServices[0]
-    : null;
-  const initialSub = initialCategory
-    ? initialCategory.sub.find((s) => s.id === initialBooking?.serviceType) || initialCategory.sub[0]
-    : null;
 
   // Location
   const [pickup,  setPickup]  = useState(initialBooking?.pickup ?? null);
@@ -76,11 +65,45 @@ const BookRide = () => {
   // Vehicle
   const [vehicleType, setVehicleType] = useState(initialVehicleType);
 
-  // Tractor / JCB service selection
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [selectedSub,      setSelectedSub]      = useState(initialSub);
+  // Tractor / JCB service selection — rates fetched from the backend
+  // (admin-editable), same list the hero widget and the app use.
+  const [services,         setServices]         = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedSub,      setSelectedSub]      = useState(null);
   const [selectedHours,    setSelectedHours]    = useState(initialBooking?.estimatedHours || 2);
   const [workNote,         setWorkNote]         = useState(initialBooking?.workNote || '');
+  // False until the initial tractor/jcb services fetch (if any) settles —
+  // gates the auto-book effect below so it doesn't fire with an empty
+  // selectedCategory/selectedSub before rates have loaded.
+  const [servicesReady, setServicesReady] = useState(!initialIsTractorJcb);
+
+  const loadServices = async (type, carryForward) => {
+    try {
+      const res = await rideAPI.getServices(type);
+      const list = res.data?.data || [];
+      setServices(list);
+      const cat = (carryForward && list.find((c) => c.id === carryForward.categoryId)) || list[0] || null;
+      const sub = (carryForward && cat?.sub.find((s) => s.id === carryForward.serviceId)) || cat?.sub?.[0] || null;
+      setSelectedCategory(cat);
+      setSelectedSub(sub);
+    } catch {
+      setServices([]);
+      setSelectedCategory(null);
+      setSelectedSub(null);
+    }
+  };
+
+  // Initial fetch — if the hero widget already had a category/sub picked,
+  // carry it forward (picking Ploughing for someone who chose Spraying
+  // would auto-book the wrong job).
+  useEffect(() => {
+    if (!initialIsTractorJcb) return;
+    loadServices(initialVehicleType, {
+      categoryId: initialBooking?.serviceCategory,
+      serviceId:  initialBooking?.serviceType,
+    }).finally(() => setServicesReady(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Distance / Fare
   const [distance, setDistance] = useState(null);
@@ -102,7 +125,7 @@ const BookRide = () => {
       initialBooking?.pickup && initialBooking?.drop &&
       localStorage.getItem('token') &&
       (type === 'bike' || type === 'auto' || type === 'car' ||
-        (isTJ && initialCategory && initialSub))
+        (isTJ && initialBooking?.serviceCategory && initialBooking?.serviceType))
     );
   });
   // Guards against duplicate rides from a fast double-click/tap: `loading`
@@ -112,7 +135,6 @@ const BookRide = () => {
   const submittingRef = useRef(false);
 
   const isTractorJcb = vehicleType === 'tractor' || vehicleType === 'jcb';
-  const services     = vehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES;
   const isHourly     = selectedCategory?.pricingType === 'hourly';
 
   // ── Computed fare ───────────────────────────────────────────────────────────
@@ -133,11 +155,11 @@ const BookRide = () => {
     setSelectedHours(2);
     setWorkNote('');
 
-    // Pre-select first category when switching to tractor/jcb
-    const svcs = type === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES;
+    // Fetch rates + pre-select first category when switching to tractor/jcb
     if (type === 'tractor' || type === 'jcb') {
-      setSelectedCategory(svcs[0]);
-      setSelectedSub(svcs[0].sub[0]);
+      loadServices(type);
+    } else {
+      setServices([]);
     }
   };
 
@@ -190,7 +212,8 @@ const BookRide = () => {
   // Every vehicle type coming from the hero widget already has pickup+drop
   // (and for tractor/jcb, a service already picked there too) — book it
   // straight away instead of making the user fill the same form again and
-  // press Confirm a second time.
+  // press Confirm a second time. Gated on servicesReady so tractor/jcb
+  // doesn't fire before the rates fetch above has set selectedCategory/Sub.
   useEffect(() => {
     const type = initialBooking?.vehicleType;
     const isTJ = type === 'tractor' || type === 'jcb';
@@ -283,7 +306,7 @@ const BookRide = () => {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [servicesReady]);
 
   // ── Confirm ─────────────────────────────────────────────────────────────────
   const handleConfirmRide = async () => {

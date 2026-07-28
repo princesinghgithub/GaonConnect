@@ -359,6 +359,9 @@ export const rideAPI = {
 
   createRazorpayOrder: (rideId) => api.post(`/ride/${rideId}/razorpay-order`),
   verifyRazorpayPayment: (data) => api.post("/ride/razorpay-verify", data),
+
+  // Tractor/JCB "Kaam ka Prakar" + rates — admin panel se editable, public route hai
+  getServices: (vehicleType) => api.get(`/ride/services/${vehicleType}`),
 };
 
 
@@ -500,6 +503,11 @@ export const adminAPI = {
     }),
   updateCommission: (percentage) =>
     api.put("/admin/pricing", { commission: { percentage } }),
+
+  // ===== TRACTOR/JCB HOURLY RATES =====
+  getHourlyRates: () => api.get("/admin/hourly-rates"),
+  updateHourlyRate: (vehicleType, categoryId, serviceId, rate, minimumHours) =>
+    api.put("/admin/hourly-rates", { vehicleType, categoryId, serviceId, rate, minimumHours }),
 
   // ===== REPORTS & ANALYTICS =====
   getAnalytics: (period = "week") =>

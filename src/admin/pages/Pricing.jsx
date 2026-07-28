@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../services/api';
 import { toast } from 'react-hot-toast';
-import { FaTaxi, FaMotorcycle, FaCar, FaBolt, FaCalculator, FaClock } from 'react-icons/fa';
+import { FaTaxi, FaMotorcycle, FaCar, FaBolt, FaCalculator, FaClock, FaTractor } from 'react-icons/fa';
 
 const VEHICLE_TYPES = [
   { key: 'auto', label: 'Auto Rickshaw', icon: <FaTaxi /> },
   { key: 'bike', label: 'Bike',          icon: <FaMotorcycle /> },
   { key: 'car',  label: 'Car',           icon: <FaCar /> },
+];
+
+const HOURLY_VEHICLE_TYPES = [
+  { key: 'tractor', label: 'Tractor' },
+  { key: 'jcb',      label: 'JCB' },
 ];
 
 const defaultVehicle = { baseFare: 0, perKmRate: 0, minimumFare: 0 };
@@ -25,6 +30,8 @@ const Pricing = () => {
   const [loading,    setLoading]    = useState(true);
   const [timestamps, setTimestamps] = useState(loadTimestamps);
   const [calcDist,   setCalcDist]   = useState(5);
+  const [hourlyRates, setHourlyRates]   = useState({ tractor: [], jcb: [] });
+  const [savingCategory, setSavingCategory] = useState({});
 
   useEffect(() => {
     adminAPI.getPricing()
@@ -36,7 +43,43 @@ const Pricing = () => {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    adminAPI.getHourlyRates()
+      .then((res) => {
+        const data = res.data?.data || {};
+        setHourlyRates({ tractor: data.tractor || [], jcb: data.jcb || [] });
+      })
+      .catch(() => {});
   }, []);
+
+  const setServiceRate = (vehicleType, categoryId, serviceId, field, value) =>
+    setHourlyRates((prev) => ({
+      ...prev,
+      [vehicleType]: prev[vehicleType].map((cat) =>
+        cat.id !== categoryId ? cat : {
+          ...cat,
+          sub: cat.sub.map((s) => (s.id !== serviceId ? s : { ...s, [field]: value })),
+        }
+      ),
+    }));
+
+  const saveCategory = async (vehicleType, category) => {
+    const key = `${vehicleType}-${category.id}`;
+    setSavingCategory((s) => ({ ...s, [key]: true }));
+    try {
+      await Promise.all(
+        category.sub.map((s) =>
+          adminAPI.updateHourlyRate(vehicleType, category.id, s.id, s.rate, s.minimumHours)
+        )
+      );
+      toast.success(`${category.label} rates updated`);
+      saveTimestamp(key);
+    } catch {
+      toast.error('Failed to update rates');
+    } finally {
+      setSavingCategory((s) => ({ ...s, [key]: false }));
+    }
+  };
 
   const saveTimestamp = (key) => {
     const current = loadTimestamps();
@@ -168,6 +211,61 @@ const Pricing = () => {
               Minimum fare (₹{vehicles[key].minimumFare}) cannot be less than base fare (₹{vehicles[key].baseFare})
             </p>
           )}
+        </div>
+      ))}
+
+      {/* Tractor/JCB Hourly Rates */}
+      {HOURLY_VEHICLE_TYPES.map(({ key: vehicleType, label: vehicleLabel }) => (
+        <div key={vehicleType} className="bg-white rounded-xl shadow p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-orange-500 text-2xl"><FaTractor /></span>
+            <h2 className="text-xl font-semibold text-gray-800">{vehicleLabel} — Kaam ka Rate</h2>
+          </div>
+          {(hourlyRates[vehicleType] || []).map((category) => {
+            const key = `${vehicleType}-${category.id}`;
+            return (
+              <div key={category.id} className="border border-gray-100 rounded-lg p-4 mb-4 last:mb-0">
+                <div className="flex justify-between items-center mb-3">
+                  <div>
+                    <h3 className="font-semibold text-gray-700">
+                      {category.emoji} {category.label}
+                      <span className="text-xs text-gray-400 font-normal ml-2">
+                        ({category.pricingType === 'per_km' ? 'per km' : 'per hour'})
+                      </span>
+                    </h3>
+                    {lastSaved(key)}
+                  </div>
+                  <button
+                    onClick={() => saveCategory(vehicleType, category)}
+                    disabled={savingCategory[key]}
+                    className="px-4 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 text-sm font-medium"
+                  >
+                    {savingCategory[key] ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {category.sub.map((service) => (
+                    <div key={service.id} className="flex items-center gap-2">
+                      <label className="text-sm text-gray-600 flex-1">{service.label}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="10"
+                        className="w-28 px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        value={service.rate}
+                        onChange={(e) =>
+                          setServiceRate(vehicleType, category.id, service.id, 'rate', parseFloat(e.target.value) || 0)
+                        }
+                      />
+                      <span className="text-xs text-gray-400 w-16">
+                        ₹/{category.pricingType === 'per_km' ? 'km' : 'hr'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       ))}
 

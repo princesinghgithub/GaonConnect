@@ -6,8 +6,8 @@ import emailjs from '@emailjs/browser';
 import Navbar from './Navbar';
 import Footer from './Footer';
 import LocationSearchInput from '../tabs/LocationSearchInput';
-import { locationAPI } from '../services/api';
-import { TRACTOR_SERVICES, JCB_SERVICES, HOURS_OPTIONS } from '../constants/tractorJcbServices';
+import { locationAPI, rideAPI } from '../services/api';
+import { HOURS_OPTIONS } from '../constants/tractorJcbServices';
 
 // Same fare formula CustomerBooking.jsx uses once a real ride is booked —
 // keeping the hero estimate consistent with what the app actually charges.
@@ -60,6 +60,7 @@ const GaonConnectLanding = () => {
   const [heroCategory, setHeroCategory] = useState(null);
   const [heroSub, setHeroSub] = useState(null);
   const [heroHours, setHeroHours] = useState(2);
+  const [heroServices, setHeroServices] = useState([]);
   const heroVehicleType = heroServiceIndex === '' ? null : VEHICLE_TYPE_BY_INDEX[Number(heroServiceIndex)];
   const heroIsTractorJcb = heroVehicleType === 'tractor' || heroVehicleType === 'jcb';
   const contactFormRef = useRef(null);
@@ -98,17 +99,33 @@ const GaonConnectLanding = () => {
 
   // Default to the first category/sub whenever a Tractor/JCB service is
   // picked (or clear it when switching away) — the user can still change
-  // the selection with the picker rendered below the service list.
+  // the selection with the picker rendered below the service list. Rates
+  // rate come from the backend (admin-editable), same as the app post-login.
   useEffect(() => {
     if (!heroIsTractorJcb) {
+      setHeroServices([]);
       setHeroCategory(null);
       setHeroSub(null);
       return;
     }
-    const svcs = heroVehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES;
-    setHeroCategory(svcs[0]);
-    setHeroSub(svcs[0].sub[0]);
-    setHeroHours(2);
+    let cancelled = false;
+    rideAPI.getServices(heroVehicleType)
+      .then((res) => {
+        if (cancelled) return;
+        const svcs = res.data?.data || [];
+        setHeroServices(svcs);
+        setHeroCategory(svcs[0] || null);
+        setHeroSub(svcs[0]?.sub?.[0] || null);
+        setHeroHours(2);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHeroServices([]);
+          setHeroCategory(null);
+          setHeroSub(null);
+        }
+      });
+    return () => { cancelled = true; };
   }, [heroServiceIndex, heroIsTractorJcb, heroVehicleType]);
 
   // Service selection handler - already logged-in users go straight to
@@ -308,7 +325,7 @@ const GaonConnectLanding = () => {
                       Kaam ka Prakar
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {(heroVehicleType === 'jcb' ? JCB_SERVICES : TRACTOR_SERVICES).map((cat) => (
+                      {heroServices.map((cat) => (
                         <button
                           key={cat.id}
                           type="button"
