@@ -8,6 +8,7 @@ const Vehicle  = require('../models/Vehicle');
 const User     = require('../models/User');
 const { getIO } = require('../socket');
 const { notify } = require('../utils/notifications');
+const { dispatchDueRides } = require('../controllers/rideController');
 
 const startScheduledRideJob = () => {
   // Har 2 minute mein scheduled rides check karo
@@ -99,6 +100,20 @@ const startScheduledRideJob = () => {
   });
 
   console.log('✅ Scheduled ride cron job started (every 2 min)');
+
+  // Har 15 second mein: progressive radius-dispatch ka agla wave jinki bhi due
+  // hai (3km→8km→15km→unlimited) — DB-persisted state (Ride.nextDispatchAt) se
+  // chalta hai, isliye server restart/redeploy ke beech mein bhi koi ride
+  // "stuck" nahi rehti chhote radius pe hamesha ke liye.
+  cron.schedule('*/15 * * * * *', async () => {
+    try {
+      await dispatchDueRides();
+    } catch (err) {
+      console.error('dispatchDueRides cron error:', err.message);
+    }
+  });
+
+  console.log('✅ Ride dispatch-wave cron job started (every 15s)');
 
   // Har 5 minute mein: 'searching' rides jo 10+ min purani hain unhe auto-cancel karo
   cron.schedule('*/5 * * * *', async () => {

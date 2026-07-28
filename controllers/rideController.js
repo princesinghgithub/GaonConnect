@@ -48,6 +48,164 @@ const notifyCustomerInApp = async (customerId, { title, message, type = 'info', 
   }
 };
 
+// ─── PROGRESSIVE RADIUS DISPATCH ──────────────────────────────────────────────
+// Uber/Ola/Rapido jaisa hi — sabse pehle sirf najdeek (3km) drivers ko poochte
+// hain, na mile/accept na ho to dheere-dheere daayra badhate jaate hain (8km →
+// 15km → phir bilkul unlimited). Har stage 30s ka mauka deta hai — poori tarah
+// khulne mein worst-case ~90s lagte hain, uske baad jab tak koi accept na kare.
+const DISPATCH_STAGES_M       = [3000, 8000, 15000, null]; // meters; null = no distance limit
+const DISPATCH_STAGE_DELAY_MS = 30 * 1000;
+
+// Ek stage ke liye matching + abhi-tak-notify-na-hue drivers dhoondo aur unhe
+// notify karo. Sirf NAYE drivers ko bhejte hain — jinko pichhle wave mein
+// already bheja ja chuka hai unko dobara spam nahi karte (unke paas already
+// apni 30s wali request timer chal rahi hai driver-app ki taraf).
+const dispatchRideStage = async (rideId, radiusMeters) => {
+  const ride = await Ride.findById(rideId);
+  if (!ride || ride.status !== 'searching') return 0; // already accepted/cancelled — chain yahin ruk jaaye
+
+  const matchingVehicles = await Vehicle.find({ type: ride.vehicleType, isVerified: true, isActive: true }).select('_id');
+  const matchingVehicleIds = matchingVehicles.map((v) => v._id);
+
+  const REACHABLE_WINDOW_MS = 10 * 60 * 1000; // 10 minute
+  const reachableSince = new Date(Date.now() - REACHABLE_WINDOW_MS);
+  const reachabilityFilter = {
+    $or: [
+      { locationUpdatedAt: { $gte: reachableSince } },
+      { locationUpdatedAt: { $exists: false } },
+    ],
+  };
+
+  const baseQuery = {
+    isOnline:       true,
+    isApproved:     true,
+    isBlocked:      { $ne: true },
+    status:         'available',
+    activeVehicle:  { $in: matchingVehicleIds },
+    _id:            { $nin: ride.notifiedDrivers || [] },
+    ...reachabilityFilter,
+  };
+
+  const pickupLng = ride.pickup.coordinates.longitude;
+  const pickupLat = ride.pickup.coordinates.latitude;
+
+  let newDrivers = [];
+  if (radiusMeters && pickupLat && pickupLng) {
+    newDrivers = await Provider.find({
+      ...baseQuery,
+      currentLocation: {
+        $near: {
+          $geometry:    { type: 'Point', coordinates: [pickupLng, pickupLat] },
+          $maxDistance: radiusMeters,
+        },
+      },
+    }).select('_id deviceInfo').limit(5).lean();
+  } else {
+    // Final "unlimited" stage — jitne bhi bache hain sab ko bhej do, koi cap nahi.
+    newDrivers = await Provider.find(baseQuery).select('_id deviceInfo').lean();
+  }
+
+  if (newDrivers.length) {
+    ride.notifiedDrivers = [...(ride.notifiedDrivers || []), ...newDrivers.map((d) => d._id)];
+    await ride.save();
+
+    const io = getIO();
+    const customerUser = await User.findById(ride.customer).select('name phone');
+    const ridePayload = {
+      rideId:        ride._id,
+      customerName:  customerUser?.name  || 'Customer',
+      customerPhone: customerUser?.phone || '',
+      pickup: {
+        address:   ride.pickup.address,
+        latitude:  pickupLat,
+        longitude: pickupLng,
+      },
+      drop: {
+        address:   ride.drop.address,
+        latitude:  ride.drop.coordinates.latitude,
+        longitude: ride.drop.coordinates.longitude,
+      },
+      fare:           ride.fare,
+      distance:       ride.distance,
+      vehicleType:    ride.vehicleType,
+      paymentMethod:  ride.paymentMethod,
+      bookingMode:    ride.bookingMode,
+      serviceCategory: ride.serviceCategory,
+      serviceType:    ride.serviceType,
+      estimatedHours: ride.estimatedHours,
+      hourlyRate:     ride.hourlyRate,
+      workNote:       ride.workNote,
+    };
+
+    newDrivers.forEach((driver) => {
+      io.to(`driver_${driver._id}`).emit('newRideRequest', ridePayload);
+      const fcm = driver.deviceInfo?.fcmToken;
+      if (fcm) notify.newRideRequest(fcm, ridePayload).catch(() => {});
+    });
+  }
+
+  return newDrivers.length;
+};
+
+// Agla wave kab due hai — DB mein persist karte hain (setTimeout se NAHI),
+// taaki server restart/redeploy (Render jaisi hosting pe deploy ke dauran
+// aam baat hai) ke beech mein bhi koi ride "stuck" na reh jaaye kisi chhote
+// radius pe hamesha ke liye. Ek cron job (jobs/scheduledRideJob.js) har 15s
+// mein dispatchDueRides ko call karta hai jo yahan se due rides dhoond ke
+// agla wave khud chala deta hai — server kabhi bhi restart ho, agli cron
+// tick pe wahin se resume ho jaata hai jahan chhoda tha.
+//
+// findOneAndUpdate (poore document ko load-then-save karne ke bajaye) — status
+// 'searching' filter ke saath atomic hai (agar ride beech mein accept ho chuki
+// ho to yeh no-op ho jaata hai), aur ismein Mongoose ke partial-select
+// document pe .save() karne wale risk (required-field validation fail ho
+// sakti hai) se bhi bacha jaata hai.
+const markNextDispatch = async (rideId, stageIndex) => {
+  const nextDispatchAt = stageIndex + 1 < DISPATCH_STAGES_M.length
+    ? new Date(Date.now() + DISPATCH_STAGE_DELAY_MS)
+    : null; // last stage ho chuka — ab aur koi wave due nahi
+  await Ride.findOneAndUpdate(
+    { _id: rideId, status: 'searching' },
+    { dispatchStageIndex: stageIndex, nextDispatchAt },
+  );
+};
+
+// Cron job isko call karta hai (har ~15s) — jitni bhi 'searching' rides ka
+// agla wave due hai (nextDispatchAt <= abhi), unko ek-ek stage aage badhao.
+//
+// isDispatchingDueRides guard: agar kabhi ek run 15s se zyada le le (bahut
+// saari due rides ek saath hon), to node-cron agli tick ko overlap-run kar
+// sakta hai — bina is guard ke, dono runs ek hi ride ko ek saath dispatch
+// karne ki koshish karte (markNextDispatch save hone se pehle), jisse driver
+// ko duplicate notification chali jaati. Single-process deployment ke liye
+// yeh in-memory flag kaafi hai; agar kabhi multiple server instances (PM2
+// cluster / horizontal scaling) chalane lagen, isko Redis-lock jaisi cheez se
+// replace karna padega.
+let isDispatchingDueRides = false;
+exports.dispatchDueRides = async () => {
+  if (isDispatchingDueRides) return;
+  isDispatchingDueRides = true;
+  try {
+    const due = await Ride.find({
+      status: 'searching',
+      nextDispatchAt: { $ne: null, $lte: new Date() },
+    }).select('_id dispatchStageIndex');
+
+    for (const ride of due) {
+      const nextIndex = ride.dispatchStageIndex + 1;
+      if (nextIndex >= DISPATCH_STAGES_M.length) continue;
+      try {
+        await dispatchRideStage(ride._id, DISPATCH_STAGES_M[nextIndex]);
+        await markNextDispatch(ride._id, nextIndex);
+      } catch (err) {
+        console.error('dispatchDueRides error for ride', ride._id, ':', err.message);
+      }
+    }
+  } finally {
+    isDispatchingDueRides = false;
+  }
+};
+
 // ─── CREATE RIDE ──────────────────────────────────────────────────────────────
 exports.createRide = async (req, res) => {
   try {
@@ -144,115 +302,20 @@ exports.createRide = async (req, res) => {
       });
     }
 
-    // Instant ride — nearest 5 drivers ko socket + push notification
-    const io = getIO();
-    const customerUser = await User.findById(req.user.id).select('name phone');
-
-    const pickupLng = pickup.longitude || pickup.location?.longitude;
-    const pickupLat = pickup.latitude  || pickup.location?.latitude;
-
-    // Requested vehicleType ki verified+active vehicles dhoondo, phir unke drivers
-    const matchingVehicles = await Vehicle.find({ type: vehicleType, isVerified: true, isActive: true }).select('_id');
-    const matchingVehicleIds = matchingVehicles.map((v) => v._id);
-
-    // isOnline ab socket se decouple hai (dekho socket.js) — asli reachability
-    // yahan check hoti hai: background location task (foreground service ke
-    // through) jab tak recent ping bhej raha hai, driver "reachable" maana
-    // jaata hai, chahe abhi socket connected ho ya nahi (app background/kill
-    // ho gaya ho). Kabhi ping hi nahi bheja (abhi-abhi online hua, race
-    // window) — usko bhi allow karo, warna fresh-online drivers turant miss ho jaate.
-    const REACHABLE_WINDOW_MS = 10 * 60 * 1000; // 10 minute
-    const reachableSince = new Date(Date.now() - REACHABLE_WINDOW_MS);
-    const reachabilityFilter = {
-      $or: [
-        { locationUpdatedAt: { $gte: reachableSince } },
-        { locationUpdatedAt: { $exists: false } },
-      ],
-    };
-
-    // MongoDB $near — location se sort karke 5 closest drivers
-    let availableDrivers = [];
-    if (pickupLat && pickupLng) {
-      availableDrivers = await Provider.find({
-        isOnline:        true,
-        isApproved:      true,
-        isBlocked:       { $ne: true },
-        status:          'available',
-        activeVehicle:   { $in: matchingVehicleIds },
-        ...reachabilityFilter,
-        currentLocation: {
-          $near: {
-            $geometry:    { type: 'Point', coordinates: [pickupLng, pickupLat] },
-            $maxDistance: 15000, // 15 km radius
-          },
-        },
-      }).select('_id deviceInfo').limit(5).lean();
-    }
-
-    // Fallback — location nahi hai toh saare available drivers
-    if (!availableDrivers.length) {
-      availableDrivers = await Provider.find({
-        isOnline:       true,
-        isApproved:     true,
-        isBlocked:      { $ne: true },
-        status:         'available',
-        activeVehicle:  { $in: matchingVehicleIds },
-        ...reachabilityFilter,
-      }).select('_id deviceInfo').lean();
-    }
-
-    // Baad mein (jab koi accept kar le) baaki notified drivers ko
-    // "ride no longer available" bhejne ke liye yeh list chahiye.
-    if (availableDrivers.length) {
-      ride.notifiedDrivers = availableDrivers.map((d) => d._id);
-      await ride.save();
-    }
-
-    const ridePayload = {
-      rideId:        ride._id,
-      customerName:  customerUser?.name  || 'Customer',
-      customerPhone: customerUser?.phone || '',
-      pickup: {
-        address:   ride.pickup.address,
-        latitude:  ride.pickup.coordinates.latitude,
-        longitude: ride.pickup.coordinates.longitude,
-      },
-      drop: {
-        address:   ride.drop.address,
-        latitude:  ride.drop.coordinates.latitude,
-        longitude: ride.drop.coordinates.longitude,
-      },
-      fare:          finalFare,
-      distance:      finalDist,
-      vehicleType,
-      paymentMethod,
-      bookingMode,
-      serviceCategory,
-      serviceType,
-      estimatedHours,
-      hourlyRate:    ride.hourlyRate || hourlyRate,
-      workNote,
-    };
-
-    // Socket (online drivers) + FCM push (offline drivers)
-    availableDrivers.forEach((driver) => {
-      io.to(`driver_${driver._id}`).emit('newRideRequest', ridePayload);
-
-      // Push notification — driver offline ho toh bhi mile
-      const fcm = driver.deviceInfo?.fcmToken;
-      if (fcm) {
-        notify.newRideRequest(fcm, ridePayload).catch(() => {});
-      }
-    });
+    // Instant ride — pehla (najdeek 3km) wave turant, baaki waves progressively
+    // cron ke through chalenge (dekho dispatchDueRides + jobs/scheduledRideJob.js) —
+    // in-memory timer nahi, isliye server restart hone par bhi wave-chain zinda rehti hai.
+    const firstWaveCount = await dispatchRideStage(ride._id, DISPATCH_STAGES_M[0]);
+    await markNextDispatch(ride._id, 0);
 
     return res.status(201).json({
       success: true,
-      message: availableDrivers.length
-        ? `${availableDrivers.length} drivers ko request bheji`
-        : 'Koi driver available nahi',
+      message: firstWaveCount
+        ? `${firstWaveCount} najdeek drivers ko request bheji`
+        : 'Najdeek koi driver nahi mila, daayra badhaya ja raha hai',
       data: {
         ride,
-        providerCount: availableDrivers.length,
+        providerCount: firstWaveCount,
         ...(promoDiscount > 0 && { promoDiscount, message: `🎉 ₹${promoDiscount} ki discount mili!` }),
       },
     });
@@ -331,6 +394,22 @@ exports.acceptRide = async (req, res) => {
     if (provider.isBlocked) return res.status(403).json({ success: false, message: 'Aapka account block hai' });
 
     const { rideId } = req.body;
+
+    // Driver ko request tab notify hui thi jab uski activeVehicle X thi. Agar
+    // accept dabane se pehle usne "Switch Vehicle" se Y pe badal li (online
+    // rehte hue vehicle switch karne ka feature), to yeh ride ab uske current
+    // vehicle type se match nahi karti — customer ne X maanga tha, Y nahi.
+    // provider.activeVehicle null hone wala edge case yahan check nahi karte
+    // (data-integrity issue, alag hi baat hai) — sirf tab reject karo jab
+    // activeVehicle genuinely set hai par uska type ride se mismatch karta hai.
+    const requestedRide = await Ride.findById(rideId).select('vehicleType status');
+    if (requestedRide && requestedRide.status === 'searching' && provider.activeVehicle && requestedRide.vehicleType !== provider.activeVehicle.type) {
+      return res.status(400).json({
+        success: false,
+        message: 'Aapne vehicle switch kar li hai — yeh request aapke pichhle vehicle type ke liye thi, ab valid nahi hai',
+      });
+    }
+
     // Atomic check-and-set — jab ek saath kai drivers (jaise scheduled
     // tractor/JCB request) accept karne ki koshish karein, sirf pehla
     // hi jeete; baki ko turant "Ride not available" mile.

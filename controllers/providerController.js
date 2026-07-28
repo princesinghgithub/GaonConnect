@@ -1653,6 +1653,13 @@ exports.toggleDuty = async (req, res) => {
     const goingOnline = req.body.goOnline !== undefined ? Boolean(req.body.goOnline) : !provider.isOnline;
 
     if (goingOnline) {
+      // Vehicle switch bhi isi flow se hota hai (already online rehte hue). Agar
+      // driver kisi ride ke beech mein hai (status 'busy'), switch allow mat karo —
+      // warna neeche status seedhe 'available' ban jaata, jabki ride abhi chal rahi hai.
+      if (provider.isOnline && provider.status === 'busy') {
+        return res.status(400).json({ success: false, message: 'Ride ke dauran vehicle switch nahi kar sakte' });
+      }
+
       const { vehicleId } = req.body;
       if (!vehicleId) {
         return res.status(400).json({ success: false, message: 'Online jaane ke liye vehicle select karo' });
