@@ -30,6 +30,20 @@ const RideSchema = new mongoose.Schema(
       },
     ],
 
+    // Progressive radius-dispatch state (rideController.js dispatchRideStage) —
+    // DB mein persist karte hain (na ki sirf in-memory setTimeout se) taaki
+    // server restart/redeploy hone par bhi baaki waves (8km/15km/unlimited)
+    // kho na jaayein — ek cron job (jobs/scheduledRideJob.js) periodically
+    // check karta hai ki kaunsi rides ka agla wave due hai.
+    dispatchStageIndex: {
+      type: Number,
+      default: 0,
+    },
+    nextDispatchAt: {
+      type: Date,
+      default: null,
+    },
+
     pickup: {
       address: {
         type: String,
@@ -254,5 +268,7 @@ workNote: {
 RideSchema.index({ customer: 1, createdAt: -1 });
 RideSchema.index({ provider: 1, createdAt: -1 });
 RideSchema.index({ status: 1 });
+// Cron sweep — "status searching + nextDispatchAt due" ko fast dhoondne ke liye
+RideSchema.index({ status: 1, nextDispatchAt: 1 });
 
 module.exports = mongoose.model("Ride", RideSchema);
