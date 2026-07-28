@@ -6,8 +6,7 @@ const Vehicle      = require('../models/Vehicle');
 const User         = require('../models/User');
 const Notification = require('../models/Notification');
 const Transaction  = require('../models/Transaction');
-const { calculateFare, calculateHourlyFare } = require('../utils/fareCalculator');
-const { getDynamicFare }            = require('../utils/dynamicFare');
+const { getDynamicFare, getDynamicHourlyFare } = require('../utils/dynamicFare');
 const { getIO }                     = require('../socket');
 const { notify }                    = require('../utils/notifications');
 const { applyPromoToRide }          = require('./promoController');
@@ -83,7 +82,7 @@ exports.createRide = async (req, res) => {
     // (client-supplied fare/estimatedFare trust karna price tampering allow karta tha)
     let finalFare = 0;
     if (serviceCategory && serviceType) {
-      const hourlyResult = calculateHourlyFare(vehicleType, serviceCategory, serviceType, estimatedHours, finalDist);
+      const hourlyResult = await getDynamicHourlyFare(vehicleType, serviceCategory, serviceType, estimatedHours, finalDist);
       finalFare = hourlyResult.fare || 0;
     }
     if (!finalFare) {

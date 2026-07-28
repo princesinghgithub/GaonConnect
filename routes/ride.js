@@ -2,8 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const { protect }  = require('../middleware/auth');
 const { validate, schemas } = require('../middleware/validate');
-const { calculateDistance, calculateDuration, getServicesForVehicle } = require('../utils/fareCalculator');
-const { getAllDynamicFares, getDynamicFare, getCurrentSurgeInfo }      = require('../utils/dynamicFare');
+const { calculateDistance, calculateDuration } = require('../utils/fareCalculator');
+const { getAllDynamicFares, getDynamicFare, getCurrentSurgeInfo, getDynamicServices } = require('../utils/dynamicFare');
 
 const {
   createRide,
@@ -52,11 +52,17 @@ router.post('/razorpay-verify',    protect, verifyRazorpayPayment);
 router.post('/payment/qr-code',        protect, createPaymentQrCode);
 router.get('/payment/qr-code/status',  protect, getPaymentQrStatus);
 
-// ─── Tractor/JCB Services List ────────────────────────────────────────────────
-router.get('/services/:vehicleType', protect, (req, res) => {
-  const services = getServicesForVehicle(req.params.vehicleType);
-  if (!services) return res.status(404).json({ success: false, message: 'Vehicle not found' });
-  return res.json({ success: true, data: services });
+// ─── Tractor/JCB Services List (rates admin panel se editable) ───────────────
+// Public rakha hai — website ka anonymous landing page (pre-login) bhi isse
+// pricing preview dikhata hai, waha auth token nahi hota.
+router.get('/services/:vehicleType', async (req, res) => {
+  try {
+    const services = await getDynamicServices(req.params.vehicleType);
+    if (!services) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    return res.json({ success: true, data: services });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // ─── Current Surge Status (App home screen pe badge dikhao) ──────────────────

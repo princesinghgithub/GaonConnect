@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const HOURLY_RATE_DEFAULTS = require('../config/hourlyRatesDefaults');
 
 // ─── Per-vehicle rate structure ───────────────────────────────────────────────
 const vehicleRateSchema = new mongoose.Schema({
@@ -6,6 +7,22 @@ const vehicleRateSchema = new mongoose.Schema({
   perKmRate:   { type: Number, required: true },
   minimumFare: { type: Number, required: true },
   isActive:    { type: Boolean, default: true  },
+}, { _id: false });
+
+// ─── Tractor/JCB Hourly (or per-km) Service Rates ─────────────────────────────
+const hourlySubServiceSchema = new mongoose.Schema({
+  id:           { type: String, required: true },
+  label:        { type: String, required: true },
+  rate:         { type: Number, required: true },
+  minimumHours: { type: Number, default: 1 },
+}, { _id: false });
+
+const hourlyCategorySchema = new mongoose.Schema({
+  id:          { type: String, required: true },
+  label:       { type: String, required: true },
+  emoji:       { type: String, default: '' },
+  pricingType: { type: String, enum: ['hourly', 'per_km'], default: 'hourly' },
+  sub:         { type: [hourlySubServiceSchema], default: [] },
 }, { _id: false });
 
 const SettingSchema = new mongoose.Schema({
@@ -27,6 +44,12 @@ const SettingSchema = new mongoose.Schema({
     jcb:     { type: vehicleRateSchema, default: { baseFare: 200, perKmRate: 40, minimumFare: 300 } },
     ambulance: { type: vehicleRateSchema, default: { baseFare: 100, perKmRate: 18, minimumFare: 150 } },
     wedding:   { type: vehicleRateSchema, default: { baseFare: 500, perKmRate: 35, minimumFare: 1500 } },
+  },
+
+  // ─── Tractor/JCB Service Rates (admin-editable, Kaam ka Prakar → Service) ────
+  hourlyRates: {
+    tractor: { type: [hourlyCategorySchema], default: () => HOURLY_RATE_DEFAULTS.tractor },
+    jcb:     { type: [hourlyCategorySchema], default: () => HOURLY_RATE_DEFAULTS.jcb     },
   },
 
   // ─── Surge Pricing ───────────────────────────────────────────────────────────

@@ -3906,6 +3906,60 @@ const updatePricing = async (req, res) => {
   }
 };
 
+// GET /api/admin/hourly-rates
+// Tractor/JCB ke "Kaam ka Prakar" + "Service" rates â€” app mein isi se dikhte hain
+const getHourlyRates = async (req, res) => {
+  try {
+    let settings = await Setting.findOne().lean();
+    if (!settings) {
+      settings = await Setting.create({});
+      settings = settings.toObject();
+    }
+    res.json({ success: true, data: settings.hourlyRates });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Hourly rates fetch error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+  }
+};
+
+// PUT /api/admin/hourly-rates
+// Body: { vehicleType: 'tractor', categoryId: 'farming', serviceId: 'ploughing', rate: 850, minimumHours: 1, label: '...' }
+const updateHourlyRate = async (req, res) => {
+  try {
+    const { vehicleType, categoryId, serviceId, rate, minimumHours, label } = req.body;
+
+    if (!['tractor', 'jcb'].includes(vehicleType)) {
+      return res.status(400).json({ success: false, message: 'vehicleType tractor ya jcb hona chahiye' });
+    }
+    if (rate === undefined || rate === null || Number(rate) < 0) {
+      return res.status(400).json({ success: false, message: 'Valid rate dena zaroori hai' });
+    }
+
+    let settings = await Setting.findOne();
+    if (!settings) settings = await Setting.create({});
+
+    const category = settings.hourlyRates?.[vehicleType]?.find((c) => c.id === categoryId);
+    const service   = category?.sub?.find((s) => s.id === serviceId);
+
+    if (!category || !service) {
+      return res.status(404).json({ success: false, message: 'Service ya category nahi mili' });
+    }
+
+    service.rate = Number(rate);
+    if (minimumHours !== undefined) service.minimumHours = Number(minimumHours);
+    if (label) service.label = label;
+
+    settings.markModified(`hourlyRates.${vehicleType}`);
+    await settings.save();
+
+    // Cache invalidate â€” app mein fresh rates aaye
+    await invalidateSettingsCache();
+
+    res.json({ success: true, message: 'Rate update ho gaya! ðŸŽ‰', data: settings.hourlyRates[vehicleType] });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Hourly rate update error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+  }
+};
+
 // GET /api/admin/config
 const getSystemConfig = async (req, res) => {
   try {
@@ -4544,6 +4598,8 @@ module.exports = {
   getSettings,
   updateSettings,
   updatePricing,
+  getHourlyRates,
+  updateHourlyRate,
   getSystemConfig,
   getAnalytics,
   exportReport,

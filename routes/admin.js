@@ -107,6 +107,8 @@ router.get('/settings', adminController.getSettings);
 router.get('/config', adminController.getSystemConfig);
 router.put('/settings', adminController.updateSettings);
 router.put('/pricing', adminController.updatePricing);
+router.get('/hourly-rates', adminController.getHourlyRates);
+router.put('/hourly-rates', adminController.updateHourlyRate);
 
 // ===== REPORTS & ANALYTICS =====
 router.get('/analytics', adminController.getAnalytics);
