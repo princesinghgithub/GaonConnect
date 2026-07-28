@@ -367,6 +367,170 @@ const blogPosts = [
       },
     ],
   },
+  {
+    slug: 'auto-bike-car-village-booking',
+    tag: 'Community',
+    title: 'Auto, Bike Aur Car Booking Gaon Mein: Roz Ka Safar Ab Aasan',
+    excerpt: 'School jaana ho, mandi ya hospital — gaon se roz ke safar ke liye auto, bike ya car, jo bhi chahiye, ek hi app se book karein.',
+    metaDescription: 'Auto rickshaw booking, bike taxi rural aur car booking rural India — apne gaon se roz ke safar ke liye sahi vehicle GaonConnect app se book karein.',
+    keywords: 'auto booking village, bike taxi rural, car booking rural india, auto rickshaw booking, gaon mein auto bike car, village cab service',
+    image: '/gaonconnect1.webp',
+    author: 'GaonConnect Team',
+    publishDate: '2026-07-21',
+    readTime: '3 min read',
+    sections: [
+      {
+        heading: 'Roz Ke Safar Ke Liye Sahi Vehicle Kaise Chunein',
+        paragraphs: [
+          'Akele school ya coaching jaana ho to bike taxi sabse tez aur sasta option hota hai. Saman ke saath mandi jaana ho ya family ke saath safar karna ho to auto rickshaw behtar rehta hai. Aur agar aaram se, comfort mein sheher ya kisi function tak jaana ho to car booking sahi rehta hai.',
+        ],
+      },
+      {
+        heading: 'Gaon Se Har Roz Ki Zarurat',
+        paragraphs: [
+          'Hospital ka emergency ho, train-bus pakadni ho ya bachon ko school se laana-le jaana ho — GaonConnect par auto, bike aur car teeno options hamesha available rehte hain, seedha aas-paas ke local drivers se.',
+          'Har vehicle ka rate app mein pehle se dikh jaata hai, isliye booking se pehle hi pata chal jaata hai ki safar kitne mein padega.',
+        ],
+      },
+      {
+        heading: 'Booking Kitni Aasan Hai',
+        paragraphs: [
+          'App kholein, apna pickup aur drop location daalein, vehicle type chunein (auto, bike ya car), aur available drivers ki list se booking confirm karein — bas itna hi.',
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'shaadi-ki-gadi-booking',
+    tag: 'Community',
+    title: 'Shaadi Ki Gaadi Booking: Vivah Aur Function Ke Liye Gaadi Kaise Book Karein',
+    excerpt: 'Baraat ho ya koi bhi function — shaadi ke liye gaadi book karna ab utna mushkil nahi. Poora tarika yahan jaaniye.',
+    metaDescription: 'Shaadi ki gadi booking aur wedding car booking GaonConnect se karein — vivah, baraat ya kisi bhi function ke liye gaadi turant book karein.',
+    keywords: 'shaadi ki gadi booking, wedding car booking, vivah gaadi booking, function ke liye gaadi, baraat gaadi booking',
+    image: '/gaonconnect2.webp',
+    author: 'GaonConnect Team',
+    publishDate: '2026-07-22',
+    readTime: '3 min read',
+    sections: [
+      {
+        heading: 'Shaadi Ke Season Mein Gaadi Milna Kyun Mushkil Ho Jaata Hai',
+        paragraphs: [
+          'Shaadi ke season mein ek hi din mein gaon ke kai ghar mein function hote hain, aur gaadi waale pehle se book ho jaate hain. Aisa mein last-minute gaadi dhoondhna sabse badi pareshani ban jaati hai.',
+        ],
+      },
+      {
+        heading: 'GaonConnect Se Shaadi Ki Gaadi Booking',
+        paragraphs: [
+          'App mein car ya tempo service select karke apni date, time aur location ke hisaab se advance mein hi booking kar sakte hain — taaki function ke din tension na ho.',
+          'Baraat, mehmano ki aana-jaani ya saman le jaana — sabke liye alag-alag vehicle book kiya ja sakta hai, ek hi app se.',
+        ],
+      },
+      {
+        heading: 'Advance Booking Kyun Zaroori Hai',
+        paragraphs: [
+          'Shaadi ke season mein jitni jaldi booking ho, utna hi sahi rate aur pasandida gaadi milne ka chance zyada rehta hai. Isliye function ki date tay hote hi booking kar lena behtar hota hai.',
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'gaonconnect-madhya-pradesh-service-cities',
+    tag: 'Community',
+    title: 'GaonConnect Kin-Kin Shehron Mein Available Hai: Rewa, Satna, Jabalpur Aur Poora MP',
+    excerpt: 'Rewa se lekar Indore tak — jaaniye GaonConnect abhi Madhya Pradesh ke kaunse shehar aur gaon mein service de raha hai.',
+    metaDescription: 'GaonConnect Madhya Pradesh ke Rewa, Satna, Jabalpur, Bhopal, Indore aur 20+ shahar-gaon mein available hai — apne area ki service check karein.',
+    keywords: 'Rewa transport, Satna transport, Jabalpur rural transport, Bhopal rural gaadi, Indore rural transport, MP rural transport, gaonconnect service area',
+    image: '/gaonconenct3.webp',
+    author: 'GaonConnect Team',
+    publishDate: '2026-07-23',
+    readTime: '3 min read',
+    sections: [
+      {
+        heading: 'GaonConnect Ki Shuruaat Madhya Pradesh Se',
+        paragraphs: [
+          'GaonConnect abhi Madhya Pradesh ke 20+ shahar aur unke aas-paas ke gaon mein available hai — Rewa, Mauganj, Satna, Maihar, Sidhi, Singrauli, Jabalpur, Katni, Shahdol, Sagar, Bhopal, Indore, Pithampur aur Dhar jaise ilaake shaamil hain.',
+        ],
+      },
+      {
+        heading: 'Har Shehar Ki Apni Zarurat',
+        paragraphs: [
+          'Rewa aur Satna jaise ilaakon mein kisano ke liye tractor aur JCB booking sabse zyada use hoti hai, jabki Bhopal aur Indore ke aas-paas ke gaon mein sheher tak roz aane-jaane ke liye auto aur car booking zyada chalti hai. Pithampur jaise industrial area mein workers ke liye daily transport ki zarurat rehti hai.',
+        ],
+      },
+      {
+        heading: 'Apna Area Kaise Check Karein',
+        paragraphs: [
+          'App kholte hi location on karne par turant pata chal jaata hai ki aapke aas-paas kaunsi services aur drivers available hain. Agar abhi service nahi hai, to GaonConnect jaldi hi naye ilaakon mein bhi pahunch raha hai.',
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'thresher-harvester-booking-guide',
+    tag: 'Farmers',
+    title: 'Thresher Aur Harvester Booking: Fasal Katai Ke Season Mein Sahi Machine Kaise Chunein',
+    excerpt: 'Fasal katai ka samay aa gaya? Thresher aur harvester mein antar aur sahi machine kaise book karein — poori jaankari.',
+    metaDescription: 'Thresher booking aur harvester booking GaonConnect se karein — fasal katai ke season mein sahi machine chunne ka tarika aur rate ki poori jaankari.',
+    keywords: 'thresher booking, harvester booking, combine harvester rent, fasal katai machine, thresher on rent, harvester on rent',
+    image: '/gaonconenct4.webp',
+    author: 'GaonConnect Team',
+    publishDate: '2026-07-25',
+    readTime: '4 min read',
+    sections: [
+      {
+        heading: 'Thresher Aur Harvester Mein Kya Farq Hai',
+        paragraphs: [
+          'Thresher fasal ko kaate hue anaaj se daana alag karta hai, jabki combine harvester ek hi machine mein katai aur daana alag karne ka kaam ek saath kar deta hai. Chhoti zameen ke liye thresher kaafi hota hai, badi zameen ke liye harvester samay bachata hai.',
+        ],
+      },
+      {
+        heading: 'Sahi Machine Kaise Chunein',
+        paragraphs: [
+          'Agar fasal pehle se katai hui hai aur sirf daana alag karna hai, to thresher book karein. Agar khada fasal ek saath katai aur threshing dono chahiye, to harvester zyada faayde ka rehta hai, khaaskar bade khet ke liye.',
+        ],
+      },
+      {
+        heading: 'Booking Ke Waqt Ye Batayein',
+        paragraphs: [
+          'Fasal ka type (gehun, dhaan, aadi), khet ka area aur kaam ka din — ye teeno cheezein driver ko clearly batayein, isse sahi machine aur estimate dono milte hain.',
+          'Season mein demand zyada hoti hai, isliye jitni jaldi booking ho utna behtar — mandi ka sahi samay bhi nahi chukega.',
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'gaonconnect-vs-ola-uber-rural-india',
+    tag: 'Community',
+    title: 'GaonConnect Vs Ola-Uber: Gaon Ke Liye Kaunsa App Sahi Hai',
+    excerpt: 'Ola-Uber sheher ke liye bane hain. Gaon aur dehat ke liye GaonConnect kyun better option hai — samajhiye antar.',
+    metaDescription: 'GaonConnect vs Ola-Uber — rural India ke liye alternative transport app kaunsa sahi hai, jaaniye gaon aur dehat ki zaroorat ke hisaab se antar.',
+    keywords: 'gaonconnect vs ola, rural alternative to ola uber, village app vs city app, rural ride hailing india, gaon ke liye best app',
+    image: '/gaonconnect5.webp',
+    author: 'GaonConnect Team',
+    publishDate: '2026-07-27',
+    readTime: '4 min read',
+    sections: [
+      {
+        heading: 'Ola-Uber Gaon Mein Kyun Nahi Chalti',
+        paragraphs: [
+          'Ola aur Uber sheher ke dense area ke liye design hue hain, jahan driver density zyada hoti hai. Gaon aur chhote kasbo mein na inke drivers hote hain, na inka model wahan profitable rehta hai — isliye zyadatar gaon mein ye apps kaam hi nahi karti.',
+        ],
+      },
+      {
+        heading: 'GaonConnect Alag Kaise Hai',
+        paragraphs: [
+          'GaonConnect shuruaat se hi rural India ke liye banaya gaya hai — local drivers jo gaon aur aas-paas ke area ko achhi tarah jaante hain, unke through booking milti hai.',
+          'Saath hi, GaonConnect sirf passenger ride tak simit nahi — tractor, JCB, tempo, thresher, harvester jaisi zarurat bhi ek hi app mein milti hai, jo Ola-Uber jaisi city apps mein nahi hoti.',
+        ],
+      },
+      {
+        heading: 'Kis Ke Liye Kaunsa App Sahi Hai',
+        paragraphs: [
+          'Agar aap sheher mein rehte hain to Ola-Uber sahi rahenge. Lekin gaon, dehat ya chhote kasbe mein rehte hain jahan ye apps available hi nahi hoti, wahan GaonConnect hi bharosemand option hai — jahan bhi zarurat ho.',
+        ],
+      },
+    ],
+  },
 ];
 
 export default blogPosts;
