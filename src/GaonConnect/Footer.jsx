@@ -73,8 +73,13 @@ const Footer = () => {
           <div>
             <h4 className="font-semibold text-white mb-3">Services</h4>
             <div className="flex flex-col gap-2">
+              <Link to="/auto-rickshaw-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Auto Rickshaw Booking</Link>
+              <Link to="/bike-taxi-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Bike Taxi Booking</Link>
+              <Link to="/car-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Car Booking</Link>
               <Link to="/tractor-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Tractor Booking</Link>
               <Link to="/jcb-rental" className="text-gray-400 hover:text-orange-400 transition-colors">JCB Rental</Link>
+              <Link to="/wedding-car-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Wedding Car Booking</Link>
+              <Link to="/goods-transport-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Goods Transport / Tempo</Link>
               <Link to="/farm-equipment" className="text-gray-400 hover:text-orange-400 transition-colors">Farm Equipment Rental</Link>
               <Link to="/village-transport" className="text-gray-400 hover:text-orange-400 transition-colors">Village Transport</Link>
               <Link to="/agriculture-logistics" className="text-gray-400 hover:text-orange-400 transition-colors">Agriculture Logistics</Link>

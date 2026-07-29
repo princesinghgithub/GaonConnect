@@ -33,13 +33,13 @@ const blogPosts = [
         heading: 'Booking Se Pehle Ye Cheezein Zaroor Check Karein',
         paragraphs: [
           'Implement (rotavator, cultivator, thresher attachment) jo aapko chahiye wo tractor ke saath available hai ya nahi, ye pehle confirm kar lein.',
-          'Kheत ka area (bigha/acre) aur kaam ka type driver ko clearly batayein, isse fare estimate sahi milta hai aur baad mein confusion nahi hota.',
+          'Khet ka area (bigha/acre) aur kaam ka type driver ko clearly batayein, isse fare estimate sahi milta hai aur baad mein confusion nahi hota.',
         ],
       },
       {
         heading: 'Nishkarsh',
         paragraphs: [
-          'Tractor booking ab फोन कॉल्स aur intezaar ka kaam nahi raha. GaonConnect par ek baar register karke, aap season bhar jab bhi zarurat ho tractor book kar sakte hain — jahan bhi zarurat ho.',
+          'Tractor booking ab phone calls aur intezaar ka kaam nahi raha. GaonConnect par ek baar register karke, aap season bhar jab bhi zarurat ho tractor book kar sakte hain — jahan bhi zarurat ho.',
         ],
       },
     ],

@@ -346,6 +346,11 @@ function App() {
             <Route path="/farm-equipment" element={<ServiceLanding slugKey="farm-equipment" />} />
             <Route path="/village-transport" element={<ServiceLanding slugKey="village-transport" />} />
             <Route path="/agriculture-logistics" element={<ServiceLanding slugKey="agriculture-logistics" />} />
+            <Route path="/auto-rickshaw-booking" element={<ServiceLanding slugKey="auto-rickshaw-booking" />} />
+            <Route path="/bike-taxi-booking" element={<ServiceLanding slugKey="bike-taxi-booking" />} />
+            <Route path="/car-booking" element={<ServiceLanding slugKey="car-booking" />} />
+            <Route path="/wedding-car-booking" element={<ServiceLanding slugKey="wedding-car-booking" />} />
+            <Route path="/goods-transport-booking" element={<ServiceLanding slugKey="goods-transport-booking" />} />
             <Route path="/press" element={<Press />} />
             <Route path="/contact" element={<ContactUs />} />
 

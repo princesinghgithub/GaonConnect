@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Menu, X, Sun, Moon, Languages } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
@@ -64,13 +64,23 @@ const Navbar = ({ onDownloadApp, scrollToSection }) => {
 
         <nav className="hidden lg:flex items-center gap-6">
           {navItems.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => handleNavClick(item)}
-              className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-saffron dark:hover:text-cta transition-colors"
-            >
-              {t(`nav.${item.key}`)}
-            </button>
+            item.path ? (
+              <Link
+                key={item.key}
+                to={item.path}
+                className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-saffron dark:hover:text-cta transition-colors"
+              >
+                {t(`nav.${item.key}`)}
+              </Link>
+            ) : (
+              <button
+                key={item.key}
+                onClick={() => handleNavClick(item)}
+                className="text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-saffron dark:hover:text-cta transition-colors"
+              >
+                {t(`nav.${item.key}`)}
+              </button>
+            )
           ))}
         </nav>
 
@@ -112,13 +122,24 @@ const Navbar = ({ onDownloadApp, scrollToSection }) => {
       {menuOpen && (
         <nav className="lg:hidden flex flex-col gap-1 px-4 pb-4 bg-white dark:bg-gray-900">
           {navItems.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => handleNavClick(item)}
-              className="text-left py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-saffron dark:hover:text-cta transition-colors"
-            >
-              {t(`nav.${item.key}`)}
-            </button>
+            item.path ? (
+              <Link
+                key={item.key}
+                to={item.path}
+                onClick={() => setMenuOpen(false)}
+                className="text-left py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-saffron dark:hover:text-cta transition-colors"
+              >
+                {t(`nav.${item.key}`)}
+              </Link>
+            ) : (
+              <button
+                key={item.key}
+                onClick={() => handleNavClick(item)}
+                className="text-left py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-saffron dark:hover:text-cta transition-colors"
+              >
+                {t(`nav.${item.key}`)}
+              </button>
+            )
           ))}
           <button
             onClick={() => { setMenuOpen(false); onDownloadApp(); }}
