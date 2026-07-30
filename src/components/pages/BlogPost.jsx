@@ -5,14 +5,13 @@ import Footer from '../../GaonConnect/Footer';
 import NotFound from './NotFound';
 import blogPosts, { getBlogPostBySlug } from '../../constants/blogPosts';
 import { trackEvent } from '../../utils/analytics';
+import { openUserApp } from '../../utils/appDownload';
 
 const BlogPost = () => {
   const { slug } = useParams();
   const post = getBlogPostBySlug(slug);
 
-  const handleDownloadApp = () => {
-    alert('🎉 Coming soon! GaonConnect app jald hi Play Store par available hoga.');
-  };
+  const handleDownloadApp = openUserApp;
 
   if (!post) return <NotFound />;
 

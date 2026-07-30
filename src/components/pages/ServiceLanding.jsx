@@ -5,6 +5,7 @@ import Footer from '../../GaonConnect/Footer';
 import NotFound from './NotFound';
 import { getServicePageBySlug } from '../../constants/servicePages';
 import { trackEvent } from '../../utils/analytics';
+import { openUserApp } from '../../utils/appDownload';
 
 // Commercial-intent landing pages (distinct from the informational articles
 // in BlogPost.jsx) — one component driven by servicePages.js, mounted at a
@@ -12,9 +13,7 @@ import { trackEvent } from '../../utils/analytics';
 const ServiceLanding = ({ slugKey }) => {
   const page = getServicePageBySlug(slugKey);
 
-  const handleDownloadApp = () => {
-    alert('🎉 Coming soon! GaonConnect app jald hi Play Store par available hoga.');
-  };
+  const handleDownloadApp = openUserApp;
 
   if (!page) return <NotFound />;
 

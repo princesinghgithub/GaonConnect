@@ -4,13 +4,12 @@ import { useTranslation } from 'react-i18next';
 import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
 import blogPosts from '../../constants/blogPosts';
+import { openUserApp } from '../../utils/appDownload';
 
 const Blog = () => {
   const { t } = useTranslation();
 
-  const handleDownloadApp = () => {
-    alert(`🎉 ${t('download.comingSoon')}\n\n${t('download.promo')}`);
-  };
+  const handleDownloadApp = openUserApp;
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">

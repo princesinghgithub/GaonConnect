@@ -3,13 +3,16 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FaFacebook, FaInstagram, FaLinkedin, FaYoutube } from 'react-icons/fa';
 import { trackEvent } from '../utils/analytics';
+import { openUserApp, openDriverApp } from '../utils/appDownload';
 
 const Footer = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleDownloadApp = () => {
+  const handleDownloadApp = openUserApp;
+
+  const handleAppleDownload = () => {
     alert(`🎉 ${t('download.comingSoon')}\n\n${t('download.promo')}`);
   };
 
@@ -48,12 +51,12 @@ const Footer = () => {
               >
                 <span className="text-lg">▶️</span>
                 <span className="text-left leading-tight">
-                  <span className="block text-[10px] opacity-70">{t('download.comingSoon')}</span>
+                  <span className="block text-[10px] opacity-70">Get it on</span>
                   <span className="block text-xs font-semibold">{t('download.playStore')}</span>
                 </span>
               </button>
               <button
-                onClick={handleDownloadApp}
+                onClick={handleAppleDownload}
                 className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 transition-colors text-white px-3 py-2 rounded-lg"
               >
                 <span className="text-lg">🍎</span>
@@ -67,9 +70,21 @@ const Footer = () => {
 
           <div>
             <h4 className="font-semibold text-white mb-3">{t('footer.driverApp')}</h4>
-            <button onClick={handleBecomeDriver} className="text-gray-400 hover:text-orange-400 transition-colors text-left">
-              🚚 {t('footer.becomeDriver')}
-            </button>
+            <div className="flex flex-col gap-2 items-start">
+              <button
+                onClick={openDriverApp}
+                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 transition-colors text-white px-3 py-2 rounded-lg"
+              >
+                <span className="text-lg">▶️</span>
+                <span className="text-left leading-tight">
+                  <span className="block text-[10px] opacity-70">Get it on</span>
+                  <span className="block text-xs font-semibold">{t('download.playStore')}</span>
+                </span>
+              </button>
+              <button onClick={handleBecomeDriver} className="text-gray-400 hover:text-orange-400 transition-colors text-left">
+                🚚 {t('footer.becomeDriver')}
+              </button>
+            </div>
           </div>
 
           <div>

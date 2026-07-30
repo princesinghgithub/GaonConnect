@@ -3,14 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { Download, Mail } from 'lucide-react';
 import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
+import { openUserApp } from '../../utils/appDownload';
 
 const Press = () => {
   const { t } = useTranslation();
   const facts = t('pressPage.facts', { returnObjects: true });
 
-  const handleDownloadApp = () => {
-    alert(`🎉 ${t('download.comingSoon')}\n\n${t('download.promo')}`);
-  };
+  const handleDownloadApp = openUserApp;
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">

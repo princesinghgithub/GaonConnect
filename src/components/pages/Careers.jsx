@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { TrendingUp, Clock, Users, ChevronLeft, ChevronRight, Mail } from 'lucide-react';
 import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
+import { openUserApp } from '../../utils/appDownload';
 
 const whyWorkIcons = [TrendingUp, Clock, Users];
 const galleryImages = ['/gaonconnect1.png', '/gaonconnect2.png', '/gaonconenct3.png'];
@@ -24,9 +25,7 @@ const Careers = () => {
     testimonials[(testimonialIndex + 1) % testimonials.length],
   ];
 
-  const handleDownloadApp = () => {
-    alert(`🎉 ${t('download.comingSoon')}\n\n${t('download.promo')}`);
-  };
+  const handleDownloadApp = openUserApp;
 
   const nextTestimonial = () => setTestimonialIndex((i) => (i + 1) % testimonials.length);
   const prevTestimonial = () => setTestimonialIndex((i) => (i - 1 + testimonials.length) % testimonials.length);

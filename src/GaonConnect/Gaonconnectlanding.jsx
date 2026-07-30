@@ -9,6 +9,7 @@ import LocationSearchInput from '../tabs/LocationSearchInput';
 import { locationAPI, rideAPI } from '../services/api';
 import { HOURS_OPTIONS } from '../constants/tractorJcbServices';
 import { trackEvent } from '../utils/analytics';
+import { openUserApp, openDriverApp } from '../utils/appDownload';
 
 // Same fare formula CustomerBooking.jsx uses once a real ride is booked —
 // keeping the hero estimate consistent with what the app actually charges.
@@ -151,9 +152,7 @@ const GaonConnectLanding = () => {
     navigate(localStorage.getItem('token') ? '/customer' : '/auth');
   };
 
-  const handleDownloadApp = () => {
-    alert(`🎉 ${t('download.comingSoon')}\n\n${t('download.promo')}`);
-  };
+  const handleDownloadApp = openUserApp;
 
   const handleBecomeDriver = () => {
     trackEvent('become_driver_click', { source: 'landing_page' });
@@ -562,6 +561,52 @@ const GaonConnectLanding = () => {
               <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">{t('about.point3')}</p>
             </div>
           </div>
+
+          {/* Founder */}
+          <div className="mt-16 bg-orange-50 dark:bg-gray-800 rounded-3xl shadow-sm p-8 md:p-10 grid grid-cols-1 md:grid-cols-[auto_1fr] gap-8 items-center text-left">
+            <img
+              src="/gaonconnect_founder.jpg"
+              alt="Prince Patel - Founder & CEO, GaonConnect"
+              loading="lazy"
+              decoding="async"
+              className="w-40 h-40 md:w-48 md:h-48 rounded-2xl object-cover mx-auto md:mx-0 shadow-md"
+            />
+            <div>
+              <h3 className="text-xl md:text-2xl font-bold text-ink dark:text-white mb-1">Prince Patel</h3>
+              <p className="text-saffron dark:text-orange-400 font-semibold mb-4">Founder &amp; CEO, GaonConnect</p>
+              <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+                Prince Patel is the Founder &amp; CEO of GaonConnect. He started GaonConnect with the vision of
+                connecting villages through technology and making transportation more accessible, reliable, and
+                affordable for rural communities across India.
+              </p>
+            </div>
+          </div>
+
+          {/* Team */}
+          <div className="mt-10">
+            <img
+              src="/gaonconnect-team.jpg"
+              alt="The GaonConnect team"
+              loading="lazy"
+              decoding="async"
+              className="w-full rounded-3xl shadow-lg object-cover"
+            />
+            <p className="text-gray-500 dark:text-gray-500 text-sm mt-3 text-center">
+              The GaonConnect team — connecting villages, empowering rural India.
+            </p>
+          </div>
+
+          {/* Milestones - kept in sync with the facts already published on /press */}
+          <div className="mt-10 grid grid-cols-2 gap-6 max-w-md mx-auto">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm text-center">
+              <div className="text-2xl font-bold text-saffron dark:text-orange-400">2025</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Founded</div>
+            </div>
+            <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm text-center">
+              <div className="text-2xl font-bold text-saffron dark:text-orange-400">20+</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Cities/Towns in MP</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -616,7 +661,7 @@ const GaonConnectLanding = () => {
             </button>
 
             <button
-              onClick={handleBecomeDriver}
+              onClick={openDriverApp}
               className="relative flex items-center gap-3 bg-black hover:bg-gray-900 transition-colors rounded-xl px-5 py-3 text-left"
             >
               <img src="/gaonconnect-icon.png" alt="GaonConnect Driver" className="h-10 w-10 shrink-0 rounded-lg" />

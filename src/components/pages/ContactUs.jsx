@@ -4,15 +4,14 @@ import { Phone, Mail, MapPin } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
+import { openUserApp } from '../../utils/appDownload';
 
 const ContactUs = () => {
   const { t } = useTranslation();
   const formRef = useRef(null);
   const [status, setStatus] = useState('idle'); // idle | sending | success | error
 
-  const handleDownloadApp = () => {
-    alert(`🎉 ${t('download.comingSoon')}\n\n${t('download.promo')}`);
-  };
+  const handleDownloadApp = openUserApp;
 
   const handleSubmit = (e) => {
     e.preventDefault();
