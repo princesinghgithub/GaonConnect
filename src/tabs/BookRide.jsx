@@ -8,6 +8,7 @@ import { FaMotorcycle, FaCarSide, FaTractor } from 'react-icons/fa';
 import { MdDirectionsRun } from 'react-icons/md';
 import { GiMineTruck } from 'react-icons/gi';
 import { HOURS_OPTIONS } from '../constants/tractorJcbServices';
+import { trackEvent } from '../utils/analytics';
 
 // ── Fare configs (non-tractor/JCB) ───────────────────────────────────────────
 const FARE_CONFIG = {
@@ -292,6 +293,7 @@ const BookRide = () => {
         if (cancelled) return;
 
         if (response.data.success) {
+          trackEvent('booking_confirmed', { vehicle_type: type, booking_mode: rideData.bookingMode });
           toast.success('Ride book ho gayi! Driver dhundha ja raha hai...');
           navigate(`/ride/${response.data.data.ride._id}`);
         } else {
@@ -366,6 +368,7 @@ const BookRide = () => {
       const response = await rideAPI.createRide(rideData);
 
       if (response.data.success) {
+        trackEvent('booking_confirmed', { vehicle_type: vehicleType, booking_mode: rideData.bookingMode });
         toast.success('Ride book ho gayi! Driver dhundha ja raha hai...');
         navigate(`/ride/${response.data.data.ride._id}`);
       }

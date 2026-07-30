@@ -8,6 +8,7 @@ import Footer from './Footer';
 import LocationSearchInput from '../tabs/LocationSearchInput';
 import { locationAPI, rideAPI } from '../services/api';
 import { HOURS_OPTIONS } from '../constants/tractorJcbServices';
+import { trackEvent } from '../utils/analytics';
 
 // Same fare formula CustomerBooking.jsx uses once a real ride is booked —
 // keeping the hero estimate consistent with what the app actually charges.
@@ -134,6 +135,7 @@ const GaonConnectLanding = () => {
   const handleServiceSelect = (serviceName, basePrice, serviceIndex) => {
     const type = VEHICLE_TYPE_BY_INDEX[serviceIndex] ?? null;
     const isTJ = type === 'tractor' || type === 'jcb';
+    trackEvent('service_selected', { service: serviceName, vehicle_type: type });
     sessionStorage.setItem('selectedService', JSON.stringify({
       service: serviceName,
       price: basePrice,
@@ -154,6 +156,7 @@ const GaonConnectLanding = () => {
   };
 
   const handleBecomeDriver = () => {
+    trackEvent('become_driver_click', { source: 'landing_page' });
     sessionStorage.setItem('registerAsDriver', 'true');
     navigate('/auth');
   };

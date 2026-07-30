@@ -4,6 +4,7 @@ import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
 import NotFound from './NotFound';
 import { getServicePageBySlug } from '../../constants/servicePages';
+import { trackEvent } from '../../utils/analytics';
 
 // Commercial-intent landing pages (distinct from the informational articles
 // in BlogPost.jsx) — one component driven by servicePages.js, mounted at a
@@ -32,6 +33,7 @@ const ServiceLanding = ({ slugKey }) => {
             href="https://wa.me/916260132613"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => trackEvent('whatsapp_click', { source: 'service_page_hero', service: page.slug })}
             className="inline-flex bg-white text-saffron hover:bg-gray-100 px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
           >
             💬 Abhi Book Karein
@@ -114,6 +116,7 @@ const ServiceLanding = ({ slugKey }) => {
             href="https://wa.me/916260132613"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => trackEvent('whatsapp_click', { source: 'service_page_footer_cta', service: page.slug })}
             className="inline-flex bg-saffron hover:bg-cta text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
           >
             💬 WhatsApp Par Booking Karein

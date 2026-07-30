@@ -4,6 +4,7 @@ import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
 import NotFound from './NotFound';
 import blogPosts, { getBlogPostBySlug } from '../../constants/blogPosts';
+import { trackEvent } from '../../utils/analytics';
 
 const BlogPost = () => {
   const { slug } = useParams();
@@ -75,6 +76,7 @@ const BlogPost = () => {
               href="https://wa.me/916260132613"
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => trackEvent('whatsapp_click', { source: 'blog_post_cta', post: post.slug })}
               className="inline-flex bg-saffron hover:bg-cta text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
             >
               💬 WhatsApp par Support Se Baat Karein

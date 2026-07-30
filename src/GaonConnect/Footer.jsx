@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FaFacebook, FaInstagram, FaLinkedin, FaYoutube } from 'react-icons/fa';
+import { trackEvent } from '../utils/analytics';
 
 const Footer = () => {
   const { t } = useTranslation();
@@ -13,6 +14,7 @@ const Footer = () => {
   };
 
   const handleBecomeDriver = () => {
+    trackEvent('become_driver_click', { source: 'footer' });
     sessionStorage.setItem('registerAsDriver', 'true');
     navigate('/auth');
   };
