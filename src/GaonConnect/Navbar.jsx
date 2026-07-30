@@ -57,8 +57,7 @@ const Navbar = ({ onDownloadApp, scrollToSection }) => {
         <div className="flex items-center gap-2 font-bold text-lg">
           <img src="/gaonconnect-icon.png" alt="GaonConnect" className="h-9 w-9" />
           <span>
-            <span className="text-ink dark:text-white">Gaon</span>{' '}
-            <span className="text-saffron dark:text-orange-300">Connect</span>
+            <span className="text-ink dark:text-white">Gaon</span><span className="text-saffron dark:text-orange-300">Connect</span>
           </span>
         </div>
 
