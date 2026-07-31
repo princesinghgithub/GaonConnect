@@ -21,7 +21,13 @@ exports.razorpayWebhook = async (req, res) => {
       .update(req.body) // raw Buffer — express.raw() se aata hai
       .digest('hex');
 
-    if (!signature || expectedSignature !== signature) {
+    const expectedBuf = Buffer.from(expectedSignature, 'utf8');
+    const receivedBuf = signature ? Buffer.from(String(signature), 'utf8') : null;
+    const isValid = !!receivedBuf
+      && receivedBuf.length === expectedBuf.length
+      && crypto.timingSafeEqual(expectedBuf, receivedBuf);
+
+    if (!isValid) {
       console.error('Razorpay webhook: invalid signature');
       return res.status(400).json({ success: false, message: 'Invalid signature' });
     }

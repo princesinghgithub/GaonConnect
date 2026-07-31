@@ -3431,7 +3431,7 @@ const getAllPayments = async (req, res) => {
 const getPaymentStats = async (req, res) => {
   try {
     const setting = await Setting.findOne();
-    const commissionPct = setting?.commission?.percentage ?? 15;
+    const commissionPct = setting?.commission?.percentage ?? 0;
 
     const stats = await Ride.aggregate([
       { $match: { status: 'completed' } },
@@ -3555,7 +3555,7 @@ const getCommissionReport = async (req, res) => {
     const { from_date, to_date } = req.query;
 
     const setting = await Setting.findOne();
-    const commissionPct = setting?.commission?.percentage ?? 15;
+    const commissionPct = setting?.commission?.percentage ?? 0;
 
     const query = { status: 'completed' };
     if (from_date || to_date) {

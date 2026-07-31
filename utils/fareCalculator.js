@@ -24,7 +24,7 @@ const DEFAULT_SURGE = {
 
 const DEFAULT_WAITING = { enabled: true, freeMinutes: 3, perMinuteRate: 2, maxCharge: 50 };
 const DEFAULT_BOOKING_FEE = { enabled: false, amount: 5 };
-const DEFAULT_COMMISSION   = 15; // %
+const DEFAULT_COMMISSION   = 0; // % (abhi 0 — no commission)
 
 // ─── Haversine Distance ───────────────────────────────────────────────────────
 exports.calculateDistance = (lat1, lon1, lat2, lon2) => {

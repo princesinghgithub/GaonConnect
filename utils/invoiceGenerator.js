@@ -163,7 +163,7 @@ const sendInvoiceEmail = async (toEmail, customerName, html, invoiceNo) => {
 const buildInvoiceHTML = async (ride) => {
   try {
     const invoiceNo    = generateInvoiceNo(ride._id);
-    const commission   = Math.round(ride.fare * 0.15);
+    const commission   = Math.round(ride.fare * 0); // abhi 0% commission
     const driverEarning = ride.fare - commission;
 
     const dateStr = new Date(ride.completedAt || ride.updatedAt).toLocaleString('hi-IN', {
