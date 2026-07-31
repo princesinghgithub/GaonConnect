@@ -113,6 +113,7 @@ router.get('/fare-estimate',
         surgeType:    data.surgeType,
         breakdown:    data.breakdown,
         driverEarnings: data.driverEarnings,
+        rateCard:     data.rateCard,
       }));
 
       return res.json({

@@ -29,7 +29,7 @@ const SettingSchema = new mongoose.Schema({
 
   // ─── Commission ─────────────────────────────────────────────────────────────
   commission: {
-    percentage: { type: Number, default: 15 },  // % platform lega
+    percentage: { type: Number, default: 0 },  // % platform lega (abhi 0 — no commission)
     type:       { type: String, enum: ['percentage', 'fixed'], default: 'percentage' },
   },
 

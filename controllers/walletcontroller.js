@@ -3,6 +3,8 @@ const Transaction = require('../models/Transaction');
 const Ride = require('../models/Ride');
 const User = require('../models/User');
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 /**
  * GET WALLET BALANCE
  * Customers only have a flat balance (User.wallet) — no earnings/withdrawal
@@ -50,12 +52,12 @@ exports.getWalletBalance = async (req, res) => {
     });
 
     const todayEarnings = todayRides.reduce((sum, ride) => {
-      const commission = ride.fare * 0.15;
+      const commission = ride.fare * 0; // abhi 0% commission
       return sum + (ride.fare - commission);
     }, 0);
 
     const weekEarnings = weekRides.reduce((sum, ride) => {
-      const commission = ride.fare * 0.15;
+      const commission = ride.fare * 0; // abhi 0% commission
       return sum + (ride.fare - commission);
     }, 0);
 
@@ -76,7 +78,7 @@ exports.getWalletBalance = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error fetching wallet balance',
-      error: error.message
+      ...(isDev && { error: error.message }),
     });
   }
 };
@@ -139,7 +141,7 @@ exports.getTransactionHistory = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error fetching transactions',
-      error: error.message
+      ...(isDev && { error: error.message }),
     });
   }
 };
@@ -237,7 +239,7 @@ exports.requestWithdrawal = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error processing withdrawal',
-      error: error.message
+      ...(isDev && { error: error.message }),
     });
   }
 };
@@ -281,7 +283,7 @@ exports.getEarningsReport = async (req, res) => {
     });
 
     const totalEarnings = rides.reduce((sum, ride) => sum + ride.fare, 0);
-    const totalCommission = totalEarnings * 0.15;
+    const totalCommission = totalEarnings * 0; // abhi 0% commission
     const netEarnings = totalEarnings - totalCommission;
 
     const avgFare = rides.length > 0 ? totalEarnings / rides.length : 0;
@@ -315,7 +317,7 @@ exports.getEarningsReport = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error fetching earnings report',
-      error: error.message
+      ...(isDev && { error: error.message }),
     });
   }
 };

@@ -519,22 +519,41 @@ exports.updateRideStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: `${ride.status} → ${status} allowed nahi` });
     }
 
-    ride.status = status;
-    if (status === 'arrived')   ride.arrivedAt    = new Date();
-    if (status === 'started')   ride.startedAt    = new Date();
-    if (status === 'working')   ride.workStartedAt = new Date();
+    // Atomic transition — filter includes the status we just read, so agar
+    // koi doosri (parallel/retry) request pehle hi flip kar chuki ho to
+    // yahan match nahi hoga aur hum double-processing (jaise double wallet
+    // credit) se bach jaate hain.
+    const updateFields = { status };
+    if (status === 'arrived') updateFields.arrivedAt    = new Date();
+    if (status === 'started') updateFields.startedAt    = new Date();
+    if (status === 'working') updateFields.workStartedAt = new Date();
     if (status === 'completed') {
-      ride.completedAt = new Date();
-      // For hourly bookings — compute actualHours from workStartedAt
+      updateFields.completedAt = new Date();
       if (ride.workStartedAt) {
-        ride.workEndedAt  = ride.completedAt;
-        ride.actualHours  = parseFloat(
-          ((ride.completedAt - ride.workStartedAt) / 3_600_000).toFixed(2)
+        updateFields.workEndedAt = updateFields.completedAt;
+        updateFields.actualHours = parseFloat(
+          ((updateFields.completedAt - ride.workStartedAt) / 3_600_000).toFixed(2)
         );
       }
     }
 
-    await ride.save();
+    const previousStatus = ride.status;
+    const updatedRide = await Ride.findOneAndUpdate(
+      { _id: ride._id, status: previousStatus },
+      { $set: updateFields },
+      { new: true },
+    ).populate('customer', 'name phone');
+
+    if (!updatedRide) {
+      return res.status(409).json({ success: false, message: 'Ride status already updated by another request' });
+    }
+    ride.status       = updatedRide.status;
+    ride.arrivedAt     = updatedRide.arrivedAt;
+    ride.startedAt     = updatedRide.startedAt;
+    ride.workStartedAt = updatedRide.workStartedAt;
+    ride.completedAt   = updatedRide.completedAt;
+    ride.workEndedAt   = updatedRide.workEndedAt;
+    ride.actualHours   = updatedRide.actualHours;
 
     // Socket
     const io = getIO();
@@ -572,16 +591,28 @@ exports.updateRideStatus = async (req, res) => {
       });
 
       // Driver earnings update
-      const commission    = Math.round(ride.fare * 0.15);
+      const commission    = Math.round(ride.fare * 0); // abhi 0% commission
       const driverEarning = ride.fare - commission;
 
-      provider.stats.completedTrips  += 1;
-      provider.stats.totalTrips      += 1;
-      provider.stats.totalEarnings   += driverEarning;
-      provider.stats.todayEarnings   += driverEarning;
-      provider.wallet.balance        += driverEarning;
-      provider.status = 'available';
-      await provider.save();
+      // Atomic $inc — do parallel ride-completions (alag rides) ek hi provider
+      // ke wallet ko simultaneously credit karein to bhi lost update na ho.
+      const updatedProvider = await Provider.findByIdAndUpdate(
+        provider._id,
+        {
+          $inc: {
+            'stats.completedTrips': 1,
+            'stats.totalTrips':     1,
+            'stats.totalEarnings':  driverEarning,
+            'stats.todayEarnings':  driverEarning,
+            'wallet.balance':       driverEarning,
+          },
+          $set: { status: 'available' },
+        },
+        { new: true },
+      );
+      provider.stats  = updatedProvider.stats;
+      provider.wallet = updatedProvider.wallet;
+      provider.status = updatedProvider.status;
 
       // Wallet screen ki "Recent Transactions" ke liye ledger entry
       Transaction.create({
@@ -612,9 +643,10 @@ exports.updateRideStatus = async (req, res) => {
 
     if (status === 'cancelled') {
       if (ride.provider) {
-        provider.stats.cancelledTrips += 1;
-        provider.status = 'available';
-        await provider.save();
+        await Provider.findByIdAndUpdate(provider._id, {
+          $inc: { 'stats.cancelledTrips': 1 },
+          $set: { status: 'available' },
+        });
       }
       // Customer ko cancel notification
       if (customerFcm) {
@@ -834,7 +866,7 @@ exports.getSearchingRides = async (req, res) => {
     const rides = await Ride.find({ status: 'searching', provider: null }).sort({ createdAt: -1 });
     return res.status(200).json({ success: true, data: rides });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: 'Rides fetch karne mein error', ...(isDev && { error: err.message }) });
   }
 };
 
@@ -860,7 +892,7 @@ exports.getScheduledRidesDriver = async (req, res) => {
 
     return res.status(200).json({ success: true, data: rides });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: 'Scheduled rides fetch karne mein error', ...(isDev && { error: err.message }) });
   }
 };
 
@@ -1005,6 +1037,6 @@ exports.getPaymentQrStatus = async (req, res) => {
     });
   } catch (err) {
     console.error('getPaymentQrStatus Error:', err);
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: 'Payment status check karne mein error', ...(isDev && { error: err.message }) });
   }
 };
