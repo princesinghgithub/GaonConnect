@@ -11,6 +11,8 @@ const { getIO }                     = require('../socket');
 const { notify }                    = require('../utils/notifications');
 const { applyPromoToRide }          = require('./promoController');
 const { buildInvoiceHTML, sendInvoice } = require('../utils/invoiceGenerator');
+const DISPATCH_RADIUS_STAGES = require('../config/dispatchRadiusConfig');
+const MAX_TRIP_DISTANCE_KM   = require('../config/maxTripDistanceConfig');
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -53,16 +55,20 @@ const notifyCustomerInApp = async (customerId, { title, message, type = 'info', 
 // hain, na mile/accept na ho to dheere-dheere daayra badhate jaate hain (8km →
 // 15km → phir bilkul unlimited). Har stage 30s ka mauka deta hai — poori tarah
 // khulne mein worst-case ~90s lagte hain, uske baad jab tak koi accept na kare.
-const DISPATCH_STAGES_M       = [3000, 8000, 15000, null]; // meters; null = no distance limit
 const DISPATCH_STAGE_DELAY_MS = 30 * 1000;
+const DISPATCH_STAGE_COUNT    = DISPATCH_RADIUS_STAGES.auto.length; // sab vehicle types ka stage-count same hai
+
+const getRadiusStages = (vehicleType) => DISPATCH_RADIUS_STAGES[vehicleType] || DISPATCH_RADIUS_STAGES.auto;
 
 // Ek stage ke liye matching + abhi-tak-notify-na-hue drivers dhoondo aur unhe
 // notify karo. Sirf NAYE drivers ko bhejte hain — jinko pichhle wave mein
 // already bheja ja chuka hai unko dobara spam nahi karte (unke paas already
 // apni 30s wali request timer chal rahi hai driver-app ki taraf).
-const dispatchRideStage = async (rideId, radiusMeters) => {
+const dispatchRideStage = async (rideId, stageIndex) => {
   const ride = await Ride.findById(rideId);
   if (!ride || ride.status !== 'searching') return 0; // already accepted/cancelled — chain yahin ruk jaaye
+
+  const radiusMeters = getRadiusStages(ride.vehicleType)[stageIndex];
 
   const matchingVehicles = await Vehicle.find({ type: ride.vehicleType, isVerified: true, isActive: true }).select('_id');
   const matchingVehicleIds = matchingVehicles.map((v) => v._id);
@@ -161,7 +167,7 @@ const dispatchRideStage = async (rideId, radiusMeters) => {
 // document pe .save() karne wale risk (required-field validation fail ho
 // sakti hai) se bhi bacha jaata hai.
 const markNextDispatch = async (rideId, stageIndex) => {
-  const nextDispatchAt = stageIndex + 1 < DISPATCH_STAGES_M.length
+  const nextDispatchAt = stageIndex + 1 < DISPATCH_STAGE_COUNT
     ? new Date(Date.now() + DISPATCH_STAGE_DELAY_MS)
     : null; // last stage ho chuka — ab aur koi wave due nahi
   await Ride.findOneAndUpdate(
@@ -193,9 +199,9 @@ exports.dispatchDueRides = async () => {
 
     for (const ride of due) {
       const nextIndex = ride.dispatchStageIndex + 1;
-      if (nextIndex >= DISPATCH_STAGES_M.length) continue;
+      if (nextIndex >= DISPATCH_STAGE_COUNT) continue;
       try {
-        await dispatchRideStage(ride._id, DISPATCH_STAGES_M[nextIndex]);
+        await dispatchRideStage(ride._id, nextIndex);
         await markNextDispatch(ride._id, nextIndex);
       } catch (err) {
         console.error('dispatchDueRides error for ride', ride._id, ':', err.message);
@@ -235,6 +241,17 @@ exports.createRide = async (req, res) => {
     const otp          = crypto.randomInt(1000, 9999).toString();
     const finalDist    = typeof distance === 'object' ? distance.value : (distance || 0);
     const finalDur     = estimatedDuration || 30;
+
+    // Trip (pickup→drop) distance cap — vehicle type ke hisaab se. Dispatch
+    // radius (upar DISPATCH_RADIUS_STAGES) alag cheez hai — wo driver-to-pickup
+    // distance control karta hai, ye actual ride ki lambai control karta hai.
+    const maxTripKm = MAX_TRIP_DISTANCE_KM[vehicleType] ?? MAX_TRIP_DISTANCE_KM.auto;
+    if (finalDist > maxTripKm) {
+      return res.status(400).json({
+        success: false,
+        message: `Ye trip (${finalDist.toFixed(1)} km) ${vehicleType} ke liye allowed maximum (${maxTripKm} km) se zyada hai`,
+      });
+    }
 
     // Fare — client jo bhi bheje usse IGNORE karo, hamesha server-side calculate karo.
     // (client-supplied fare/estimatedFare trust karna price tampering allow karta tha)
@@ -305,7 +322,7 @@ exports.createRide = async (req, res) => {
     // Instant ride — pehla (najdeek 3km) wave turant, baaki waves progressively
     // cron ke through chalenge (dekho dispatchDueRides + jobs/scheduledRideJob.js) —
     // in-memory timer nahi, isliye server restart hone par bhi wave-chain zinda rehti hai.
-    const firstWaveCount = await dispatchRideStage(ride._id, DISPATCH_STAGES_M[0]);
+    const firstWaveCount = await dispatchRideStage(ride._id, 0);
     await markNextDispatch(ride._id, 0);
 
     return res.status(201).json({
