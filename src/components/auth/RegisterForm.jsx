@@ -357,7 +357,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
       } else if (role === "provider") {
         navigate("/driver");
       } else if (role === "admin") {
-        navigate("/admin");
+        navigate("/"); // admin dashboard moved to gaonConnect_adminDashbord
       } else {
         navigate("/");
       }

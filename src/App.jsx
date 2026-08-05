@@ -297,15 +297,18 @@ function App() {
               }
             />
 
-            {/* ADMIN */}
-            <Route
+            {/* ADMIN — disabled here, this was a duplicate of the dedicated
+                admin dashboard (gaonConnect_adminDashbord repo). Keeping both
+                live let admins edit the same pricing/settings data from two
+                separate UIs that could drift out of sync. */}
+            {/* <Route
               path="/admin"
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <AdminDashboard />
                 </ProtectedRoute>
               }
-            />
+            /> */}
 
             {/* BOOK RIDE - Protected route after auth */}
             <Route

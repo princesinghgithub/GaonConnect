@@ -41,7 +41,9 @@ export const AuthProvider = ({ children }) => {
         navigate('/driver', { replace: true });
         break;
       case 'admin':
-        navigate('/admin', { replace: true });
+        // Admin dashboard now lives in the separate gaonConnect_adminDashbord
+        // app, not here — send admins to the homepage instead of a 404.
+        navigate('/', { replace: true });
         break;
       default:
         navigate('/', { replace: true });

@@ -239,7 +239,7 @@ const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
       const role = data.user.role;
       if (role === 'customer') navigate('/customer');
       else if (role === 'provider') navigate('/driver');
-      else if (role === 'admin') navigate('/admin');
+      else if (role === 'admin') navigate('/'); // admin dashboard moved to gaonConnect_adminDashbord
       else navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid OTP');
