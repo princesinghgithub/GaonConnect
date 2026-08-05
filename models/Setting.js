@@ -7,7 +7,24 @@ const vehicleRateSchema = new mongoose.Schema({
   perKmRate:   { type: Number, required: true },
   minimumFare: { type: Number, required: true },
   isActive:    { type: Boolean, default: true  },
+  label:       { type: String, default: '' },
+  icon:        { type: String, default: '' },
 }, { _id: false });
+
+// Seed defaults for the original 9 vehicle types — vehicleRates/hourlyRates
+// are Maps now (admin can add/delete keys from the dashboard), these are
+// just the starting values for a fresh Setting document.
+const DEFAULT_VEHICLE_RATES = {
+  bike:      { baseFare: 20,  perKmRate: 8,  minimumFare: 25,   label: 'Bike',      icon: '🏍️' },
+  auto:      { baseFare: 25,  perKmRate: 12, minimumFare: 30,   label: 'Auto',      icon: '🛺' },
+  car:       { baseFare: 50,  perKmRate: 15, minimumFare: 70,   label: 'Car',       icon: '🚗' },
+  tractor:   { baseFare: 100, perKmRate: 25, minimumFare: 150,  label: 'Tractor',   icon: '🚜' },
+  tempo:     { baseFare: 80,  perKmRate: 20, minimumFare: 120,  label: 'Tempo',     icon: '🚐' },
+  truck:     { baseFare: 150, perKmRate: 30, minimumFare: 200,  label: 'Truck',     icon: '🚛' },
+  jcb:       { baseFare: 200, perKmRate: 40, minimumFare: 300,  label: 'JCB',       icon: '🚧' },
+  ambulance: { baseFare: 100, perKmRate: 18, minimumFare: 150,  label: 'Ambulance', icon: '🚑' },
+  wedding:   { baseFare: 500, perKmRate: 35, minimumFare: 1500, label: 'Wedding',   icon: '💐' },
+};
 
 // ─── Tractor/JCB Hourly (or per-km) Service Rates ─────────────────────────────
 const hourlySubServiceSchema = new mongoose.Schema({
@@ -34,22 +51,24 @@ const SettingSchema = new mongoose.Schema({
   },
 
   // ─── Vehicle-wise Base Rates ─────────────────────────────────────────────────
+  // Map, not fixed keys — admin dashboard can add/delete vehicle types at
+  // runtime (POST/DELETE /admin/vehicle-types) without a schema change.
+  // Stored BSON shape ({bike: {...}, auto: {...}}) is identical to the old
+  // fixed-key subdocument, so existing documents load with no migration.
   vehicleRates: {
-    bike:    { type: vehicleRateSchema, default: { baseFare: 20,  perKmRate: 8,  minimumFare: 25  } },
-    auto:    { type: vehicleRateSchema, default: { baseFare: 25,  perKmRate: 12, minimumFare: 30  } },
-    car:     { type: vehicleRateSchema, default: { baseFare: 50,  perKmRate: 15, minimumFare: 70  } },
-    tractor: { type: vehicleRateSchema, default: { baseFare: 100, perKmRate: 25, minimumFare: 150 } },
-    tempo:   { type: vehicleRateSchema, default: { baseFare: 80,  perKmRate: 20, minimumFare: 120 } },
-    truck:   { type: vehicleRateSchema, default: { baseFare: 150, perKmRate: 30, minimumFare: 200 } },
-    jcb:     { type: vehicleRateSchema, default: { baseFare: 200, perKmRate: 40, minimumFare: 300 } },
-    ambulance: { type: vehicleRateSchema, default: { baseFare: 100, perKmRate: 18, minimumFare: 150 } },
-    wedding:   { type: vehicleRateSchema, default: { baseFare: 500, perKmRate: 35, minimumFare: 1500 } },
+    type: Map,
+    of: vehicleRateSchema,
+    default: () => new Map(Object.entries(DEFAULT_VEHICLE_RATES)),
   },
 
-  // ─── Tractor/JCB Service Rates (admin-editable, Kaam ka Prakar → Service) ────
+  // ─── Hourly Service Rates (admin-editable, Kaam ka Prakar → Service) ─────────
+  // Map keyed by vehicleType — only types that support hourly billing
+  // (tractor/jcb today) have an entry; a type with no key here is
+  // distance-only. New types get an entry via createVehicleType.
   hourlyRates: {
-    tractor: { type: [hourlyCategorySchema], default: () => HOURLY_RATE_DEFAULTS.tractor },
-    jcb:     { type: [hourlyCategorySchema], default: () => HOURLY_RATE_DEFAULTS.jcb     },
+    type: Map,
+    of: [hourlyCategorySchema],
+    default: () => new Map(Object.entries(HOURLY_RATE_DEFAULTS)),
   },
 
   // ─── Surge Pricing ───────────────────────────────────────────────────────────

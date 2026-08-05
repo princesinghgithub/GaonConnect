@@ -199,7 +199,8 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
 
 // ─── All vehicles ka estimate ek saath ───────────────────────────────────────
 exports.getAllFareEstimates = (distance, options = {}) => {
-  const vehicles = ['bike', 'auto', 'car', 'tractor', 'tempo', 'truck', 'jcb'];
+  const rates    = options.settings?.vehicleRates || DEFAULT_RATES;
+  const vehicles = Object.keys(rates);
   const result   = {};
   vehicles.forEach((v) => {
     result[v] = exports.getFareBreakdown(distance, v, options);

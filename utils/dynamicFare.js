@@ -63,6 +63,23 @@ const getDynamicHourlyFare = async (vehicleType, category, service, hours, dista
   return calculateHourlyFare(vehicleType, category, service, hours, distance, settings?.hourlyRates);
 };
 
+// ─── Bookable vehicle-type catalog (apps ke liye — icon, label, hourly support) ──
+const getDynamicVehicleTypes = async () => {
+  const settings     = await getSettings();
+  const vehicleRates = settings?.vehicleRates || {};
+  const hourlyRates   = settings?.hourlyRates  || {};
+
+  return Object.entries(vehicleRates)
+    .filter(([, r]) => r.isActive !== false)
+    .map(([id, r]) => ({
+      id,
+      label: r.label || id,
+      icon:  r.icon || '',
+      pricingType: 'distance',
+      supportsHourly: Array.isArray(hourlyRates[id]) && hourlyRates[id].length > 0,
+    }));
+};
+
 // ─── Current surge status (App mein dikhao) ───────────────────────────────────
 const getCurrentSurgeInfo = async () => {
   const settings = await getSettings();
@@ -108,4 +125,5 @@ module.exports = {
   getCurrentSurgeInfo,
   getDynamicServices,
   getDynamicHourlyFare,
+  getDynamicVehicleTypes,
 };

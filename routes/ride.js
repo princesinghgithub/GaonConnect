@@ -3,7 +3,7 @@ const router  = express.Router();
 const { protect }  = require('../middleware/auth');
 const { validate, schemas } = require('../middleware/validate');
 const { calculateDistance, calculateDuration } = require('../utils/fareCalculator');
-const { getAllDynamicFares, getDynamicFare, getCurrentSurgeInfo, getDynamicServices } = require('../utils/dynamicFare');
+const { getAllDynamicFares, getDynamicFare, getCurrentSurgeInfo, getDynamicServices, getDynamicVehicleTypes } = require('../utils/dynamicFare');
 
 const {
   createRide,
@@ -60,6 +60,18 @@ router.get('/services/:vehicleType', async (req, res) => {
     const services = await getDynamicServices(req.params.vehicleType);
     if (!services) return res.status(404).json({ success: false, message: 'Vehicle not found' });
     return res.json({ success: true, data: services });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ─── Vehicle-type catalog (icon/label/hourly-support) ────────────────────────
+// Public rakha hai — landing page ka pricing preview aur booking screens dono
+// isse fetch kar sakte hain (naya type admin add kare toh yahin se aa jaayega).
+router.get('/vehicle-types', async (req, res) => {
+  try {
+    const types = await getDynamicVehicleTypes();
+    return res.json({ success: true, data: types });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

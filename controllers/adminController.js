@@ -3927,18 +3927,20 @@ const updateHourlyRate = async (req, res) => {
   try {
     const { vehicleType, categoryId, serviceId, rate, minimumHours, label } = req.body;
 
-    if (!['tractor', 'jcb'].includes(vehicleType)) {
-      return res.status(400).json({ success: false, message: 'vehicleType tractor ya jcb hona chahiye' });
+    let settings = await Setting.findOne();
+    if (!settings) settings = await Setting.create({});
+
+    // hourlyRates is a Map now — dynamic keys, use .has()/.get() not bracket access
+    if (!settings.hourlyRates.has(vehicleType)) {
+      return res.status(400).json({ success: false, message: 'Is vehicle type ke liye hourly rates configured nahi hain' });
     }
     if (rate === undefined || rate === null || Number(rate) < 0) {
       return res.status(400).json({ success: false, message: 'Valid rate dena zaroori hai' });
     }
 
-    let settings = await Setting.findOne();
-    if (!settings) settings = await Setting.create({});
-
-    const category = settings.hourlyRates?.[vehicleType]?.find((c) => c.id === categoryId);
-    const service   = category?.sub?.find((s) => s.id === serviceId);
+    const categories = settings.hourlyRates.get(vehicleType);
+    const category    = categories?.find((c) => c.id === categoryId);
+    const service      = category?.sub?.find((s) => s.id === serviceId);
 
     if (!category || !service) {
       return res.status(404).json({ success: false, message: 'Service ya category nahi mili' });
@@ -3948,15 +3950,125 @@ const updateHourlyRate = async (req, res) => {
     if (minimumHours !== undefined) service.minimumHours = Number(minimumHours);
     if (label) service.label = label;
 
-    settings.markModified(`hourlyRates.${vehicleType}`);
+    // Mutating an array nested inside a Map value in place doesn't always
+    // get picked up by Mongoose's dirty-tracking — mark the whole map dirty.
+    settings.markModified('hourlyRates');
     await settings.save();
 
     // Cache invalidate â€” app mein fresh rates aaye
     await invalidateSettingsCache();
 
-    res.json({ success: true, message: 'Rate update ho gaya! ðŸŽ‰', data: settings.hourlyRates[vehicleType] });
+    res.json({ success: true, message: 'Rate update ho gaya! ðŸŽ‰', data: settings.hourlyRates.get(vehicleType) });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Hourly rate update error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+  }
+};
+
+// GET /api/admin/vehicle-types
+// Puri vehicle-type catalog — pricing table admin dashboard isi se banata hai
+const getVehicleTypes = async (req, res) => {
+  try {
+    let settings = await Setting.findOne().lean();
+    if (!settings) {
+      settings = await Setting.create({});
+      settings = settings.toObject();
+    }
+
+    const vehicleRates = settings.vehicleRates || {};
+    const hourlyRates   = settings.hourlyRates  || {};
+
+    const types = Object.entries(vehicleRates).map(([id, r]) => ({
+      id,
+      label:        r.label || id,
+      icon:         r.icon || '',
+      baseFare:     r.baseFare,
+      perKmRate:    r.perKmRate,
+      minimumFare:  r.minimumFare,
+      isActive:     r.isActive !== false,
+      supportsHourly: Array.isArray(hourlyRates[id]) && hourlyRates[id].length > 0,
+    }));
+
+    res.json({ success: true, data: types });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Vehicle types fetch error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+  }
+};
+
+// POST /api/admin/vehicle-types
+// Body: { id: 'pickup', label: 'Pickup Truck', icon: '', baseFare, perKmRate, minimumFare, hourlyCategories? }
+const createVehicleType = async (req, res) => {
+  try {
+    const { id, label, icon = '', baseFare, perKmRate, minimumFare, hourlyCategories } = req.body;
+
+    if (!id || !/^[a-z0-9_]+$/.test(id)) {
+      return res.status(400).json({ success: false, message: 'id sirf lowercase letters, numbers, underscore mein dena hai (jaise "pickup")' });
+    }
+    if (!label) {
+      return res.status(400).json({ success: false, message: 'Label dena zaroori hai' });
+    }
+    if ([baseFare, perKmRate, minimumFare].some((v) => v === undefined || v === null || Number(v) < 0)) {
+      return res.status(400).json({ success: false, message: 'Valid baseFare, perKmRate, minimumFare dena zaroori hai' });
+    }
+
+    let settings = await Setting.findOne();
+    if (!settings) settings = await Setting.create({});
+
+    if (settings.vehicleRates.has(id)) {
+      return res.status(409).json({ success: false, message: `"${id}" vehicle type pehle se maujood hai` });
+    }
+
+    settings.vehicleRates.set(id, {
+      baseFare:    Number(baseFare),
+      perKmRate:   Number(perKmRate),
+      minimumFare: Number(minimumFare),
+      isActive:    true,
+      label,
+      icon,
+    });
+
+    if (Array.isArray(hourlyCategories) && hourlyCategories.length > 0) {
+      settings.hourlyRates.set(id, hourlyCategories);
+    }
+
+    settings.markModified('vehicleRates');
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    res.status(201).json({ success: true, message: 'Vehicle type add ho gaya! ðŸŽ‰', data: { id, label, icon, baseFare, perKmRate, minimumFare } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Vehicle type create error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+  }
+};
+
+// DELETE /api/admin/vehicle-types/:id
+const deleteVehicleType = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let settings = await Setting.findOne();
+    if (!settings || !settings.vehicleRates.has(id)) {
+      return res.status(404).json({ success: false, message: 'Vehicle type nahi mila' });
+    }
+
+    // Registered vehicles use this type raw (no FK to Setting) — deleting the
+    // catalog entry out from under them would silently fall back to 'auto'
+    // pricing for their rides. Block until they're reassigned.
+    const inUse = await Vehicle.exists({ type: id });
+    if (inUse) {
+      return res.status(400).json({ success: false, message: 'Is type ki vehicles registered hain, pehle unhe reassign karo' });
+    }
+
+    settings.vehicleRates.delete(id);
+    settings.hourlyRates.delete(id);
+    settings.markModified('vehicleRates');
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    res.json({ success: true, message: 'Vehicle type delete ho gaya' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Vehicle type delete error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
 };
 
@@ -4600,6 +4712,9 @@ module.exports = {
   updatePricing,
   getHourlyRates,
   updateHourlyRate,
+  getVehicleTypes,
+  createVehicleType,
+  deleteVehicleType,
   getSystemConfig,
   getAnalytics,
   exportReport,

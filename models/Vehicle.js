@@ -26,10 +26,14 @@ const VehicleSchema = new mongoose.Schema({
     index: true
   },
 
+  // Vehicle types are admin-managed now (see Setting.vehicleRates) rather
+  // than a fixed enum — fareCalculator falls back to 'auto' pricing for any
+  // unrecognized type, so this stays a free string.
   type: {
     type: String,
     required: true,
-    enum: ['auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb', 'ambulance', 'wedding']
+    trim: true,
+    lowercase: true,
   },
 
   number: {

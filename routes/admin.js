@@ -109,6 +109,9 @@ router.put('/settings', adminController.updateSettings);
 router.put('/pricing', adminController.updatePricing);
 router.get('/hourly-rates', adminController.getHourlyRates);
 router.put('/hourly-rates', adminController.updateHourlyRate);
+router.get('/vehicle-types', adminController.getVehicleTypes);
+router.post('/vehicle-types', adminController.createVehicleType);
+router.delete('/vehicle-types/:id', adminController.deleteVehicleType);
 
 // ===== REPORTS & ANALYTICS =====
 router.get('/analytics', adminController.getAnalytics);
