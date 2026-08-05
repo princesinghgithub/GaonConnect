@@ -551,6 +551,19 @@ exports.updateRideStatus = async (req, res) => {
         updateFields.actualHours = parseFloat(
           ((updateFields.completedAt - ride.workStartedAt) / 3_600_000).toFixed(2)
         );
+
+        // Hourly (tractor/JCB) booking — bill actual worked time, not the
+        // original estimate. calculateHourlyFare applies the service's
+        // minimumHours floor, so kaam jaldi khatam ho jaaye to bhi minimum
+        // charge lagta hai, lekin estimate se kam kaam hua to poora estimate
+        // charge nahi hota — sirf actual (ya minimum, jo bhi zyada ho).
+        if (ride.bookingMode === 'hourly' && ride.serviceCategory && ride.serviceType) {
+          const recalculated = await getDynamicHourlyFare(
+            ride.vehicleType, ride.serviceCategory, ride.serviceType,
+            updateFields.actualHours, ride.distance,
+          );
+          if (recalculated.fare) updateFields.fare = recalculated.fare;
+        }
       }
     }
 
@@ -571,6 +584,7 @@ exports.updateRideStatus = async (req, res) => {
     ride.completedAt   = updatedRide.completedAt;
     ride.workEndedAt   = updatedRide.workEndedAt;
     ride.actualHours   = updatedRide.actualHours;
+    ride.fare          = updatedRide.fare;
 
     // Socket
     const io = getIO();

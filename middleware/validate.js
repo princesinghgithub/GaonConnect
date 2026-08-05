@@ -92,7 +92,9 @@ const schemas = {
       latitude:  Joi.number().min(-90).max(90).required(),
       longitude: Joi.number().min(-180).max(180).required(),
     }),
-    vehicleType:        Joi.string().valid('auto', 'bike', 'car', 'tractor', 'tempo', 'truck', 'jcb', 'ambulance', 'wedding').required(),
+    // Vehicle types are admin-managed (Setting.vehicleRates), not a fixed
+    // list — fareCalculator falls back to 'auto' pricing for unknown types.
+    vehicleType:        Joi.string().lowercase().required(),
     distance:           Joi.number().min(0).required(),
     estimatedDuration:  Joi.number().min(0).required(),
     fare:               Joi.number().min(0).optional(),
