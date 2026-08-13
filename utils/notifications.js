@@ -149,6 +149,38 @@ const notify = {
     });
   },
 
+  // Driver ko — account reject hua (reason ke saath)
+  accountRejected: async (driverFcmToken, { driverName, reason }) => {
+    return sendToDevice(driverFcmToken, {
+      title: '❌ Account Approved Nahi Hua',
+      body:  reason
+        ? `${driverName}, aapka account reject hua: ${reason}. App mein dobara try karein.`
+        : `${driverName}, aapka account abhi approve nahi hua. Support se contact karein.`,
+      data:  { type: 'ACCOUNT_REJECTED', reason: reason || '' },
+    });
+  },
+
+  // Driver ko — document reject hua
+  documentRejected: async (driverFcmToken, { driverName, documentType, reason }) => {
+    const docLabel = { aadhaar: 'Aadhaar', license: 'License', rc: 'Vehicle RC', photo: 'Profile Photo' }[documentType] || documentType;
+    return sendToDevice(driverFcmToken, {
+      title: `📄 ${docLabel} Reject Hua`,
+      body:  reason
+        ? `${driverName}, aapka ${docLabel} reject hua: ${reason}. Dobara upload karein.`
+        : `${driverName}, aapka ${docLabel} verify nahi hua. Saaf photo upload karein.`,
+      data:  { type: 'DOCUMENT_REJECTED', documentType, reason: reason || '' },
+    });
+  },
+
+  // Driver ko — KYC pending reminder
+  kycReminder: async (driverFcmToken, { driverName }) => {
+    return sendToDevice(driverFcmToken, {
+      title: '⏳ KYC Baaki Hai',
+      body:  `${driverName}, aapka KYC review mein hai. Jaldi approve hoga — app check karte rahein.`,
+      data:  { type: 'KYC_PENDING_REMINDER' },
+    });
+  },
+
   // Custom — admin se kisi bhi user/driver ko
   custom: async (fcmToken, { title, body, data }) => {
     return sendToDevice(fcmToken, { title, body, data });

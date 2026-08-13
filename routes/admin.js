@@ -47,6 +47,7 @@ router.get('/revenue/chart', adminController.getRevenueChart);
 router.get('/dashboard/metrics', adminController.getDashboardMetrics);
 router.get('/dashboard/overview', adminController.getDashboardOverview);
 router.get('/ai-agent/tasks', adminController.getAIAgentTasks);
+router.get('/alerts', adminController.getAlerts);
 
 // ===== DRIVERS MANAGEMENT =====
 router.post('/drivers', adminController.createDriver);

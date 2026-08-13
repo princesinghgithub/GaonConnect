@@ -2457,13 +2457,22 @@ const rejectDriver = async (req, res) => {
         rejectedBy: req.user._id
       },
       { new: true }
-    ).select('-password');
+    ).populate('user', 'name').select('-password');
 
     if (!driver) {
       return res.status(404).json({
         success: false,
         message: 'Driver not found'
       });
+    }
+
+    const fcmToken = driver.deviceInfo?.fcmToken;
+    if (fcmToken) {
+      const { notify } = require('../utils/notifications');
+      notify.accountRejected(fcmToken, {
+        driverName: driver.user?.name || 'Driver',
+        reason: reason || '',
+      }).catch(() => {});
     }
 
     res.json({
@@ -2621,7 +2630,7 @@ const deleteDriver = async (req, res) => {
 // Provider-level KYC doc verification (aadhaar only â€” vehicle docs use verifyVehicleDocument)
 const verifyDocument = async (req, res) => {
   try {
-    const { documentType, status } = req.body;
+    const { documentType, status, reason } = req.body;
 
     const VERIFIABLE_DOCS = ['aadhaar'];
     if (!VERIFIABLE_DOCS.includes(documentType)) {
@@ -2631,7 +2640,7 @@ const verifyDocument = async (req, res) => {
       });
     }
 
-    const driver = await Driver.findById(req.params.id);
+    const driver = await Driver.findById(req.params.id).populate('user', 'name');
 
     if (!driver) {
       return res.status(404).json({
@@ -2646,6 +2655,18 @@ const verifyDocument = async (req, res) => {
     driver.documents[documentType].verifiedBy = req.user._id;
 
     await driver.save();
+
+    if (status !== 'verified') {
+      const fcmToken = driver.deviceInfo?.fcmToken;
+      if (fcmToken) {
+        const { notify } = require('../utils/notifications');
+        notify.documentRejected(fcmToken, {
+          driverName: driver.user?.name || 'Driver',
+          documentType,
+          reason: reason || '',
+        }).catch(() => {});
+      }
+    }
 
     res.json({
       success: true,
@@ -4571,6 +4592,34 @@ const deleteComplaint = async (req, res) => {
   }
 };
 
+const getAlerts = async (req, res) => {
+  try {
+    const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+
+    const [newDriversToday, newUsersToday, kycPending, withdrawalsPending, openComplaints] = await Promise.all([
+      Driver.countDocuments({ createdAt: { $gte: todayStart } }),
+      User.countDocuments({ createdAt: { $gte: todayStart }, role: 'customer' }),
+      Driver.countDocuments({ isApproved: false, isRejected: false, isBlocked: false }),
+      Transaction.countDocuments({ type: 'debit', status: 'pending' }),
+      Complaint.countDocuments({ status: { $in: ['open', 'investigating'] } }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        total: newDriversToday + newUsersToday + kycPending + withdrawalsPending + openComplaints,
+        newDriversToday,
+        newUsersToday,
+        kycPending,
+        withdrawalsPending,
+        openComplaints,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ===== PROMO CODES =====
 const PromoCode = require('../models/PromoCode');
 
@@ -4732,4 +4781,5 @@ module.exports = {
   createComplaint,
   updateComplaint,
   deleteComplaint,
+  getAlerts,
 };
