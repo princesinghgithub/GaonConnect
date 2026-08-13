@@ -160,7 +160,9 @@ initSocket(server);
 
 // ─── Scheduled Jobs ───────────────────────────────────────────────────────────
 const { startScheduledRideJob } = require('./jobs/scheduledRideJob');
+const { startKycReminderJob }   = require('./jobs/kycReminderJob');
 startScheduledRideJob();
+startKycReminderJob();
 
 // ─── Start Server with Port Retry ────────────────────────────────────────────
 const BASE_PORT      = Number(process.env.PORT) || 5000;
