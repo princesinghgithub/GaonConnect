@@ -4463,7 +4463,7 @@ const sendBulkNotification = async (req, res) => {
     });
   } catch (error) {
     console.error('sendBulkNotification Error:', error);
-    res.status(500).json({ success: false, message: 'Server error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
