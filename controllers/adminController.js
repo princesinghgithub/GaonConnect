@@ -4438,7 +4438,7 @@ const sendBulkNotification = async (req, res) => {
     const sendToUsers   = audience === 'all' || audience === 'users'   || audience === 'customers';
 
     if (sendToDrivers) {
-      const providers = await Provider.find({ 'deviceInfo.fcmToken': { $exists: true, $ne: null } })
+      const providers = await Driver.find({ 'deviceInfo.fcmToken': { $exists: true, $ne: null } })
         .select('deviceInfo');
       const providerTokens = providers.map((p) => p.deviceInfo?.fcmToken).filter(Boolean);
       tokens.push(...providerTokens);
