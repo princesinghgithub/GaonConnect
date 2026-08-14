@@ -4423,8 +4423,10 @@ const sendNotification = async (req, res) => {
 // Body: { recipientType ('all'|'providers'|'customers'), title, body }
 const sendBulkNotification = async (req, res) => {
   try {
-    const { recipientType, title, body, message } = req.body;
+    const { recipientType, target, title, body, message } = req.body;
     const notifBody = body || message;
+    // frontend 'target', backend legacy 'recipientType' — dono accept karo
+    const audience = target || recipientType || 'all';
 
     if (!title || !notifBody) {
       return res.status(400).json({ success: false, message: 'title aur body required hai' });
@@ -4432,15 +4434,17 @@ const sendBulkNotification = async (req, res) => {
 
     let tokens = [];
 
-    if (recipientType === 'providers' || recipientType === 'all') {
+    const sendToDrivers = audience === 'all' || audience === 'drivers' || audience === 'providers';
+    const sendToUsers   = audience === 'all' || audience === 'users'   || audience === 'customers';
+
+    if (sendToDrivers) {
       const providers = await Provider.find({ 'deviceInfo.fcmToken': { $exists: true, $ne: null } })
         .select('deviceInfo');
       const providerTokens = providers.map((p) => p.deviceInfo?.fcmToken).filter(Boolean);
       tokens.push(...providerTokens);
     }
 
-    if (recipientType === 'customers' || recipientType === 'all') {
-      // Future: User model mein fcmToken field add karo
+    if (sendToUsers) {
       const users = await User.find({ fcmToken: { $exists: true, $ne: null } }).select('fcmToken');
       const userTokens = users.map((u) => u.fcmToken).filter(Boolean);
       tokens.push(...userTokens);
