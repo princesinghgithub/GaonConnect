@@ -1900,14 +1900,23 @@ exports.getWeeklyEarnings = async (req, res) => {
 // Update FCM Token
 exports.updateFCMToken = async (req, res) => {
   try {
-    const provider = await Provider.findOne({ user: req.user.id });
+    const { fcmToken, platform, deviceId } = req.body;
+
+    if (!fcmToken)
+      return res.status(400).json({ success: false, message: 'fcmToken required' });
+
+    const update = { 'deviceInfo.fcmToken': fcmToken };
+    if (platform) update['deviceInfo.platform'] = platform;
+    if (deviceId) update['deviceInfo.deviceId'] = deviceId;
+
+    const provider = await Provider.findOneAndUpdate(
+      { user: req.user.id },
+      { $set: update },
+      { new: true }
+    );
 
     if (!provider)
       return res.status(404).json({ success: false, message: 'Provider not found' });
-
-    provider.deviceInfo = req.body;
-
-    await provider.save();
 
     res.json({ success: true, message: 'FCM token updated' });
 
