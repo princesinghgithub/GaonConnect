@@ -1724,6 +1724,7 @@ const Ride = require('../models/Ride');
 const Transaction = require('../models/Transaction');
 const Setting = require('../models/Setting');
 const Notification = require('../models/Notification');
+const { buildCsv, sendCsv, formatDate, formatDateTime, timestampedName } = require('../utils/csvExport');
 
 // ===== DASHBOARD CONTROLLERS =====
 
@@ -4208,75 +4209,317 @@ const getAnalytics = async (req, res) => {
   }
 };
 
+// ===== CSV EXPORTS =====
+// Drivers / Users / Bookings ka CSV. Har export list-endpoint jaise hi filters
+// leta hai (getAllDrivers / getAllUsers / getAllRides se same query params),
+// taaki dashboard pe jo filter laga ho wahi rows file mein aayein.
+
+// from/to (dashboard) aur from_date/to_date (purane report links) dono support.
+// 'to' din ka poora din include karo — warna us date ki bookings chhut jaati hain.
+const buildDateRange = (query) => {
+  const from = query.from || query.from_date || query.startDate;
+  const to = query.to || query.to_date || query.endDate;
+  if (!from && !to) return null;
+
+  const range = {};
+  if (from) {
+    const d = new Date(from);
+    if (!Number.isNaN(d.getTime())) range.$gte = d;
+  }
+  if (to) {
+    const d = new Date(to);
+    if (!Number.isNaN(d.getTime())) {
+      // Sirf date aayi ho (time ke bina) to us din ke end tak le jao
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(to).trim())) d.setHours(23, 59, 59, 999);
+      range.$lte = d;
+    }
+  }
+  return Object.keys(range).length ? range : null;
+};
+
+const EXPORT_LIMIT = 20000; // memory guard — isse zyada rows pe date filter lagao
+
+const driverStatusLabel = (d) => {
+  if (d.isBlocked) return 'Blocked';
+  if (d.isRejected) return 'Rejected';
+  if (!d.isApproved) return 'Pending Approval';
+  if (d.status === 'available') return 'Online';
+  if (d.status === 'busy') return 'On Trip';
+  return 'Offline';
+};
+
+const DRIVER_COLUMNS = [
+  { label: 'Driver ID', value: (d) => String(d._id) },
+  { label: 'Name', value: (d) => d.user?.name },
+  { label: 'Phone', value: (d) => d.user?.phone },
+  { label: 'Email', value: (d) => d.user?.email },
+  { label: 'City', value: (d) => d.user?.city },
+  { label: 'Status', value: driverStatusLabel },
+  { label: 'Approved', value: (d) => !!d.isApproved },
+  { label: 'Rejected', value: (d) => !!d.isRejected },
+  { label: 'Blocked', value: (d) => !!d.isBlocked },
+  { label: 'Vehicle Type', value: (d) => d.vehicle?.type },
+  { label: 'Vehicle Number', value: (d) => d.vehicle?.number },
+  { label: 'Vehicle Model', value: (d) => d.vehicle?.model },
+  { label: 'Vehicle Verified', value: (d) => !!d.vehicle?.isVerified },
+  { label: 'Total Vehicles', value: (d) => (d.vehicles || []).length },
+  { label: 'Total Trips', value: (d) => d.stats?.totalTrips || 0 },
+  { label: 'Completed Trips', value: (d) => d.stats?.completedTrips || 0 },
+  { label: 'Cancelled Trips', value: (d) => d.stats?.cancelledTrips || 0 },
+  { label: 'Rating', value: (d) => Number(d.rating?.average || 0).toFixed(1) },
+  { label: 'Rating Count', value: (d) => d.rating?.count || 0 },
+  { label: 'Total Earnings', value: (d) => d.stats?.totalEarnings || 0 },
+  { label: 'Month Earnings', value: (d) => d.stats?.monthEarnings || 0 },
+  { label: 'Today Earnings', value: (d) => d.stats?.todayEarnings || 0 },
+  { label: 'Wallet Balance', value: (d) => d.wallet?.balance || 0 },
+  { label: 'Bank Account Holder', value: (d) => d.bankDetails?.accountHolderName },
+  { label: 'Bank Name', value: (d) => d.bankDetails?.bankName },
+  { label: 'Account Number', value: (d) => d.bankDetails?.accountNumber },
+  { label: 'IFSC', value: (d) => d.bankDetails?.ifscCode },
+  { label: 'Bank Verified', value: (d) => !!d.bankDetails?.verified },
+  { label: 'Aadhaar Verified', value: (d) => !!d.documents?.aadhaar?.verified },
+  { label: 'Joined On', value: (d) => formatDate(d.createdAt) },
+];
+
+const USER_COLUMNS = [
+  { label: 'User ID', value: (u) => String(u._id) },
+  { label: 'Name', value: (u) => u.name },
+  { label: 'Phone', value: (u) => u.phone },
+  { label: 'Email', value: (u) => u.email },
+  { label: 'City', value: (u) => u.city },
+  { label: 'Verified', value: (u) => !!u.isVerified },
+  { label: 'Blocked', value: (u) => !!u.isBlocked },
+  { label: 'Wallet Balance', value: (u) => u.wallet || 0 },
+  { label: 'Total Rides', value: (u) => u.rideStats?.totalRides || 0 },
+  { label: 'Completed Rides', value: (u) => u.rideStats?.completedRides || 0 },
+  { label: 'Cancelled Rides', value: (u) => u.rideStats?.cancelledRides || 0 },
+  { label: 'Total Spent', value: (u) => u.rideStats?.totalSpent || 0 },
+  { label: 'Last Ride', value: (u) => formatDate(u.rideStats?.lastRideAt) },
+  { label: 'Joined On', value: (u) => formatDate(u.createdAt) },
+];
+
+const RIDE_COLUMNS = [
+  { label: 'Booking ID', value: (r) => String(r._id) },
+  { label: 'Booked On', value: (r) => formatDateTime(r.createdAt) },
+  { label: 'Status', value: (r) => r.status },
+  { label: 'Booking Type', value: (r) => r.bookingType },
+  { label: 'Booking Mode', value: (r) => r.bookingMode },
+  { label: 'Service', value: (r) => r.vehicleType },
+  { label: 'Service Category', value: (r) => r.serviceCategory },
+  { label: 'Service Type', value: (r) => r.serviceType },
+  { label: 'Customer Name', value: (r) => r.customer?.name },
+  { label: 'Customer Phone', value: (r) => r.customer?.phone },
+  { label: 'Driver Name', value: (r) => r.provider?.user?.name },
+  { label: 'Driver Phone', value: (r) => r.provider?.user?.phone },
+  { label: 'Vehicle Number', value: (r) => r.vehicle?.number },
+  { label: 'Pickup', value: (r) => r.pickup?.address },
+  { label: 'Drop', value: (r) => r.drop?.address },
+  { label: 'Distance (km)', value: (r) => r.distance || 0 },
+  { label: 'Est. Duration (min)', value: (r) => r.estimatedDuration || 0 },
+  { label: 'Actual Duration (min)', value: (r) => r.actualDuration || 0 },
+  { label: 'Est. Hours', value: (r) => r.estimatedHours || 0 },
+  { label: 'Actual Hours', value: (r) => r.actualHours || 0 },
+  { label: 'Hourly Rate', value: (r) => r.hourlyRate || 0 },
+  { label: 'Fare', value: (r) => r.fare || 0 },
+  { label: 'Final Fare', value: (r) => (r.finalFare != null ? r.finalFare : r.fare) || 0 },
+  { label: 'Payment Method', value: (r) => r.paymentMethod },
+  { label: 'Payment Status', value: (r) => r.paymentStatus },
+  { label: 'Customer Rating', value: (r) => r.rating?.customerRating || '' },
+  { label: 'Customer Feedback', value: (r) => r.rating?.customerFeedback },
+  { label: 'Scheduled At', value: (r) => formatDateTime(r.scheduledAt) },
+  { label: 'Accepted At', value: (r) => formatDateTime(r.acceptedAt) },
+  { label: 'Completed At', value: (r) => formatDateTime(r.completedAt) },
+  { label: 'Cancelled At', value: (r) => formatDateTime(r.cancelledAt) },
+  { label: 'Cancelled By', value: (r) => r.cancelledBy },
+  { label: 'Cancellation Reason', value: (r) => r.cancellationReason },
+];
+
+// getAllDrivers wale hi filters — bas pagination ke bajaye poora filtered set
+const fetchDriversForExport = async (query) => {
+  const { status, search, isApproved, isRejected, isBlocked, hasChangeRequest } = query;
+
+  const matchStage = {};
+  if (status === 'online') matchStage.status = { $in: ['available', 'busy'] };
+  else if (status) matchStage.status = status;
+  if (isApproved !== undefined) matchStage.isApproved = isApproved === 'true';
+  if (isRejected !== undefined) matchStage.isRejected = isRejected === 'true';
+  if (isBlocked !== undefined) matchStage.isBlocked = isBlocked === 'true';
+  if (isApproved === 'false' && isRejected === undefined && isBlocked === undefined) {
+    matchStage.isRejected = false;
+    matchStage.isBlocked = false;
+  }
+  const dateRange = buildDateRange(query);
+  if (dateRange) matchStage.createdAt = dateRange;
+
+  const pipeline = [
+    { $match: matchStage },
+    { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'user' } },
+    { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+    { $lookup: { from: 'vehicles', localField: '_id', foreignField: 'providerId', as: 'vehicles' } },
+    { $lookup: { from: 'vehicles', localField: 'activeVehicle', foreignField: '_id', as: 'vehicle' } },
+    { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
+  ];
+
+  if (hasChangeRequest === 'true') {
+    pipeline.push({ $match: { 'vehicles.changeRequest.status': 'pending' } });
+  }
+
+  if (search) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { 'user.name': { $regex: search, $options: 'i' } },
+          { 'user.email': { $regex: search, $options: 'i' } },
+          { 'user.phone': { $regex: search, $options: 'i' } },
+          { 'vehicles.number': { $regex: search, $options: 'i' } },
+        ],
+      },
+    });
+  }
+
+  pipeline.push(
+    { $project: { 'user.password': 0, 'user.otp': 0, 'user.fcmToken': 0 } },
+    { $sort: { createdAt: -1 } },
+    { $limit: EXPORT_LIMIT }
+  );
+
+  return Driver.aggregate(pipeline);
+};
+
+// getAllUsers wale hi filters + har user ke ride stats (ek hi aggregate mein)
+const fetchUsersForExport = async (query) => {
+  const { search, isBlocked, isVerified } = query;
+
+  const customerFilter = { $or: [{ role: 'customer' }, { roles: 'customer' }] };
+  const extra = {};
+  if (isBlocked !== undefined) extra.isBlocked = isBlocked === 'true';
+  if (isVerified !== undefined) extra.isVerified = isVerified === 'true';
+  const dateRange = buildDateRange(query);
+  if (dateRange) extra.createdAt = dateRange;
+
+  const mongoQuery = search
+    ? {
+        $and: [
+          customerFilter,
+          extra,
+          { $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+          ] },
+        ],
+      }
+    : { ...customerFilter, ...extra };
+
+  const users = await User.find(mongoQuery)
+    .sort({ createdAt: -1 })
+    .limit(EXPORT_LIMIT)
+    .select('-password -otp -otpExpiry -fcmToken')
+    .lean();
+
+  if (!users.length) return users;
+
+  const statsRows = await Ride.aggregate([
+    { $match: { customer: { $in: users.map((u) => u._id) } } },
+    {
+      $group: {
+        _id: '$customer',
+        totalRides: { $sum: 1 },
+        completedRides: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+        cancelledRides: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+        totalSpent: {
+          $sum: { $cond: [{ $eq: ['$status', 'completed'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] },
+        },
+        lastRideAt: { $max: '$createdAt' },
+      },
+    },
+  ]);
+
+  const statsById = new Map(statsRows.map((s) => [String(s._id), s]));
+  return users.map((u) => ({ ...u, rideStats: statsById.get(String(u._id)) || null }));
+};
+
+// getAllRides wale hi filters
+const fetchRidesForExport = async (query) => {
+  const { status, driverId, userId, vehicleType, paymentStatus } = query;
+
+  const mongoQuery = {};
+  if (status) mongoQuery.status = status;
+  if (driverId) mongoQuery.provider = driverId;
+  if (userId) mongoQuery.customer = userId;
+  if (vehicleType) mongoQuery.vehicleType = vehicleType;
+  if (paymentStatus) mongoQuery.paymentStatus = paymentStatus;
+  const dateRange = buildDateRange(query);
+  if (dateRange) mongoQuery.createdAt = dateRange;
+
+  return Ride.find(mongoQuery)
+    .sort({ createdAt: -1 })
+    .limit(EXPORT_LIMIT)
+    .populate('customer', 'name email phone city')
+    .populate('vehicle', 'type number model')
+    .populate({ path: 'provider', select: 'user', populate: { path: 'user', select: 'name phone' } })
+    .lean();
+};
+
+const exportDrivers = async (req, res) => {
+  try {
+    const drivers = await fetchDriversForExport(req.query);
+    return sendCsv(res, timestampedName('gaonconnect_drivers'), buildCsv(DRIVER_COLUMNS, drivers));
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Export nahi ho paya', error: error.message });
+  }
+};
+
+const exportUsers = async (req, res) => {
+  try {
+    const users = await fetchUsersForExport(req.query);
+    return sendCsv(res, timestampedName('gaonconnect_users'), buildCsv(USER_COLUMNS, users));
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Export nahi ho paya', error: error.message });
+  }
+};
+
+const exportRides = async (req, res) => {
+  try {
+    const rides = await fetchRidesForExport(req.query);
+    return sendCsv(res, timestampedName('gaonconnect_bookings'), buildCsv(RIDE_COLUMNS, rides));
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Export nahi ho paya', error: error.message });
+  }
+};
+
+// Reports page ka generic export — type ke hisaab se upar wale hi builders use karta hai
 const exportReport = async (req, res) => {
   try {
-    const { type, from_date, to_date } = req.query;
+    const type = String(req.query.type || '').toLowerCase();
 
-    const query = {};
-    if (from_date || to_date) {
-      query.createdAt = {};
-      if (from_date) query.createdAt.$gte = new Date(from_date);
-      if (to_date) query.createdAt.$lte = new Date(to_date);
-    }
-
-    let data;
-    let filename;
-
-    switch(type) {
+    switch (type) {
       case 'rides':
-        data = await Ride.find(query)
-          .populate('customer', 'name email phone')
-          .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
-          .lean();
-        filename = 'rides-report.csv';
-        break;
-
-      case 'payments':
-        data = await Ride.find({ ...query, status: 'completed' })
-          .populate('customer', 'name email phone')
-          .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
-          .select('customer provider vehicleType fare finalFare paymentMethod paymentStatus createdAt')
-          .lean();
-        filename = 'payments-report.csv';
-        break;
+      case 'bookings':
+        return exportRides(req, res);
 
       case 'drivers':
-        data = await Driver.find()
-          .select('-password')
-          .lean();
-        filename = 'drivers-report.csv';
-        break;
+        return exportDrivers(req, res);
 
       case 'users':
-        data = await User.find({ $or: [{ role: 'customer' }, { roles: 'customer' }] })
-          .select('-password')
-          .lean();
-        filename = 'users-report.csv';
-        break;
-        
+      case 'customers':
+        return exportUsers(req, res);
+
+      // Earnings report = sirf completed rides (paisa wali rows)
+      case 'earnings':
+      case 'payments': {
+        const rides = await fetchRidesForExport({ ...req.query, status: 'completed' });
+        return sendCsv(res, timestampedName('gaonconnect_earnings'), buildCsv(RIDE_COLUMNS, rides));
+      }
+
       default:
         return res.status(400).json({
           success: false,
-          message: 'Invalid report type'
+          message: `Invalid report type: "${req.query.type || ''}". Valid: rides, earnings, drivers, users`,
         });
     }
-
-    // Simple CSV conversion
-    const fields = Object.keys(data[0] || {});
-    const csv = [
-      fields.join(','),
-      ...data.map(row => fields.map(field => JSON.stringify(row[field] || '')).join(','))
-    ].join('\n');
-
-    res.header('Content-Type', 'text/csv');
-    res.header('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(csv);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Export nahi ho paya', error: error.message });
   }
 };
 
@@ -4771,6 +5014,9 @@ module.exports = {
   getSystemConfig,
   getAnalytics,
   exportReport,
+  exportDrivers,
+  exportUsers,
+  exportRides,
   getDriverPerformance,
   sendNotification,
   sendBulkNotification,

@@ -76,6 +76,8 @@ app.use(cors({
   optionsSuccessStatus: 200,
   methods:              ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders:       ['Content-Type', 'Authorization'],
+  // CSV export ka filename browser tak pahunchane ke liye
+  exposedHeaders:       ['Content-Disposition'],
 }));
 
 // ─── Webhooks (raw body — mounted before JSON parser for signature verification)

@@ -53,6 +53,8 @@ router.get('/alerts', adminController.getAlerts);
 router.post('/drivers', adminController.createDriver);
 router.get('/drivers', adminController.getAllDrivers);
 router.get('/drivers/live-locations', adminController.getActiveDriversLocation);
+// '/drivers/:id' se pehle rakhna zaroori hai, warna 'export' ek id ban jaata hai
+router.get('/drivers/export', adminController.exportDrivers);
 router.get('/drivers/:id', adminController.getDriverById);
 router.get('/drivers/:id/stats', adminController.getDriverStats);
 router.get('/drivers/:id/performance', adminController.getDriverPerformance);
@@ -85,6 +87,7 @@ router.delete('/vehicles/:id', adminController.deleteVehicleAdmin);
 router.get('/rides', adminController.getAllRides);
 router.get('/rides/stats', adminController.getRideStats);
 router.get('/rides/ongoing', adminController.getOngoingRides);
+router.get('/rides/export', adminController.exportRides);
 router.get('/rides/:id', adminController.getRideDetails);
 router.get('/rides/:id/track', adminController.trackRide);
 router.post('/rides/:id/cancel', adminController.cancelRideAdmin);
@@ -99,6 +102,7 @@ router.put('/payments/withdrawal/:id', adminController.processWithdrawal);
 // ===== USERS/CUSTOMERS =====
 router.post('/users', adminController.createUser);
 router.get('/users', adminController.getAllUsers);
+router.get('/users/export', adminController.exportUsers);
 router.get('/users/:id', adminController.getUserDetails);
 router.put('/users/:id/block', adminController.blockUser);
 router.put('/users/:id/unblock', adminController.unblockUser);
