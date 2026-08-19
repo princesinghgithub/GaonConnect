@@ -4,6 +4,30 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        // The framework barely changes between deploys while our own code
+        // changes constantly. Keeping them in one chunk meant every release
+        // made returning visitors re-download React too, so split the deps
+        // that are stable into their own long-lived files.
+        // Matched on the node_modules path rather than by package name, so
+        // deep entries like react-dom/client land in the vendor chunk too.
+        // Deliberately narrow: leaflet and chart.js must stay in the lazy
+        // route chunks that need them, not get dragged into the first load.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/.test(id)) {
+            return 'react-vendor';
+          }
+          if (/[\\/]node_modules[\\/](i18next|react-i18next)[\\/]/.test(id)) {
+            return 'i18n-vendor';
+          }
+        },
+      },
+    },
+  },
+
   plugins: [
     tailwindcss(),
 
