@@ -101,10 +101,22 @@
     "cofounderRole": "को-फाउंडर, GaonConnect",
     "cofounderBio": "Vipin Patel, GaonConnect के को-फाउंडर हैं। वे ऑपरेशन्स और ड्राइवर पार्टनरशिप पर काम करते हैं, ताकि गांव और छोटे कस्बों में गाड़ियां आसानी से और कम दाम में मिल सकें।"
   },
+  "appModal": {
+    "heading": "आपको कौन सा ऐप चाहिए?",
+    "subheading": "GaonConnect के दो ऐप हैं — जो आप पर लागू हो वो चुनें।",
+    "userTitle": "ग्राहकों के लिए",
+    "userDescription": "ऑटो, बाइक, कार, ट्रैक्टर, JCB या टेम्पो बुक करें — जहां भी ज़रूरत हो।",
+    "userCta": "डाउनलोड करें",
+    "driverTitle": "ड्राइवरों के लिए",
+    "driverDescription": "गाड़ी है? ड्राइवर पार्टनर बनकर कमाई शुरू करें।",
+    "driverCta": "डाउनलोड करें",
+    "close": "बंद करें"
+  },
   "download": {
     "heading": "App डाउनलोड करें",
     "subheading": "अपने फोन में GaonConnect लें और सेकंडों में बुक करें",
     "playStore": "Google Play पर पाएं",
+    "getItOn": "डाउनलोड करें",
     "appStore": "App Store से डाउनलोड करें",
     "comingSoon": "जल्द आ रहा है",
     "customerTagline": "राइड बुक करें",

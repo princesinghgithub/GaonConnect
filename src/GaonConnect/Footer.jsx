@@ -1,16 +1,60 @@
 import React from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { FaFacebook, FaInstagram, FaLinkedin, FaYoutube } from 'react-icons/fa';
+import { FaFacebook, FaInstagram, FaLinkedin, FaYoutube, FaGooglePlay, FaApple, FaTruck } from 'react-icons/fa';
 import { trackEvent } from '../utils/analytics';
-import { openUserApp, openDriverApp } from '../utils/appDownload';
+import { openDriverApp } from '../utils/appDownload';
+import { useAppDownload } from '../context/AppDownloadContext';
+
+const SERVICE_LINKS = [
+  { to: '/auto-rickshaw-booking', label: 'Auto Rickshaw Booking' },
+  { to: '/bike-taxi-booking', label: 'Bike Taxi Booking' },
+  { to: '/car-booking', label: 'Car Booking' },
+  { to: '/tractor-booking', label: 'Tractor Booking' },
+  { to: '/jcb-rental', label: 'JCB Rental' },
+  { to: '/wedding-car-booking', label: 'Wedding Car Booking' },
+  { to: '/goods-transport-booking', label: 'Goods Transport / Tempo' },
+  { to: '/farm-equipment', label: 'Farm Equipment Rental' },
+  { to: '/village-transport', label: 'Village Transport' },
+  { to: '/agriculture-logistics', label: 'Agriculture Logistics' },
+];
+
+const linkClass = 'text-gray-400 hover:text-orange-400 transition-colors text-left';
+
+// Play/App Store badge. The small line is the verb ("Get it on"), the big one
+// is the store name — store names are brands, so they stay untranslated.
+const StoreBadge = ({ icon: Icon, caption, store, onClick, muted = false }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`flex items-center gap-3 w-full sm:w-auto px-4 py-2.5 rounded-xl border transition-colors ${
+      muted
+        ? 'border-white/10 bg-white/5 text-gray-400 hover:bg-white/10'
+        : 'border-white/15 bg-white/10 text-white hover:bg-white/20'
+    }`}
+  >
+    <Icon size={22} className="shrink-0" />
+    <span className="text-left leading-tight">
+      <span className="block text-[10px] uppercase tracking-wide opacity-70">{caption}</span>
+      <span className="block text-sm font-semibold">{store}</span>
+    </span>
+  </button>
+);
+
+const FooterColumn = ({ title, children, className = '' }) => (
+  <div className={className}>
+    <h4 className="font-semibold text-white mb-4">{title}</h4>
+    {children}
+  </div>
+);
 
 const Footer = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleDownloadApp = openUserApp;
+  const { openAppDownload } = useAppDownload();
+  const handleDownloadApp = openAppDownload;
 
   const handleAppleDownload = () => {
     alert(`🎉 ${t('download.comingSoon')}\n\n${t('download.promo')}`);
@@ -30,131 +74,135 @@ const Footer = () => {
     }
   };
 
+  const socials = [
+    { href: 'https://www.instagram.com/gaonconnect/', label: 'Instagram', icon: FaInstagram },
+    { href: 'https://facebook.com/profile.php?id=61591245161485', label: 'Facebook', icon: FaFacebook },
+    { href: 'https://www.linkedin.com/company/133394201/', label: 'LinkedIn', icon: FaLinkedin },
+    { href: 'https://www.youtube.com/@Gaonconnenct', label: 'YouTube', icon: FaYoutube },
+  ];
+
   return (
-    <footer className="bg-green-950 dark:bg-black text-white py-12 px-6">
+    <footer className="bg-green-950 dark:bg-black text-white px-6">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-10 flex items-center gap-3">
-          <img src="/gaonconnect-icon.png" alt="GaonConnect" className="h-10 w-10 shrink-0" />
-          <div>
-            <div className="text-2xl font-bold text-orange-400 leading-tight">GaonConnect</div>
-            <div className="text-gray-400 text-sm">gaon aur dehat ke liye transport app</div>
+        <div className="py-8 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <img src="/gaonconnect-icon.png" alt="GaonConnect" className="h-11 w-11 shrink-0" />
+            <div>
+              <div className="text-2xl font-bold text-orange-400 leading-tight">GaonConnect</div>
+              <div className="text-gray-400 text-sm">gaon aur dehat ke liye transport app</div>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-8 text-sm">
-          <div>
-            <h4 className="font-semibold text-white mb-3">{t('footer.customerApp')}</h4>
-            <div className="flex flex-col gap-2">
-              <button
+        {/* The app badges sit in the column grid rather than opposite the
+            brand — pinned to the far edge they left a dead gap across the
+            middle of a wide screen. Services is by far the longest list, so
+            it runs two-up instead of making the footer ten rows tall. */}
+        <div className="py-10 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-8 gap-y-10 text-sm">
+          <div className="col-span-2 md:col-span-3 lg:col-span-1">
+            <h4 className="font-semibold text-white mb-4">{t('footer.customerApp')}</h4>
+            <div className="flex flex-col gap-2.5">
+              <StoreBadge
+                icon={FaGooglePlay}
+                caption={t('download.getItOn')}
+                store="Google Play"
                 onClick={handleDownloadApp}
-                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 transition-colors text-white px-3 py-2 rounded-lg"
-              >
-                <span className="text-lg">▶️</span>
-                <span className="text-left leading-tight">
-                  <span className="block text-[10px] opacity-70">Get it on</span>
-                  <span className="block text-xs font-semibold">{t('download.playStore')}</span>
-                </span>
-              </button>
-              <button
+              />
+              <StoreBadge
+                icon={FaApple}
+                caption={t('download.comingSoon')}
+                store="App Store"
                 onClick={handleAppleDownload}
-                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 transition-colors text-white px-3 py-2 rounded-lg"
-              >
-                <span className="text-lg">🍎</span>
-                <span className="text-left leading-tight">
-                  <span className="block text-[10px] opacity-70">{t('download.comingSoon')}</span>
-                  <span className="block text-xs font-semibold">{t('download.appStore')}</span>
-                </span>
-              </button>
+                muted
+              />
             </div>
-          </div>
 
-          <div>
-            <h4 className="font-semibold text-white mb-3">{t('footer.driverApp')}</h4>
-            <div className="flex flex-col gap-2 items-start">
-              <button
+            <h4 className="font-semibold text-white mb-4 mt-7">{t('footer.driverApp')}</h4>
+            <div className="flex flex-col gap-2.5 items-start">
+              <StoreBadge
+                icon={FaGooglePlay}
+                caption={t('download.getItOn')}
+                store="Google Play"
                 onClick={openDriverApp}
-                className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 transition-colors text-white px-3 py-2 rounded-lg"
+              />
+              <button
+                onClick={handleBecomeDriver}
+                className="flex items-center gap-2 text-gray-400 hover:text-orange-400 transition-colors px-1"
               >
-                <span className="text-lg">▶️</span>
-                <span className="text-left leading-tight">
-                  <span className="block text-[10px] opacity-70">Get it on</span>
-                  <span className="block text-xs font-semibold">{t('download.playStore')}</span>
-                </span>
-              </button>
-              <button onClick={handleBecomeDriver} className="text-gray-400 hover:text-orange-400 transition-colors text-left">
-                🚚 {t('footer.becomeDriver')}
+                <FaTruck size={15} className="shrink-0" />
+                {t('footer.becomeDriver')}
               </button>
             </div>
           </div>
 
-          <div>
-            <h4 className="font-semibold text-white mb-3">Services</h4>
-            <div className="flex flex-col gap-2">
-              <Link to="/auto-rickshaw-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Auto Rickshaw Booking</Link>
-              <Link to="/bike-taxi-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Bike Taxi Booking</Link>
-              <Link to="/car-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Car Booking</Link>
-              <Link to="/tractor-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Tractor Booking</Link>
-              <Link to="/jcb-rental" className="text-gray-400 hover:text-orange-400 transition-colors">JCB Rental</Link>
-              <Link to="/wedding-car-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Wedding Car Booking</Link>
-              <Link to="/goods-transport-booking" className="text-gray-400 hover:text-orange-400 transition-colors">Goods Transport / Tempo</Link>
-              <Link to="/farm-equipment" className="text-gray-400 hover:text-orange-400 transition-colors">Farm Equipment Rental</Link>
-              <Link to="/village-transport" className="text-gray-400 hover:text-orange-400 transition-colors">Village Transport</Link>
-              <Link to="/agriculture-logistics" className="text-gray-400 hover:text-orange-400 transition-colors">Agriculture Logistics</Link>
+          <FooterColumn title={t('nav.services')} className="col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
+              {SERVICE_LINKS.map(({ to, label }) => (
+                <Link key={to} to={to} className={linkClass}>
+                  {label}
+                </Link>
+              ))}
             </div>
-          </div>
+          </FooterColumn>
 
-          <div>
-            <h4 className="font-semibold text-white mb-3">{t('footer.quickLinks')}</h4>
-            <div className="flex flex-col gap-2">
-              <button onClick={() => (location.pathname === '/' ? window.scrollTo({ top: 0, behavior: 'smooth' }) : navigate('/'))} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.home')}</button>
-              <button onClick={() => goToSection('services')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('nav.services')}</button>
-              <button onClick={() => goToSection('faqs')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('nav.faqs')}</button>
-              <button onClick={() => navigate('/contact')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.contact')}</button>
+          <FooterColumn title={t('footer.quickLinks')}>
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={() => (location.pathname === '/' ? window.scrollTo({ top: 0, behavior: 'smooth' }) : navigate('/'))}
+                className={linkClass}
+              >
+                {t('footer.home')}
+              </button>
+              <button onClick={() => goToSection('services')} className={linkClass}>{t('nav.services')}</button>
+              <button onClick={() => goToSection('faqs')} className={linkClass}>{t('nav.faqs')}</button>
+              <button onClick={() => navigate('/contact')} className={linkClass}>{t('footer.contact')}</button>
             </div>
-          </div>
+          </FooterColumn>
 
-          <div>
-            <h4 className="font-semibold text-white mb-3">{t('footer.company')}</h4>
-            <div className="flex flex-col gap-2">
-              <button onClick={() => goToSection('about')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.about')}</button>
-              <button onClick={() => navigate('/safety')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('nav.safety')}</button>
-              <button onClick={() => navigate('/careers')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('nav.careers')}</button>
-              <button onClick={() => navigate('/blog')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('nav.blog')}</button>
-              <button onClick={() => navigate('/press')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('nav.press')}</button>
+          <FooterColumn title={t('footer.company')}>
+            <div className="flex flex-col gap-2.5">
+              <button onClick={() => goToSection('about')} className={linkClass}>{t('footer.about')}</button>
+              <button onClick={() => navigate('/safety')} className={linkClass}>{t('nav.safety')}</button>
+              <button onClick={() => navigate('/careers')} className={linkClass}>{t('nav.careers')}</button>
+              <button onClick={() => navigate('/blog')} className={linkClass}>{t('nav.blog')}</button>
+              <button onClick={() => navigate('/press')} className={linkClass}>{t('nav.press')}</button>
             </div>
-          </div>
+          </FooterColumn>
 
-          <div>
-            <h4 className="font-semibold text-white mb-3">{t('footer.legal')}</h4>
-            <div className="flex flex-col gap-2">
-              <button onClick={() => navigate('/privacy-policy')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.privacy')}</button>
-              <button onClick={() => navigate('/account-deletion')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.accountDeletion')}</button>
-              <button onClick={() => navigate('/data-deletion')} className="text-gray-400 hover:text-orange-400 transition-colors text-left">{t('footer.dataDeletion')}</button>
+          <FooterColumn title={t('footer.legal')}>
+            <div className="flex flex-col gap-2.5">
+              <button onClick={() => navigate('/privacy-policy')} className={linkClass}>{t('footer.privacy')}</button>
+              <button onClick={() => navigate('/account-deletion')} className={linkClass}>{t('footer.accountDeletion')}</button>
+              <button onClick={() => navigate('/data-deletion')} className={linkClass}>{t('footer.dataDeletion')}</button>
             </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-white mb-3">{t('footer.followUs')}</h4>
-            <div className="flex items-center gap-4">
-              <a href="https://www.instagram.com/gaonconnect/" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-gray-400 hover:text-white transition-colors">
-                <FaInstagram size={20} />
-              </a>
-              <a href="https://facebook.com/profile.php?id=61591245161485" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-gray-400 hover:text-white transition-colors">
-                <FaFacebook size={20} />
-              </a>
-              <a href="https://www.linkedin.com/company/133394201/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="text-gray-400 hover:text-white transition-colors">
-                <FaLinkedin size={20} />
-              </a>
-              <a href="https://www.youtube.com/@Gaonconnenct" target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="text-gray-400 hover:text-white transition-colors">
-                <FaYoutube size={20} />
-              </a>
-            </div>
-          </div>
+          </FooterColumn>
         </div>
 
-        <div className="border-t border-gray-800 mt-10 pt-6">
-          <p className="text-center text-gray-400 text-sm mb-2">{t('footer.copyright')}</p>
-          <p className="text-center text-gray-500 text-sm">{t('footer.tagline')}</p>
+        {/* Socials sit with the copyright rather than in a column of their
+            own, which left a near-empty seventh column in the grid. The
+            padding keeps them clear of the fixed WhatsApp button, which
+            parks itself in this exact corner: sideways on a wide screen,
+            and below the stacked row on a narrow one. */}
+        <div className="border-t border-white/10 pt-6 pb-24 sm:pb-6 sm:pr-24 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-center sm:text-left">
+            <p className="text-gray-400 text-sm">{t('footer.copyright')}</p>
+            <p className="text-gray-500 text-sm">{t('footer.tagline')}</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {socials.map(({ href, label, icon: Icon }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={label}
+                className="w-9 h-9 rounded-full bg-white/10 hover:bg-orange-500 text-gray-300 hover:text-white flex items-center justify-center transition-colors"
+              >
+                <Icon size={17} />
+              </a>
+            ))}
+          </div>
         </div>
       </div>
     </footer>

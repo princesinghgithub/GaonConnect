@@ -5,13 +5,14 @@ import Footer from '../../GaonConnect/Footer';
 import NotFound from './NotFound';
 import blogPosts, { getBlogPostBySlug } from '../../constants/blogPosts';
 import { trackEvent } from '../../utils/analytics';
-import { openUserApp } from '../../utils/appDownload';
+import { useAppDownload } from '../../context/AppDownloadContext';
 
 const BlogPost = () => {
   const { slug } = useParams();
   const post = getBlogPostBySlug(slug);
 
-  const handleDownloadApp = openUserApp;
+  const { openAppDownload } = useAppDownload();
+  const handleDownloadApp = openAppDownload;
 
   if (!post) return <NotFound />;
 

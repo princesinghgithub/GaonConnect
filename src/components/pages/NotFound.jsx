@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
-import { openUserApp } from '../../utils/appDownload';
+import { useAppDownload } from '../../context/AppDownloadContext';
 
 // Vercel rewrites every unmatched path to index.html with a 200 status, so
 // without this catch-all route, unknown URLs (dead links, bot-guessed paths)
@@ -10,7 +10,8 @@ import { openUserApp } from '../../utils/appDownload';
 // tags. SeoCanonical noindexes any path not in its known-routes list, so
 // this component just needs to give those URLs real, honest content.
 const NotFound = () => {
-  const handleDownloadApp = openUserApp;
+  const { openAppDownload } = useAppDownload();
+  const handleDownloadApp = openAppDownload;
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300 flex flex-col">

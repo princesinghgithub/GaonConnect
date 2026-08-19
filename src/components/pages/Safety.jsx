@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ShieldCheck, MapPin, Phone, Users, Car, Siren } from 'lucide-react';
 import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
-import { openUserApp } from '../../utils/appDownload';
+import { useAppDownload } from '../../context/AppDownloadContext';
 
 const pointIcons = [ShieldCheck, MapPin, Siren, Users, Car, Phone];
 
@@ -14,7 +14,8 @@ const Safety = () => {
     icon: pointIcons[i],
   }));
 
-  const handleDownloadApp = openUserApp;
+  const { openAppDownload } = useAppDownload();
+  const handleDownloadApp = openAppDownload;
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">

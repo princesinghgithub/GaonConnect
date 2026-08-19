@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { TrendingUp, Clock, Users, ChevronLeft, ChevronRight, Mail } from 'lucide-react';
 import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
-import { openUserApp } from '../../utils/appDownload';
+import { useAppDownload } from '../../context/AppDownloadContext';
 
 const whyWorkIcons = [TrendingUp, Clock, Users];
 // .webp versions of the same shots (already used by src/constants/blogPosts.js)
@@ -28,7 +28,8 @@ const Careers = () => {
     testimonials[(testimonialIndex + 1) % testimonials.length],
   ];
 
-  const handleDownloadApp = openUserApp;
+  const { openAppDownload } = useAppDownload();
+  const handleDownloadApp = openAppDownload;
 
   const nextTestimonial = () => setTestimonialIndex((i) => (i + 1) % testimonials.length);
   const prevTestimonial = () => setTestimonialIndex((i) => (i - 1 + testimonials.length) % testimonials.length);

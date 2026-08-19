@@ -5,7 +5,7 @@ import Footer from '../../GaonConnect/Footer';
 import NotFound from './NotFound';
 import { getServicePageBySlug } from '../../constants/servicePages';
 import { trackEvent } from '../../utils/analytics';
-import { openUserApp } from '../../utils/appDownload';
+import { useAppDownload } from '../../context/AppDownloadContext';
 
 // Commercial-intent landing pages (distinct from the informational articles
 // in BlogPost.jsx) — one component driven by servicePages.js, mounted at a
@@ -13,7 +13,8 @@ import { openUserApp } from '../../utils/appDownload';
 const ServiceLanding = ({ slugKey }) => {
   const page = getServicePageBySlug(slugKey);
 
-  const handleDownloadApp = openUserApp;
+  const { openAppDownload } = useAppDownload();
+  const handleDownloadApp = openAppDownload;
 
   if (!page) return <NotFound />;
 

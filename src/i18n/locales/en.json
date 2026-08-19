@@ -101,10 +101,22 @@
     "cofounderRole": "Co-Founder, GaonConnect",
     "cofounderBio": "Vipin Patel is the Co-Founder of GaonConnect. He works closely on operations and driver partnerships, building the on-ground network that keeps rides available and affordable in villages and small towns."
   },
+  "appModal": {
+    "heading": "Which app do you need?",
+    "subheading": "GaonConnect has two apps - pick the one that fits you.",
+    "userTitle": "For customers",
+    "userDescription": "Book an auto, bike, car, tractor, JCB or tempo - wherever you need it.",
+    "userCta": "Download",
+    "driverTitle": "For drivers",
+    "driverDescription": "Own a vehicle? Join as a driver partner and start earning.",
+    "driverCta": "Download",
+    "close": "Close"
+  },
   "download": {
     "heading": "Download the App",
     "subheading": "Get GaonConnect on your phone and book in seconds",
     "playStore": "Get it on Google Play",
+    "getItOn": "Get it on",
     "appStore": "Download on App Store",
     "comingSoon": "Coming soon",
     "customerTagline": "Book a Ride",

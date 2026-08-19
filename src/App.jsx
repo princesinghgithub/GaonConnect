@@ -154,6 +154,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './context/ProtectedRoute';
 import { RideProvider } from './context/RideContext';
 import { DriverProvider } from './context/Drivercontext';
+import { AppDownloadProvider } from './context/AppDownloadContext';
 import GaonConnectLanding from './GaonConnect/Gaonconnectlanding'
 import WhatsAppFloat from "./components/pages/WhatsAppFloat";
 
@@ -267,6 +268,7 @@ function App() {
   <AuthProvider>
       <RideProvider>
         <DriverProvider>
+          <AppDownloadProvider>
           <SeoCanonical />
           <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -361,6 +363,7 @@ function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
+          </AppDownloadProvider>
         </DriverProvider>
           <WhatsAppFloat /> 
       </RideProvider>

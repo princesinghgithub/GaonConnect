@@ -9,7 +9,8 @@ import LocationSearchInput from '../tabs/LocationSearchInput';
 import { locationAPI, rideAPI } from '../services/api';
 import { HOURS_OPTIONS } from '../constants/tractorJcbServices';
 import { trackEvent } from '../utils/analytics';
-import { openUserApp, openDriverApp } from '../utils/appDownload';
+import { openDriverApp } from '../utils/appDownload';
+import { useAppDownload } from '../context/AppDownloadContext';
 
 // Same fare formula CustomerBooking.jsx uses once a real ride is booked —
 // keeping the hero estimate consistent with what the app actually charges.
@@ -152,7 +153,8 @@ const GaonConnectLanding = () => {
     navigate(localStorage.getItem('token') ? '/customer' : '/auth');
   };
 
-  const handleDownloadApp = openUserApp;
+  const { openAppDownload } = useAppDownload();
+  const handleDownloadApp = openAppDownload;
 
   const handleBecomeDriver = () => {
     trackEvent('become_driver_click', { source: 'landing_page' });

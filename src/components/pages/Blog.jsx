@@ -4,12 +4,13 @@ import { useTranslation } from 'react-i18next';
 import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
 import blogPosts from '../../constants/blogPosts';
-import { openUserApp } from '../../utils/appDownload';
+import { useAppDownload } from '../../context/AppDownloadContext';
 
 const Blog = () => {
   const { t } = useTranslation();
 
-  const handleDownloadApp = openUserApp;
+  const { openAppDownload } = useAppDownload();
+  const handleDownloadApp = openAppDownload;
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
