@@ -562,23 +562,46 @@ const GaonConnectLanding = () => {
             </div>
           </div>
 
-          {/* Founder */}
-          <div className="mt-16 bg-orange-50 dark:bg-gray-800 rounded-3xl shadow-sm p-8 md:p-10 grid grid-cols-1 md:grid-cols-[auto_1fr] gap-8 items-center text-left">
-            <img
-              src="/gaonconnect_founder.jpg"
-              alt="Prince Patel - Founder & CEO, GaonConnect"
-              loading="lazy"
-              decoding="async"
-              className="w-40 h-40 md:w-48 md:h-48 rounded-2xl object-cover mx-auto md:mx-0 shadow-md"
-            />
-            <div>
-              <h3 className="text-xl md:text-2xl font-bold text-ink dark:text-white mb-1">Prince Patel</h3>
-              <p className="text-saffron dark:text-orange-400 font-semibold mb-4">Founder &amp; CEO, GaonConnect</p>
-              <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-                Prince Patel is the Founder &amp; CEO of GaonConnect. He started GaonConnect with the vision of
-                connecting villages through technology and making transportation more accessible, reliable, and
-                affordable for rural communities across India.
-              </p>
+          {/* Leadership */}
+          <div className="mt-16">
+            <h3 className="text-2xl md:text-3xl font-bold text-ink dark:text-white mb-2">{t('about.leadership')}</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-8">{t('about.leadershipSub')}</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+              {[
+                {
+                  img: '/gaonconnect_founder.jpg',
+                  name: 'Prince Patel',
+                  role: t('about.founderRole'),
+                  bio: t('about.founderBio'),
+                  imgPosition: 'object-center',
+                },
+                {
+                  img: '/vipin.jpeg',
+                  name: 'Vipin Patel',
+                  role: t('about.cofounderRole'),
+                  bio: t('about.cofounderBio'),
+                  imgPosition: 'object-top',
+                },
+              ].map((person) => (
+                <div
+                  key={person.name}
+                  className="bg-orange-50 dark:bg-gray-800 rounded-3xl shadow-sm p-8 md:p-10 flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left gap-6 transition-shadow duration-200 hover:shadow-lg"
+                >
+                  <img
+                    src={person.img}
+                    alt={`${person.name} - ${person.role}`}
+                    loading="lazy"
+                    decoding="async"
+                    className={`w-32 h-32 md:w-36 md:h-36 shrink-0 rounded-2xl object-cover ${person.imgPosition} shadow-md ring-4 ring-white dark:ring-gray-700`}
+                  />
+                  <div>
+                    <h4 className="text-xl md:text-2xl font-bold text-ink dark:text-white mb-1">{person.name}</h4>
+                    <p className="text-saffron dark:text-orange-400 font-semibold mb-3">{person.role}</p>
+                    <p className="text-gray-600 dark:text-gray-400 leading-relaxed text-sm md:text-base">{person.bio}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
