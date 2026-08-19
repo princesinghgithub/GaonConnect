@@ -5,6 +5,15 @@ import hi from './locales/hi.json';
 
 const savedLang = localStorage.getItem('gc_lang') || 'hi';
 
+// index.html ships a static lang="en" while the app defaults to Hindi, so
+// crawlers and screen readers were told the wrong language on every page.
+// Keep <html lang> and og:locale pointed at whatever is actually rendered.
+const applyDocumentLanguage = (lng) => {
+  document.documentElement.lang = lng;
+  const ogLocale = document.querySelector('meta[property="og:locale"]');
+  if (ogLocale) ogLocale.setAttribute('content', lng === 'en' ? 'en_IN' : 'hi_IN');
+};
+
 i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
@@ -15,8 +24,11 @@ i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
+applyDocumentLanguage(savedLang);
+
 i18n.on('languageChanged', (lng) => {
   localStorage.setItem('gc_lang', lng);
+  applyDocumentLanguage(lng);
 });
 
 export default i18n;
