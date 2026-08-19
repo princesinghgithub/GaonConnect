@@ -6,7 +6,10 @@ import Footer from '../../GaonConnect/Footer';
 import { openUserApp } from '../../utils/appDownload';
 
 const whyWorkIcons = [TrendingUp, Clock, Users];
-const galleryImages = ['/gaonconnect1.png', '/gaonconnect2.png', '/gaonconenct3.png'];
+// .webp versions of the same shots (already used by src/constants/blogPosts.js)
+// — the .png originals are ~1.6 MB combined against ~141 KB here, which matters
+// on the rural connections most of our users are on.
+const galleryImages = ['/gaonconnect1.webp', '/gaonconnect2.webp', '/gaonconenct3.webp'];
 const avatarColors = ['bg-saffron', 'bg-india-green', 'bg-amber-600'];
 
 const Careers = () => {
@@ -95,7 +98,14 @@ const Careers = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {galleryImages.map((src) => (
-              <img key={src} src={src} alt="" className="w-full h-48 object-cover rounded-2xl shadow-md" />
+              <img
+                key={src}
+                src={src}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="w-full h-48 object-cover rounded-2xl shadow-md"
+              />
             ))}
           </div>
         </div>

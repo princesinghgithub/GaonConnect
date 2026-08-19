@@ -424,9 +424,13 @@ const GaonConnectLanding = () => {
           <div className="relative">
             <picture>
               <source srcSet="/gaonconnect_banner.webp" type="image/webp" />
+              {/* .jpg fallback, not the 8 MB .png original: this is the LCP
+                  image and width/height keep it from shifting the hero. */}
               <img
-                src="/gaonconnect_banner.png"
+                src="/gaonconnect_banner.jpg"
                 alt="GaonConnect - auto, bike aur car ek saath"
+                width="1600"
+                height="1108"
                 className="relative rounded-[2rem] shadow-2xl w-full h-auto object-contain"
                 fetchPriority="high"
                 decoding="async"
