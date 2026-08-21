@@ -139,6 +139,11 @@ router.post('/logout-all',
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
 router.get('/profile',  protect, getProfile);
+// User app launch pe '/auth/me' se token verify karti hai. Yeh route nahi tha,
+// toh 404 aata tha — aur client sirf 401 pe logout karta hai, isliye 404 chup-chaap
+// nigal liya jaata tha. Nateeja: launch pe token kabhi verify hi nahi hota tha
+// (blocked/deleted account bhi andar aa jaata). '/profile' ka alias.
+router.get('/me',       protect, getProfile);
 router.put('/profile',  protect, validate(schemas.updateProfile), updateProfile);
 router.post('/profile/photo', protect, photoUpload.single('photo'), uploadProfilePhoto);
 

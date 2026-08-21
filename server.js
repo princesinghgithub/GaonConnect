@@ -112,7 +112,13 @@ app.use('/api/wallet',   require('./routes/wallet'));
 app.use('/api/admin',    adminRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/ratings', require('./routes/rating'));
+// Dono apps '/api/notification' (singular) call karti hain. Pehle sirf plural
+// mount tha, isliye HAR notification call 404 hoti thi — list khaali, unread
+// badge gayab, mark-as-read dead — aur `catch {}` ki wajah se kisi ko pata nahi
+// chala. Alias rakhne se pehle se installed apps bhi turant theek ho jaati hain,
+// bina naye Play Store release ke.
 app.use('/api/notifications', require('./routes/notification'));
+app.use('/api/notification',  require('./routes/notification'));
 app.use('/api/sos',     require('./routes/sos'));
 app.use('/api/promo',   require('./routes/promo'));
 app.use('/api/agent',   require('./routes/agent'));
