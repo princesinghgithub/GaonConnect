@@ -2,6 +2,7 @@ const { Server } = require('socket.io');
 const jwt         = require('jsonwebtoken');
 const Provider     = require('./models/Provider');
 const Ride          = require('./models/Ride');
+const Message       = require('./models/Message');
 
 let io = null;
 
@@ -108,6 +109,54 @@ function initSocket(server) {
         io.to(`booking_${bookingId}`).emit('location_update', { driverId: socket.providerId, lat, lng });
       } catch (err) {
         console.error('driverLocation error:', err.message);
+      }
+    });
+
+    // ─── Chat: customer ↔ driver ────────────────────────────────────────────
+    // Ownership wahi check hai jo joinBookingRoom karta hai — client se aayi
+    // rideId pe bharosa nahi kiya jaata, warna koi bhi kisi ki bhi ride mein
+    // message bhej deta. Sender ki pehchaan token se aati hai, payload se nahi.
+    socket.on('chat_message', async ({ rideId, text } = {}, ack) => {
+      const done = typeof ack === 'function' ? ack : () => {};
+      try {
+        const body = String(text || '').trim().slice(0, 1000);
+        if (!rideId || !body) return done({ ok: false, error: 'empty' });
+
+        const ride = await Ride.findById(rideId).select('customer provider status');
+        if (!ride) return done({ ok: false, error: 'not_found' });
+
+        const isCustomer = String(ride.customer) === socket.userId;
+        const isDriver   = socket.providerId && ride.provider && String(ride.provider) === socket.providerId;
+        if (!isCustomer && !isDriver) return done({ ok: false, error: 'forbidden' });
+
+        // Ride khatam ho chuki hai to chat band — warna log ride ke hafton baad
+        // tak message bhejte rehte aur uska koi jawab dene wala nahi hota.
+        if (['completed', 'cancelled'].includes(ride.status)) {
+          return done({ ok: false, error: 'ride_over' });
+        }
+
+        const msg = await Message.create({
+          ride:       ride._id,
+          sender:     socket.userId,
+          senderRole: isCustomer ? 'customer' : 'driver',
+          text:       body,
+        });
+
+        const payload = {
+          _id:        String(msg._id),
+          rideId:     String(ride._id),
+          text:       msg.text,
+          senderRole: msg.senderRole,
+          createdAt:  msg.createdAt,
+        };
+
+        // Room mein bhejo — bhejne wale ko bhi, taaki dono taraf ek hi
+        // server-stamped id aur timestamp rahe.
+        io.to(`booking_${ride._id}`).emit('chat_message', payload);
+        done({ ok: true, message: payload });
+      } catch (err) {
+        console.error('chat_message error:', err.message);
+        done({ ok: false, error: 'server' });
       }
     });
 

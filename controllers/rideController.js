@@ -6,6 +6,7 @@ const Vehicle      = require('../models/Vehicle');
 const User         = require('../models/User');
 const Notification = require('../models/Notification');
 const Transaction  = require('../models/Transaction');
+const Message      = require('../models/Message');
 const { getDynamicFare, getDynamicHourlyFare, getSettings } = require('../utils/dynamicFare');
 const { calculateWaitingCharge } = require('../utils/fareCalculator');
 const { rewardReferralIfFirstRide } = require('../utils/referral');
@@ -942,6 +943,45 @@ const chargeCancellationFee = async ({ ride, amount, onDriver, provider, userId 
     }
   } catch (err) {
     console.error('Cancellation fee charge error:', err.message);
+  }
+};
+
+// ─── GET /api/ride/:id/messages ──────────────────────────────────────────────
+// Chat history. Messages live socket se aate hain, par app dobara khulne par
+// (ya driver ke phone lock hone ke baad) purani baat-cheet chahiye hoti hai.
+exports.getRideMessages = async (req, res) => {
+  try {
+    const ride = await Ride.findById(req.params.id).select('customer provider');
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
+
+    const isCustomer = ride.customer?.toString() === req.user.id;
+    let isDriver = false;
+    if (ride.provider) {
+      const provider = await Provider.findById(ride.provider).select('user');
+      isDriver = provider?.user?.toString() === req.user.id;
+    }
+    if (!isCustomer && !isDriver) {
+      return res.status(403).json({ success: false, message: 'Yeh ride aapki nahi hai' });
+    }
+
+    const messages = await Message.find({ ride: ride._id })
+      .select('text senderRole createdAt')
+      .sort({ createdAt: 1 })
+      .limit(200)
+      .lean();
+
+    return res.json({
+      success: true,
+      data: messages.map((m) => ({
+        _id:        String(m._id),
+        text:       m.text,
+        senderRole: m.senderRole,
+        createdAt:  m.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error('getRideMessages Error:', error.message);
+    return res.status(500).json({ success: false, message: 'Messages laane mein error' });
   }
 };
 

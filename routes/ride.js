@@ -9,6 +9,7 @@ const {
   createRide,
   getRideById,
   getRideInvoice,
+  getRideMessages,
   getCurrentRideCustomer,
   getCurrentRideDriver,
   acceptRide,
@@ -144,6 +145,10 @@ router.get('/fare-estimate',
     }
   }
 );
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+// Messages bhejne ka kaam socket karta hai; yeh sirf history ke liye hai.
+router.get('/:id/messages', protect, getRideMessages);
 
 // ─── Invoice ──────────────────────────────────────────────────────────────────
 router.get('/:id/invoice', protect, getRideInvoice);
