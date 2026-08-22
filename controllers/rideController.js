@@ -349,9 +349,13 @@ exports.createRide = async (req, res) => {
 // ─── GET RIDE BY ID ───────────────────────────────────────────────────────────
 exports.getRideById = async (req, res) => {
   try {
+    // Vehicle bhi populate karo — rider ko gaadi ka number chahiye hota hai
+    // yeh pehchanne ke liye ki kaunsi gaadi uski hai, aur baithne se pehle
+    // plate milaane ke liye. Uber/Rapido dono yeh hamesha dikhate hain.
     const ride = await Ride.findById(req.params.id)
       .populate('customer', 'name phone profilePhoto')
-      .populate({ path: 'provider', populate: { path: 'user', select: 'name phone profilePhoto' } });
+      .populate({ path: 'provider', populate: { path: 'user', select: 'name phone profilePhoto' } })
+      .populate('vehicle', 'number model color type');
 
     if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
 
@@ -369,6 +373,7 @@ exports.getCurrentRideCustomer = async (req, res) => {
       status:   { $in: ['searching', 'accepted', 'arrived', 'started'] },
     })
       .populate({ path: 'provider', populate: { path: 'user', select: 'name phone profilePhoto' } })
+      .populate('vehicle', 'number model color type')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({ success: true, data: ride, message: ride ? 'Active ride found' : 'No active ride' });
@@ -816,12 +821,36 @@ exports.cancelRide = async (req, res) => {
         : (cancelConf.driverFee   ?? 30);
     }
 
-    ride.status             = 'cancelled';
-    ride.cancelledBy        = isCustomer ? 'customer' : 'driver';
-    ride.cancellationReason = reason || 'Not specified';
-    ride.cancelledAt        = new Date();
-    ride.cancellationFee    = cancellationFee;
-    await ride.save();
+    // ─── Driver cancel kare to ride dobara driver dhoondhe ───────────────────
+    // Pehle driver ke cancel karne par ride bas 'cancelled' ho jaati thi aur
+    // customer ko poori booking dobara karni padti thi — jabki uski galti kuch
+    // bhi nahi thi. Uber/Rapido dono aise mein khud dusra driver dhoondte hain.
+    //
+    // Sirf accepted/arrived pe — ride start ho chuki ho to beech raste mein
+    // naya driver dhoondna bemaani hai. notifiedDrivers list waisi hi rehti hai
+    // taaki cancel karne wale driver ko wahi ride dobara offer na ho.
+    const canRequeue = !isCustomer && ['accepted', 'arrived'].includes(ride.status);
+
+    if (canRequeue) {
+      ride.status             = 'searching';
+      ride.provider           = null;
+      ride.vehicle            = null;
+      ride.acceptedAt         = null;
+      // searchingSince naya — warna 10-minute wala auto-cancel job ise turant
+      // stale maan kar band kar deta.
+      ride.searchingSince     = new Date();
+      ride.dispatchStageIndex = 0;
+      ride.cancellationReason = reason || 'Driver cancelled';
+      ride.cancellationFee    = cancellationFee;
+      await ride.save();
+    } else {
+      ride.status             = 'cancelled';
+      ride.cancelledBy        = isCustomer ? 'customer' : 'driver';
+      ride.cancellationReason = reason || 'Not specified';
+      ride.cancelledAt        = new Date();
+      ride.cancellationFee    = cancellationFee;
+      await ride.save();
+    }
 
     if (cancellationFee > 0) {
       await chargeCancellationFee({
@@ -852,8 +881,35 @@ exports.cancelRide = async (req, res) => {
           notify.rideCancelledForDriver(driverFcm, { customerName: ride.customer?.name || 'Customer' }).catch(() => {});
         }
       }
+    } else if (canRequeue) {
+      // Driver ne cancel kiya, par ride ab dobara search mein hai — customer ko
+      // "cancel ho gayi" mat bolo, warna wo dobara book karne lagega jabki
+      // hum uske liye pehle hi naya driver dhoond rahe hain.
+      io.to(`user_${ride.customer?._id}`).emit('rideRequeued', { rideId: ride._id });
+
+      const customerFcm = await getCustomerFcm(ride.customer?._id);
+      if (customerFcm) {
+        notify.custom(customerFcm, {
+          title: '🔄 Naya Driver Dhoond Rahe Hain',
+          body:  'Pehle wale driver ne cancel kar diya. Aapki booking chaalu hai.',
+          data:  { type: 'RIDE_REQUEUED', rideId: String(ride._id) },
+        }).catch(() => {});
+      }
+      notifyCustomerInApp(ride.customer?._id, {
+        title: '🔄 Naya Driver Dhoond Rahe Hain',
+        message: 'Pehle wale driver ne cancel kar diya. Aapki booking chaalu hai, naya driver dhoonda ja raha hai.',
+        type: 'info', data: { rideId: ride._id.toString(), event: 'RIDE_REQUEUED' },
+      });
+
+      // Turant pehla wave (3km) chalao; aage ke waves cron sambhal lega.
+      try {
+        await dispatchRideStage(ride._id, 0);
+        await markNextDispatch(ride._id, 0);
+      } catch (err) {
+        console.error('Re-dispatch after driver cancel failed:', err.message);
+      }
     } else {
-      // Driver ne cancel kiya → customer ko batao
+      // Driver ne cancel kiya aur ride requeue nahi ho sakti → customer ko batao
       io.to(`user_${ride.customer?._id}`).emit('rideCancelled', { rideId: ride._id });
       const customerFcm = await getCustomerFcm(ride.customer?._id);
       if (customerFcm) {
@@ -867,9 +923,14 @@ exports.cancelRide = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: cancellationFee > 0
-        ? `Ride cancel ho gayi. ₹${cancellationFee} cancellation charge laga hai.`
-        : 'Ride cancel ho gayi',
+      message: canRequeue
+        ? (cancellationFee > 0
+            ? `Ride chhod di. ₹${cancellationFee} charge laga hai. Customer ke liye naya driver dhoonda ja raha hai.`
+            : 'Ride chhod di. Customer ke liye naya driver dhoonda ja raha hai.')
+        : (cancellationFee > 0
+            ? `Ride cancel ho gayi. ₹${cancellationFee} cancellation charge laga hai.`
+            : 'Ride cancel ho gayi'),
+      requeued: canRequeue,
       cancellationFee,
       data: ride,
     });
