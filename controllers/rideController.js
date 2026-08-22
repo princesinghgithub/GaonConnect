@@ -6,7 +6,10 @@ const Vehicle      = require('../models/Vehicle');
 const User         = require('../models/User');
 const Notification = require('../models/Notification');
 const Transaction  = require('../models/Transaction');
-const { getDynamicFare, getDynamicHourlyFare } = require('../utils/dynamicFare');
+const { getDynamicFare, getDynamicHourlyFare, getSettings } = require('../utils/dynamicFare');
+const { calculateWaitingCharge } = require('../utils/fareCalculator');
+const { rewardReferralIfFirstRide } = require('../utils/referral');
+const { creditDriverIncentive } = require('../utils/incentive');
 const { getIO }                     = require('../socket');
 const { notify }                    = require('../utils/notifications');
 const { applyPromoToRide }          = require('./promoController');
@@ -543,6 +546,23 @@ exports.updateRideStatus = async (req, res) => {
     const updateFields = { status };
     if (status === 'arrived') updateFields.arrivedAt    = new Date();
     if (status === 'started') updateFields.startedAt    = new Date();
+
+    // ─── Waiting charge ──────────────────────────────────────────────────────
+    // calculateWaitingCharge() pehle se likha tha par waitMinutes kabhi
+    // calculate hi nahi hota tha — hamesha 0 jaata tha, isliye driver ko wait
+    // ka ek rupaya nahi milta tha. arrivedAt se start tak ka time yahan naapa
+    // jaata hai. Charge abhi sirf store hota hai; fare mein completion pe joda
+    // jaata hai, taaki hourly recalculation use mita na de.
+    if (status === 'started' && ride.arrivedAt) {
+      const waitedMs  = updateFields.startedAt - new Date(ride.arrivedAt);
+      const waitMins  = Math.max(0, Math.floor(waitedMs / 60000));
+      const settings  = await getSettings();
+      const charge    = calculateWaitingCharge(waitMins, settings?.waiting);
+
+      updateFields.waitMinutes   = waitMins;
+      updateFields.waitingCharge = charge;
+    }
+
     if (status === 'working') updateFields.workStartedAt = new Date();
     if (status === 'completed') {
       updateFields.completedAt = new Date();
@@ -565,6 +585,15 @@ exports.updateRideStatus = async (req, res) => {
           if (recalculated.fare) updateFields.fare = recalculated.fare;
         }
       }
+
+      // Waiting charge ab fare mein jodo — hourly recalculation ke BAAD, warna
+      // recalculated fare use overwrite kar deta. ride.fare completion tak base
+      // fare hi rehta hai, isliye yeh ek hi baar judta hai; aur status
+      // transition atomic hai to retry pe dobara nahi judega.
+      const waitCharge = ride.waitingCharge || 0;
+      if (waitCharge > 0) {
+        updateFields.fare = (updateFields.fare ?? ride.fare) + waitCharge;
+      }
     }
 
     const previousStatus = ride.status;
@@ -585,6 +614,8 @@ exports.updateRideStatus = async (req, res) => {
     ride.workEndedAt   = updatedRide.workEndedAt;
     ride.actualHours   = updatedRide.actualHours;
     ride.fare          = updatedRide.fare;
+    ride.waitMinutes   = updatedRide.waitMinutes;
+    ride.waitingCharge = updatedRide.waitingCharge;
 
     // Socket
     const io = getIO();
@@ -620,6 +651,15 @@ exports.updateRideStatus = async (req, res) => {
         title: '✅ Ride Complete!', message: `${ride.drop.address} pahunch gaye. Fare: ₹${ride.fare}. Rating dijiye!`,
         type: 'success', data: { rideId: ride._id.toString(), event: 'RIDE_COMPLETED' },
       });
+
+      // Referral reward — agar yeh customer ki pehli poori hui ride hai to
+      // usse aur usse laane wale, dono ko bonus. Await nahi kar rahe: reward
+      // fail ho jaaye to bhi ride complete honi chahiye.
+      rewardReferralIfFirstRide(ride.customer?._id).catch(() => {});
+
+      // Daily incentive — aaj ka target pura hua to bonus. Yeh bhi ride
+      // completion ko block nahi karta.
+      creditDriverIncentive(provider._id).catch(() => {});
 
       // Driver earnings update
       const commission    = Math.round(ride.fare * 0); // abhi 0% commission
@@ -758,11 +798,39 @@ exports.cancelRide = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Yeh ride cancel nahi ho sakti' });
     }
 
+    // ─── Cancellation fee ────────────────────────────────────────────────────
+    // Settings mein yeh config pehle se maujood tha par kabhi lagta nahi tha —
+    // cancellation bilkul muft thi. Fee sirf tab lagti hai jab koi driver ride
+    // accept kar chuka ho: agar abhi search hi chal rahi thi to kisi ka time
+    // barbaad nahi hua, isliye charge karna galat hoga. Accept hone ke baad bhi
+    // freeWindowMinutes tak muft — galti se book karne wale ko sazaa na mile.
+    const settings     = await getSettings();
+    const cancelConf   = settings?.cancellation || {};
+    const freeWindowMs = (cancelConf.freeWindowMinutes ?? 2) * 60000;
+
+    let cancellationFee = 0;
+    if (ride.acceptedAt && Date.now() - new Date(ride.acceptedAt).getTime() > freeWindowMs) {
+      cancellationFee = isCustomer
+        ? (cancelConf.customerFee ?? 20)
+        : (cancelConf.driverFee   ?? 30);
+    }
+
     ride.status             = 'cancelled';
     ride.cancelledBy        = isCustomer ? 'customer' : 'driver';
     ride.cancellationReason = reason || 'Not specified';
     ride.cancelledAt        = new Date();
+    ride.cancellationFee    = cancellationFee;
     await ride.save();
+
+    if (cancellationFee > 0) {
+      await chargeCancellationFee({
+        ride,
+        amount:   cancellationFee,
+        onDriver: !isCustomer,
+        provider,
+        userId:   ride.customer?._id,
+      });
+    }
 
     if (provider) {
       provider.status = 'available';
@@ -796,10 +864,84 @@ exports.cancelRide = async (req, res) => {
       });
     }
 
-    return res.status(200).json({ success: true, message: 'Ride cancel ho gayi', data: ride });
+    return res.status(200).json({
+      success: true,
+      message: cancellationFee > 0
+        ? `Ride cancel ho gayi. ₹${cancellationFee} cancellation charge laga hai.`
+        : 'Ride cancel ho gayi',
+      cancellationFee,
+      data: ride,
+    });
   } catch (error) {
     console.error('Cancel Ride Error:', error);
     return res.status(500).json({ success: false, message: 'Ride cancel karne mein error' });
+  }
+};
+
+// ─── Cancellation fee wasoolo ────────────────────────────────────────────────
+// Driver ke paas wallet balance hota hai (kamai isi mein aati hai), isliye
+// uski fee turant kaat li jaati hai. Customer ka wallet abhi khaali ho sakta
+// hai — uspe fee zabardasti nahi thopte: balance ho to kaat lo, warna
+// transaction 'pending' chhod do taaki wallet mein paisa aane par ya admin
+// ke through settle ho sake. Ride cancel hona kabhi fail nahi hona chahiye
+// sirf isliye ki fee nahi kat payi, isliye poora block try/catch mein hai.
+const chargeCancellationFee = async ({ ride, amount, onDriver, provider, userId }) => {
+  try {
+    if (onDriver && provider) {
+      const updated = await Provider.findByIdAndUpdate(
+        provider._id,
+        { $inc: { 'wallet.balance': -amount } },
+        { new: true },
+      ).select('wallet');
+
+      await Transaction.create({
+        provider:     provider._id,
+        ride:         ride._id,
+        type:         'debit',
+        category:     'cancellation_fee',
+        amount,
+        description:  'Ride cancel karne ka charge',
+        status:       'completed',
+        balanceAfter: updated?.wallet?.balance,
+      });
+      return;
+    }
+
+    if (!userId) return;
+
+    const user = await User.findById(userId).select('wallet');
+    const canPayNow = (user?.wallet || 0) >= amount;
+
+    if (canPayNow) {
+      const updated = await User.findByIdAndUpdate(
+        userId,
+        { $inc: { wallet: -amount } },
+        { new: true },
+      ).select('wallet');
+
+      await Transaction.create({
+        user:         userId,
+        ride:         ride._id,
+        type:         'debit',
+        category:     'cancellation_fee',
+        amount,
+        description:  'Ride cancel karne ka charge',
+        status:       'completed',
+        balanceAfter: updated?.wallet,
+      });
+    } else {
+      await Transaction.create({
+        user:        userId,
+        ride:        ride._id,
+        type:        'debit',
+        category:    'cancellation_fee',
+        amount,
+        description: 'Ride cancel karne ka charge (baaki hai)',
+        status:      'pending',
+      });
+    }
+  } catch (err) {
+    console.error('Cancellation fee charge error:', err.message);
   }
 };
 

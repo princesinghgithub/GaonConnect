@@ -1,9 +1,21 @@
+const crypto   = require('crypto');
+const Razorpay = require('razorpay');
 const Provider = require('../models/Provider');
 const Transaction = require('../models/Transaction');
 const Ride = require('../models/Ride');
 const User = require('../models/User');
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+const razorpay = new Razorpay({
+  key_id:     process.env.RAZORPAY_KEY,
+  key_secret: process.env.RAZORPAY_SECRET,
+});
+
+// Top-up limits — chhoti raqam pe gateway fee hi zyada pad jaati hai, aur
+// bahut badi raqam aksar galti se type hoti hai (ya money-laundering flag).
+const MIN_TOPUP = 10;
+const MAX_TOPUP = 10000;
 
 /**
  * GET WALLET BALANCE
@@ -90,14 +102,30 @@ exports.getTransactionHistory = async (req, res) => {
   try {
     const { page = 1, limit = 20, type } = req.query;
 
-    // Customers don't have a transaction ledger yet (Transaction model is
-    // provider-earnings only) — return an empty list instead of 404.
+    // Customers ke paas ab apni ledger hai (top-up, cancellation fee, tip),
+    // isliye khaali list lautana galat hoga — unki transactions user field se
+    // aati hain, provider field se nahi.
     if (req.user.role !== 'provider') {
+      const custQuery = { user: req.user.id };
+      if (type && ['credit', 'debit'].includes(type)) custQuery.type = type;
+
+      const [custTxns, custCount] = await Promise.all([
+        Transaction.find(custQuery)
+          .sort({ createdAt: -1 })
+          .limit(limit * 1)
+          .skip((page - 1) * limit),
+        Transaction.countDocuments(custQuery),
+      ]);
+
       return res.status(200).json({
         success: true,
         data: {
-          transactions: [],
-          pagination: { currentPage: Number(page), totalPages: 0, total: 0 },
+          transactions: custTxns,
+          pagination: {
+            currentPage: Number(page),
+            totalPages:  Math.ceil(custCount / limit),
+            total:       custCount,
+          },
         },
       });
     }
@@ -322,3 +350,205 @@ exports.getEarningsReport = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/wallet/topup/order
+ * Wallet mein paisa daalne ke liye Razorpay order banao.
+ *
+ * Pehle customer wallet sirf padha ja sakta tha — paisa daalne ka koi rasta hi
+ * nahi tha, isliye balance hamesha 0 rehta aur wallet feature bekaar tha.
+ * Yahan sirf order banta hai; balance tab tak nahi badhta jab tak verify step
+ * signature check na kar le — warna koi bhi bina paise diye wallet bhar leta.
+ */
+exports.createTopupOrder = async (req, res) => {
+  try {
+    const amount = Number(req.body?.amount);
+
+    if (!Number.isFinite(amount) || amount < MIN_TOPUP || amount > MAX_TOPUP) {
+      return res.status(400).json({
+        success: false,
+        message: `Amount ₹${MIN_TOPUP} se ₹${MAX_TOPUP} ke beech hona chahiye`,
+      });
+    }
+
+    const order = await razorpay.orders.create({
+      amount:   Math.round(amount * 100), // paise
+      currency: 'INR',
+      receipt:  `topup_${req.user.id}_${Date.now()}`,
+      notes:    { userId: String(req.user.id), purpose: 'wallet_topup' },
+    });
+
+    // Transaction pehle hi 'pending' bana dete hain — agar user payment ke
+    // beech app band kar de to bhi record rehta hai aur reconcile ho sakta hai.
+    await Transaction.create({
+      user:          req.user.id,
+      type:          'credit',
+      category:      'topup',
+      amount,
+      description:   'Wallet top-up',
+      status:        'pending',
+      transactionId: order.id,
+    });
+
+    return res.json({ success: true, order, key: process.env.RAZORPAY_KEY });
+  } catch (err) {
+    console.error('createTopupOrder Error:', err.message);
+    return res.status(500).json({ success: false, message: 'Top-up order banane mein error' });
+  }
+};
+
+/**
+ * POST /api/wallet/topup/verify
+ * Razorpay signature verify karke wallet credit karo.
+ */
+exports.verifyTopup = async (req, res) => {
+  try {
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return res.status(400).json({ success: false, message: 'Payment details adhoore hain' });
+    }
+
+    // Order ko us pending transaction se dhoondo jo humne banayi thi. Isse do
+    // cheezein pakki hoti hain: order sach mein humne banaya tha, aur amount
+    // client ke bheje hue number se nahi balki server ke record se aata hai —
+    // warna koi ₹10 de kar ₹10,000 credit karwa leta.
+    const txn = await Transaction.findOne({
+      transactionId: razorpayOrderId,
+      user:          req.user.id,
+      category:      'topup',
+    });
+
+    if (!txn) {
+      return res.status(404).json({ success: false, message: 'Top-up order nahi mila' });
+    }
+
+    if (txn.status === 'completed') {
+      // Double-submit (network retry ya user ka dobara tap) — dobara credit mat karo.
+      const user = await User.findById(req.user.id).select('wallet');
+      return res.json({ success: true, message: 'Top-up pehle hi ho chuka hai', balance: user?.wallet || 0 });
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_SECRET)
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex');
+
+    if (expectedSignature !== razorpaySignature) {
+      txn.status        = 'failed';
+      txn.failureReason = 'Signature mismatch';
+      await txn.save();
+      return res.status(400).json({ success: false, message: 'Payment verify nahi ho paya' });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user.id,
+      { $inc: { wallet: txn.amount } },
+      { new: true },
+    ).select('wallet');
+
+    txn.status       = 'completed';
+    txn.processedAt  = new Date();
+    txn.balanceAfter = updated?.wallet;
+    await txn.save();
+
+    return res.json({
+      success: true,
+      message: `₹${txn.amount} wallet mein add ho gaye`,
+      balance: updated?.wallet || 0,
+    });
+  } catch (err) {
+    console.error('verifyTopup Error:', err.message);
+    return res.status(500).json({ success: false, message: 'Top-up verify karne mein error' });
+  }
+};
+
+/**
+ * POST /api/wallet/tip
+ * Ride khatam hone ke baad driver ko tip do — wallet se seedha driver ko.
+ *
+ * Tip Rapido/Uber dono pe hai aur driver ki kamai seedha badhata hai, platform
+ * ka isme koi commission nahi — isliye poori raqam driver ke wallet mein jaati
+ * hai. Sirf completed ride pe, aur ek ride pe ek hi baar.
+ */
+exports.tipDriver = async (req, res) => {
+  try {
+    const { rideId } = req.body;
+    const amount = Number(req.body?.amount);
+
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1000) {
+      return res.status(400).json({ success: false, message: 'Tip ₹1 se ₹1000 ke beech hona chahiye' });
+    }
+
+    const ride = await Ride.findById(rideId);
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
+
+    if (ride.customer.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Yeh ride aapki nahi hai' });
+    }
+    if (ride.status !== 'completed') {
+      return res.status(400).json({ success: false, message: 'Ride complete hone ke baad hi tip de sakte hain' });
+    }
+    if (!ride.provider) {
+      return res.status(400).json({ success: false, message: 'Is ride pe koi driver nahi tha' });
+    }
+
+    // Ek ride pe ek hi tip — warna galti se dobara tap karne pe do baar kat jaata.
+    const already = await Transaction.findOne({ ride: ride._id, category: 'tip', user: req.user.id });
+    if (already) {
+      return res.status(400).json({ success: false, message: 'Is ride pe tip pehle hi de chuke hain' });
+    }
+
+    const user = await User.findById(req.user.id).select('wallet');
+    if ((user?.wallet || 0) < amount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Wallet mein itna balance nahi hai. Pehle top-up karein.',
+        code:    'INSUFFICIENT_BALANCE',
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      { $inc: { wallet: -amount } },
+      { new: true },
+    ).select('wallet');
+
+    const updatedProvider = await Provider.findByIdAndUpdate(
+      ride.provider,
+      { $inc: { 'wallet.balance': amount, 'stats.totalEarnings': amount } },
+      { new: true },
+    ).select('wallet');
+
+    await Transaction.create([
+      {
+        user:         req.user.id,
+        ride:         ride._id,
+        type:         'debit',
+        category:     'tip',
+        amount,
+        description:  'Driver ko tip',
+        status:       'completed',
+        balanceAfter: updatedUser?.wallet,
+      },
+      {
+        provider:     ride.provider,
+        ride:         ride._id,
+        type:         'credit',
+        category:     'tip',
+        amount,
+        description:  'Customer se tip',
+        status:       'completed',
+        balanceAfter: updatedProvider?.wallet?.balance,
+      },
+    ]);
+
+    return res.json({
+      success: true,
+      message: `₹${amount} tip driver ko bhej diya. Shukriya!`,
+      balance: updatedUser?.wallet || 0,
+    });
+  } catch (err) {
+    console.error('tipDriver Error:', err.message);
+    return res.status(500).json({ success: false, message: 'Tip bhejne mein error' });
+  }
+};

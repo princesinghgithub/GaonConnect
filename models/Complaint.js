@@ -14,7 +14,7 @@ const ComplaintSchema = new mongoose.Schema({
   ride: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride' },
   category: {
     type: String,
-    enum: ['fare', 'behavior', 'safety', 'vehicle_condition', 'delay', 'route', 'other'],
+    enum: ['fare', 'behavior', 'safety', 'vehicle_condition', 'delay', 'route', 'lost_item', 'other'],
     default: 'other',
   },
   description: { type: String, required: true, trim: true },
@@ -34,5 +34,7 @@ const ComplaintSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 ComplaintSchema.index({ status: 1, createdAt: -1 });
+// User apni complaints dekh sake iske liye.
+ComplaintSchema.index({ complainant: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Complaint', ComplaintSchema);

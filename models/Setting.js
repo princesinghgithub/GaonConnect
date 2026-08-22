@@ -123,6 +123,34 @@ const SettingSchema = new mongoose.Schema({
   },
 
   // ─── General ─────────────────────────────────────────────────────────────────
+  // ─── Refer & Earn ────────────────────────────────────────────────────────────
+  referral: {
+    enabled:        { type: Boolean, default: true },
+    referrerReward: { type: Number,  default: 50 },  // jisne refer kiya
+    refereeReward:  { type: Number,  default: 50 },  // jo refer hokar aaya
+    // Reward pehli COMPLETED ride ke baad milta hai, sign-up pe nahi — warna
+    // log fake account bana bana ke wallet bharte rehte.
+    rewardOnFirstRide: { type: Boolean, default: true },
+  },
+
+  // ─── Driver Incentives ───────────────────────────────────────────────────────
+  // Rapido-style daily targets: "aaj itni rides pure karo, itna bonus".
+  // Tiers sorted rakhna zaroori nahi — code sabse ooncha pura hua tier chunta hai.
+  incentive: {
+    enabled: { type: Boolean, default: false },
+    daily: {
+      type: [{
+        rides: { type: Number, required: true },
+        bonus: { type: Number, required: true },
+      }],
+      default: [
+        { rides: 5,  bonus: 50  },
+        { rides: 10, bonus: 150 },
+        { rides: 15, bonus: 300 },
+      ],
+    },
+  },
+
   general: {
     currency:       { type: String, default: 'INR'            },
     currencySymbol: { type: String, default: '₹'              },

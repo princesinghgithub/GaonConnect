@@ -258,6 +258,16 @@ workNote: {
     completedAt: Date,
     cancelledAt: Date,
 
+    // Driver ke pickup pe pahunchne (arrivedAt) se ride start hone tak ka time.
+    // Settings.waiting ke free minutes ke upar jo bacha, uska charge lagta hai.
+    // Dono alag store hote hain taaki invoice mein saaf dikha sakein ki kitna
+    // wait hua aur uska kitna laga — warna user ko sirf badha hua fare dikhta.
+    waitMinutes:   { type: Number, default: 0 },
+    waitingCharge: { type: Number, default: 0 },
+
+    // Cancellation fee — free window ke baad cancel karne par lagti hai.
+    cancellationFee: { type: Number, default: 0 },
+
     createdAt: {
       type: Date,
       default: Date.now,

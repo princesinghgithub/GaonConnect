@@ -18,9 +18,15 @@ const generateInvoiceHTML = (data) => {
     fare, commission, driverEarning,
     paymentMethod, paymentStatus,
     promoDiscount = 0,
+    waitingCharge = 0,
+    waitMinutes = 0,
   } = data;
 
   const finalFare = fare - (promoDiscount || 0);
+  // ride.fare mein waiting charge pehle se juda hua aata hai, isliye base
+  // nikalne ke liye ghata rahe hain — warna receipt poore total ko "Base Fare"
+  // likhti aur customer ko samajh hi nahi aata ki extra paisa kis cheez ka hai.
+  const baseFare = fare - (waitingCharge || 0);
 
   return `
 <!DOCTYPE html>
@@ -119,7 +125,8 @@ const generateInvoiceHTML = (data) => {
   <div class="section">
     <div class="section-title">Payment</div>
     <div class="fare-box">
-      <div class="row"><span class="label">Base Fare</span><span class="value">₹${fare}</span></div>
+      <div class="row"><span class="label">Base Fare</span><span class="value">₹${baseFare}</span></div>
+      ${waitingCharge > 0 ? `<div class="row"><span class="label">Waiting Charge (${waitMinutes} min)</span><span class="value">₹${waitingCharge}</span></div>` : ''}
       ${promoDiscount > 0 ? `<div class="row promo-line"><span class="label">🎉 Promo Discount</span><span class="value">- ₹${promoDiscount}</span></div>` : ''}
       <hr style="border:none;border-top:1px dashed #cfe8d6;margin:12px 0"/>
       <div class="row"><span class="label" style="font-size:15px;font-weight:700;color:#1f1f1f">Total Paid</span><span class="fare-total">₹${finalFare}</span></div>
@@ -193,6 +200,8 @@ const buildInvoiceHTML = async (ride) => {
       distance:      ride.distance         || 0,
       duration:      ride.actualDuration   || ride.estimatedDuration || 0,
       fare:          ride.fare             || 0,
+      waitingCharge: ride.waitingCharge    || 0,
+      waitMinutes:   ride.waitMinutes      || 0,
       commission,
       driverEarning,
       paymentMethod: ride.paymentMethod    || 'cash',

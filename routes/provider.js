@@ -71,6 +71,21 @@ router.put('/location', protect, updateProviderLocation);
 
 // Stats & Earnings
 router.get('/stats/me',        protect, getProviderStats);
+
+// Aaj ka incentive target + progress (Rapido-style daily bonus).
+router.get('/incentive/today', protect, async (req, res) => {
+  try {
+    const Provider = require('../models/Provider');
+    const provider = await Provider.findOne({ user: req.user.id }).select('_id');
+    if (!provider) return res.status(403).json({ success: false, message: 'Driver nahi mila' });
+
+    const { getDriverIncentiveStatus } = require('../utils/incentive');
+    const data = await getDriverIncentiveStatus(provider._id);
+    return res.json({ success: true, data });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 router.get('/earnings/today',  protect, getTodayEarnings);
 router.get('/earnings/weekly', protect, getWeeklyEarnings);
 

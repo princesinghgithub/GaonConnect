@@ -144,6 +144,14 @@ router.get('/profile',  protect, getProfile);
 // nigal liya jaata tha. Nateeja: launch pe token kabhi verify hi nahi hota tha
 // (blocked/deleted account bhi andar aa jaata). '/profile' ka alias.
 router.get('/me',       protect, getProfile);
+
+// Emergency contacts — SOS ke waqt inhe khabar jaati hai
+router.get('/emergency-contacts', protect, require('../controllers/authController').getEmergencyContacts);
+router.put('/emergency-contacts', protect, require('../controllers/authController').setEmergencyContacts);
+
+// Refer & Earn
+router.get('/referral',        protect, require('../controllers/authController').getReferral);
+router.post('/referral/apply', protect, require('../controllers/authController').applyReferral);
 router.put('/profile',  protect, validate(schemas.updateProfile), updateProfile);
 router.post('/profile/photo', protect, photoUpload.single('photo'), uploadProfilePhoto);
 

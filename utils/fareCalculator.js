@@ -199,9 +199,15 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
 
 // ─── All vehicles ka estimate ek saath ───────────────────────────────────────
 exports.getAllFareEstimates = (distance, options = {}) => {
-  const rates    = options.settings?.vehicleRates || DEFAULT_RATES;
-  const vehicles = Object.keys(rates);
-  const result   = {};
+  const rates = options.settings?.vehicleRates || DEFAULT_RATES;
+
+  // isActive: false wale vehicles chhod do. Pehle yeh sab types ka fare lauta
+  // deta tha jabki getDynamicVehicleTypes inhe filter karta hai — is farak ki
+  // wajah se admin ke band kiye hue vehicle home screen se to gayab ho jaate
+  // the, par fare screen unhe ab bhi dikha kar book karne deti thi.
+  const vehicles = Object.keys(rates).filter((v) => rates[v]?.isActive !== false);
+
+  const result = {};
   vehicles.forEach((v) => {
     result[v] = exports.getFareBreakdown(distance, v, options);
   });

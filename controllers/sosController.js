@@ -102,10 +102,35 @@ exports.triggerSOS = async (req, res) => {
 
     console.log(`🚨 SOS triggered by ${req.user.name} (${triggeredByRole}) | Ride: ${ride?._id || 'N/A'}`);
 
+    // User ke emergency contacts wapas bhejo taaki app turant unhe WhatsApp pe
+    // live location bhej sake. SMS isliye nahi bhej rahe kyunki India mein
+    // custom SMS ke liye DLT-approved template chahiye — WhatsApp deep link
+    // bina kisi gateway ke aaj hi kaam karta hai.
+    let emergencyContacts = [];
+    try {
+      const u = await User.findById(req.user.id).select('emergencyContacts');
+      emergencyContacts = u?.emergencyContacts || [];
+    } catch {
+      // Contacts na mile to SOS phir bhi safal hai — 112 aur admin alert ja chuka hai.
+    }
+
+    // Admin ko bhi contacts dikhne chahiye, taaki ops team khud phone kar sake.
+    if (emergencyContacts.length) {
+      io.to('admin_room').emit('sos_contacts', {
+        alertId:  alert._id,
+        contacts: emergencyContacts,
+      });
+    }
+
     return res.status(201).json({
       success: true,
       message: '🚨 SOS alert bhej diya gaya! Help raste mein hai.',
-      data:    { alertId: alert._id },
+      data: {
+        alertId: alert._id,
+        emergencyContacts,
+        // App is text ko WhatsApp/SMS mein bhej sakti hai.
+        shareText: `EMERGENCY: ${req.user.name} ko madad chahiye. Live location: https://maps.google.com/?q=${latitude},${longitude}`,
+      },
     });
   } catch (error) {
     console.error('SOS Trigger Error:', error);
