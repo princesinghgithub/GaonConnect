@@ -123,6 +123,7 @@ app.use('/api/sos',     require('./routes/sos'));
 app.use('/api/promo',   require('./routes/promo'));
 app.use('/api/agent',   require('./routes/agent'));
 app.use('/api/support', require('./routes/support'));
+app.use('/api/banner',  require('./routes/banner'));
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/health', async (_req, res) => {
