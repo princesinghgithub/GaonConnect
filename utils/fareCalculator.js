@@ -189,6 +189,11 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
     // Meta
     vehicleType,
     distance,
+    // Label aur icon bhi bhejo — app ke paas admin ke naye vehicle types ke
+    // liye koi translation ya emoji nahi hoti, aur bina inke wo raw key
+    // ("home.vehicles.ambulance") dikha deti thi.
+    label: r.label || vehicleType,
+    icon:  r.icon  || '',
     rateCard: {
       baseFare:    r.baseFare,
       perKmRate:   r.perKmRate,

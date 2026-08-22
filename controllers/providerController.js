@@ -1898,6 +1898,54 @@ exports.getWeeklyEarnings = async (req, res) => {
 
 
 // Update FCM Token
+// ─── GET /api/provider/earnings/daily ────────────────────────────────────────
+// Pichhle 7 din ka din-wise breakdown — driver app ka earnings chart isi se
+// banta hai. /earnings/weekly sirf total deta hai, isliye chart ban hi nahi
+// sakta tha aur app mein bas numbers dikhte the.
+exports.getDailyEarnings = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id }).select('_id');
+    if (!provider) return res.status(404).json({ success: false, message: 'Driver nahi mila' });
+
+    const { istDayRange } = require('../utils/incentive');
+
+    // Aaj se peeche 7 din. Din IST se naapa jaata hai — UTC pe "aaj" subah
+    // 5:30 baje badalta, jo driver ke liye bilkul galat hai.
+    const days = [];
+    for (let i = 6; i >= 0; i -= 1) {
+      const at = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const { start, end, key } = istDayRange(at);
+      days.push({ key, start, end });
+    }
+
+    const rides = await Ride.find({
+      provider:    provider._id,
+      status:      'completed',
+      completedAt: { $gte: days[0].start, $lt: days[days.length - 1].end },
+    }).select('fare completedAt').lean();
+
+    const result = days.map((d) => {
+      const dayRides = rides.filter((r) => r.completedAt >= d.start && r.completedAt < d.end);
+      return {
+        date:     d.key,
+        earnings: dayRides.reduce((sum, r) => sum + (r.fare || 0), 0),
+        rides:    dayRides.length,
+      };
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        days:  result,
+        total: result.reduce((s, d) => s + d.earnings, 0),
+        best:  result.reduce((m, d) => Math.max(m, d.earnings), 0),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.updateFCMToken = async (req, res) => {
   try {
     const { fcmToken, platform, deviceId } = req.body;

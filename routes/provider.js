@@ -88,6 +88,7 @@ router.get('/incentive/today', protect, async (req, res) => {
 });
 router.get('/earnings/today',  protect, getTodayEarnings);
 router.get('/earnings/weekly', protect, getWeeklyEarnings);
+router.get('/earnings/daily',  protect, require('../controllers/providerController').getDailyEarnings);
 
 // Bank & Preferences
 router.put('/bank-details', protect, updateBankDetails);

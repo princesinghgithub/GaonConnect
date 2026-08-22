@@ -2425,7 +2425,7 @@ const approveDriver = async (req, res) => {
         isRejected:  false,
       },
       { new: true }
-    ).populate('user', 'name');
+    ).populate('user', 'name phone');
 
     if (!driver) {
       return res.status(404).json({ success: false, message: 'Driver not found' });
@@ -2436,6 +2436,12 @@ const approveDriver = async (req, res) => {
     if (fcmToken) {
       const { notify } = require('../utils/notifications');
       notify.accountApproved(fcmToken, { driverName: driver.user?.name || 'Driver' }).catch(() => {});
+    }
+
+    // SMS bhi - driver ne app install/open na kiya ho to push kahin nahi pahunchta
+    if (driver.user?.phone) {
+      const { smsNotify } = require('../utils/sendSMS');
+      smsNotify.driverApproved(driver.user.phone, { name: driver.user?.name }).catch(() => {});
     }
 
     res.json({ success: true, message: 'Driver approved successfully', data: driver });
@@ -2458,7 +2464,7 @@ const rejectDriver = async (req, res) => {
         rejectedBy: req.user._id
       },
       { new: true }
-    ).populate('user', 'name').select('-password');
+    ).populate('user', 'name phone').select('-password');
 
     if (!driver) {
       return res.status(404).json({
@@ -2472,6 +2478,14 @@ const rejectDriver = async (req, res) => {
       const { notify } = require('../utils/notifications');
       notify.accountRejected(fcmToken, {
         driverName: driver.user?.name || 'Driver',
+        reason: reason || '',
+      }).catch(() => {});
+    }
+
+    if (driver.user?.phone) {
+      const { smsNotify } = require('../utils/sendSMS');
+      smsNotify.driverRejected(driver.user.phone, {
+        name: driver.user?.name,
         reason: reason || '',
       }).catch(() => {});
     }

@@ -120,6 +120,8 @@ router.get('/fare-estimate',
       // App ke liye simplified list bhi bhejo
       const fareList = Object.entries(allFares).map(([type, data]) => ({
         vehicleType:  type,
+        label:        data.label,
+        icon:         data.icon,
         totalFare:    data.totalFare,
         surgeActive:  data.surgeActive,
         surgeType:    data.surgeType,
