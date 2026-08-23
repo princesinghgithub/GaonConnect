@@ -34,7 +34,7 @@ const express = require('express');
 const router = express.Router();
 const { protect, admin } = require('../middleware/auth');
 const adminController = require('../controllers/adminController');
-const { docUpload } = require('../middleware/upload');
+const { docUpload, adminAssetUpload } = require('../middleware/upload');
 
 // All routes are protected and admin-only
 router.use(protect);
@@ -117,6 +117,15 @@ router.put('/hourly-rates', adminController.updateHourlyRate);
 router.get('/vehicle-types', adminController.getVehicleTypes);
 router.post('/vehicle-types', adminController.createVehicleType);
 router.put('/vehicle-types/:id', adminController.updateVehicleType);
+
+// Vehicle photo / banner image upload. URL wapas milta hai, jise vehicle-type
+// ya banner pe set kar do.
+router.post('/upload/image', adminAssetUpload.single('image'), (req, res) => {
+  if (!req.file?.path) {
+    return res.status(400).json({ success: false, message: 'Image nahi mili' });
+  }
+  return res.json({ success: true, data: { url: req.file.path } });
+});
 router.delete('/vehicle-types/:id', adminController.deleteVehicleType);
 
 // ===== REPORTS & ANALYTICS =====
