@@ -18,15 +18,17 @@ import api from "../services/api";
 // Gaon ka user lamba type nahi karta — jo sawal sabse zyada poochhe jaate hain
 // wo ek tap pe hain.
 const QUICK = [
-  "Booking kaise karun?",
-  "Kiraya kaise banta hai?",
-  "Promo code kaise lagayein?",
-  "Ride cancel kaise karun?",
+  "JCB ka rate kya hai?",
+  "Tractor kaise book karun?",
+  "Cancel karne pe charge lagta hai?",
+  "Refer karne pe kya milta hai?",
   "Driver kaise banun?",
 ];
 
 const GREETING =
-  "नमस्ते! 🙏 मैं GaonConnect का सहायक हूँ।\n\nबुकिंग, किराया, प्रोमो कोड या ड्राइवर बनने के बारे में कुछ भी पूछिए।";
+  `नमस्ते! 🙏 मैं GaonConnect का सहायक हूँ।
+
+रेट, बुकिंग, ट्रैक्टर-JCB, प्रोमो, सेफ्टी या ड्राइवर बनने तक — GaonConnect के बारे में कुछ भी पूछिए।`;
 
 export default function SupportChat() {
   const [open, setOpen] = useState(false);
