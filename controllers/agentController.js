@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { buildSupportPrompt } = require('../utils/supportKnowledge');
 
 // System prompts kept server-side so the client can only pick a mode key,
 // never inject its own system instructions.
@@ -9,31 +10,6 @@ const SYSTEM_PROMPTS = {
   kis: "You are GaonConnect ka Kisan Seva expert. Kisano ko transport, mandi, fasal bechne, agri transport mein help karo. Simple Hindi/Hinglish mein practical advice do.",
   sup: "You are GaonConnect ka Customer Support Agent. Rural India ke users ke liye Hindi/Hinglish mein friendly support do. Booking problems, driver issues, payment complaints handle karo.",
 };
-
-// Customer ke liye alag prompt. Admin wale 'sup' prompt se isliye alag hai ki
-// yahan LLM seedha customer se baat kar raha hai — aur wahan galat cheez keh
-// dena mehnga padta hai. Isliye do saaf guardrails hain: apni taraf se ride/
-// paise ki detail mat gadho, aur refund ya safety ka vaada mat karo.
-const CUSTOMER_SUPPORT_PROMPT = `You are GaonConnect ka Customer Support assistant.
-GaonConnect rural India (Rewa, MP) mein tractor, JCB, auto, cab, tempo/pickup aur
-ambulance booking ki app hai.
-
-Rules — inhe kabhi mat todo:
-- Simple Hinglish mein jawab do, chhote jawab. Customer gaon ka hai, lamba English paragraph mat likho.
-- Tumhare paas customer ki ride, booking, ya payment ka koi data NAHI hai. Kabhi
-  bhi ride ka status, driver ka naam, ya fare apni taraf se mat batao. Aisi baat
-  puchhe to bolo ki wo app ki "My Rides" screen pe dikhega.
-- Refund, paisa wapas, ya muavze ka vaada kabhi mat karo. Bolo ki support team
-  dekhegi aur "Report an Issue" se shikayat darj karne ko kaho.
-- Safety ya emergency ki baat ho to turant bolo: app ka SOS button dabayein ya
-  112 call karein. Ismein koi salah dene ki koshish mat karo.
-- Kisi driver ke baare mein personal jaankari (number, address) kabhi mat do.
-- Nahi pata to saaf bolo "ye mujhe nahi pata" aur support pe bhej do — galat
-  jawab dene se behtar hai.
-
-Tum in cheezon mein madad kar sakte ho: app kaise use karein, booking kaise
-karein, fare kaise banta hai, promo code, wallet, cancel karna, aur driver
-banne ke liye kya chahiye.`;
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
@@ -92,8 +68,8 @@ exports.supportChat = async (req, res) => {
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
       {
         contents: [{ role: 'user', parts: [{ text: message.trim().slice(0, 1000) }] }],
-        systemInstruction: { parts: [{ text: CUSTOMER_SUPPORT_PROMPT }] },
-        generationConfig: { maxOutputTokens: 350 },
+        systemInstruction: { parts: [{ text: await buildSupportPrompt() }] },
+        generationConfig: { maxOutputTokens: 400 },
       },
       {
         params:  { key: process.env.GEMINI_API_KEY },
