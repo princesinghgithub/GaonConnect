@@ -116,6 +116,7 @@ router.get('/hourly-rates', adminController.getHourlyRates);
 router.put('/hourly-rates', adminController.updateHourlyRate);
 router.get('/vehicle-types', adminController.getVehicleTypes);
 router.post('/vehicle-types', adminController.createVehicleType);
+router.put('/vehicle-types/:id', adminController.updateVehicleType);
 router.delete('/vehicle-types/:id', adminController.deleteVehicleType);
 
 // ===== REPORTS & ANALYTICS =====

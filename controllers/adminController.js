@@ -4032,9 +4032,52 @@ const getVehicleTypes = async (req, res) => {
 
 // POST /api/admin/vehicle-types
 // Body: { id: 'pickup', label: 'Pickup Truck', icon: '', baseFare, perKmRate, minimumFare, hourlyCategories? }
+// ─── PUT /api/admin/vehicle-types/:id ────────────────────────────────────────
+// Maujooda vehicle type badlo — photo, label, emoji, rates, active/inactive.
+// Pehle sirf create aur delete the, isliye JCB jaisi pehle se bani type pe
+// asli photo lagane ka koi tareeka hi nahi tha (delete karke dobara banane se
+// uske hourly rates bhi chale jaate).
+const updateVehicleType = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const settings = await Setting.findOne();
+    if (!settings || !settings.vehicleRates.has(id)) {
+      return res.status(404).json({ success: false, message: `"${id}" vehicle type nahi mila` });
+    }
+
+    const current = settings.vehicleRates.get(id);
+    const { label, icon, image, baseFare, perKmRate, minimumFare, isActive } = req.body;
+
+    // Sirf wahi fields badlo jo bheji gayi hain — baaki jaise the waise rahein.
+    const next = {
+      baseFare:    baseFare    !== undefined ? Number(baseFare)    : current.baseFare,
+      perKmRate:   perKmRate   !== undefined ? Number(perKmRate)   : current.perKmRate,
+      minimumFare: minimumFare !== undefined ? Number(minimumFare) : current.minimumFare,
+      isActive:    isActive    !== undefined ? Boolean(isActive)   : current.isActive !== false,
+      label:       label !== undefined ? label : current.label,
+      icon:        icon  !== undefined ? icon  : current.icon,
+      image:       image !== undefined ? image : (current.image || ''),
+    };
+
+    if ([next.baseFare, next.perKmRate, next.minimumFare].some((v) => !Number.isFinite(v) || v < 0)) {
+      return res.status(400).json({ success: false, message: 'Fare values sahi nahi hain' });
+    }
+
+    settings.vehicleRates.set(id, next);
+    settings.markModified('vehicleRates');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.json({ success: true, message: 'Vehicle type update ho gaya', data: { id, ...next } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 const createVehicleType = async (req, res) => {
   try {
-    const { id, label, icon = '', baseFare, perKmRate, minimumFare, hourlyCategories } = req.body;
+    const { id, label, icon = '', image = '', baseFare, perKmRate, minimumFare, hourlyCategories } = req.body;
 
     if (!id || !/^[a-z0-9_]+$/.test(id)) {
       return res.status(400).json({ success: false, message: 'id sirf lowercase letters, numbers, underscore mein dena hai (jaise "pickup")' });
@@ -4060,6 +4103,7 @@ const createVehicleType = async (req, res) => {
       isActive:    true,
       label,
       icon,
+      image,
     });
 
     if (Array.isArray(hourlyCategories) && hourlyCategories.length > 0) {
@@ -4071,7 +4115,7 @@ const createVehicleType = async (req, res) => {
     await settings.save();
     await invalidateSettingsCache();
 
-    res.status(201).json({ success: true, message: 'Vehicle type add ho gaya! ðŸŽ‰', data: { id, label, icon, baseFare, perKmRate, minimumFare } });
+    res.status(201).json({ success: true, message: 'Vehicle type add ho gaya! ðŸŽ‰', data: { id, label, icon, image, baseFare, perKmRate, minimumFare } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Vehicle type create error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
@@ -5024,6 +5068,7 @@ module.exports = {
   updateHourlyRate,
   getVehicleTypes,
   createVehicleType,
+  updateVehicleType,
   deleteVehicleType,
   getSystemConfig,
   getAnalytics,

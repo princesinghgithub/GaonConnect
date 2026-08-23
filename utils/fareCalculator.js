@@ -194,6 +194,7 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
     // ("home.vehicles.ambulance") dikha deti thi.
     label: r.label || vehicleType,
     icon:  r.icon  || '',
+    image: r.image || '',
     rateCard: {
       baseFare:    r.baseFare,
       perKmRate:   r.perKmRate,

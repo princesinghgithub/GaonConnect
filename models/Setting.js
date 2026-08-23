@@ -8,7 +8,15 @@ const vehicleRateSchema = new mongoose.Schema({
   minimumFare: { type: Number, required: true },
   isActive:    { type: Boolean, default: true  },
   label:       { type: String, default: '' },
+  /** Emoji fallback — jab tak asli photo na ho. */
   icon:        { type: String, default: '' },
+  /**
+   * Vehicle ki asli photo (Cloudinary URL). Emoji se kaam chal jaata hai par
+   * kuch vehicles ke liye Unicode mein theek emoji hai hi nahi — JCB iska
+   * saaf example hai: 🚧 road-work ka board hai, JCB nahi. Photo yahan set
+   * karne par dono apps mein turant dikhti hai, app release ki zarurat nahi.
+   */
+  image:       { type: String, default: '' },
 }, { _id: false });
 
 // Seed defaults for the original 9 vehicle types — vehicleRates/hourlyRates
@@ -19,9 +27,9 @@ const DEFAULT_VEHICLE_RATES = {
   auto:      { baseFare: 25,  perKmRate: 12, minimumFare: 30,   label: 'Auto',      icon: '🛺' },
   car:       { baseFare: 50,  perKmRate: 15, minimumFare: 70,   label: 'Car',       icon: '🚗' },
   tractor:   { baseFare: 100, perKmRate: 25, minimumFare: 150,  label: 'Tractor',   icon: '🚜' },
-  tempo:     { baseFare: 80,  perKmRate: 20, minimumFare: 120,  label: 'Tempo',     icon: '🚐' },
+  tempo:     { baseFare: 80,  perKmRate: 20, minimumFare: 120,  label: 'Tempo / Pickup',     icon: '🚐' },
   truck:     { baseFare: 150, perKmRate: 30, minimumFare: 200,  label: 'Truck',     icon: '🚛' },
-  jcb:       { baseFare: 200, perKmRate: 40, minimumFare: 300,  label: 'JCB',       icon: '🚧' },
+  jcb:       { baseFare: 200, perKmRate: 40, minimumFare: 300,  label: 'JCB',       icon: '🏗️' },
   ambulance: { baseFare: 100, perKmRate: 18, minimumFare: 150,  label: 'Ambulance', icon: '🚑' },
   wedding:   { baseFare: 500, perKmRate: 35, minimumFare: 1500, label: 'Wedding',   icon: '💐' },
 };

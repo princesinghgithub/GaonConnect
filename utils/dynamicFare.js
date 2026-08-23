@@ -75,6 +75,7 @@ const getDynamicVehicleTypes = async () => {
       id,
       label: r.label || id,
       icon:  r.icon || '',
+      image: r.image || '',
       pricingType: 'distance',
       supportsHourly: Array.isArray(hourlyRates[id]) && hourlyRates[id].length > 0,
     }));
