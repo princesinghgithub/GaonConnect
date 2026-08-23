@@ -157,6 +157,7 @@ import { DriverProvider } from './context/Drivercontext';
 import { AppDownloadProvider } from './context/AppDownloadContext';
 import GaonConnectLanding from './GaonConnect/Gaonconnectlanding'
 import WhatsAppFloat from "./components/pages/WhatsAppFloat";
+import SupportChat from "./components/SupportChat";
 
 // Everything below the homepage is code-split: the / route is what almost
 // every visitor and every crawler hits first, so its bundle should carry
@@ -365,7 +366,8 @@ function App() {
           </Suspense>
           </AppDownloadProvider>
         </DriverProvider>
-          <WhatsAppFloat /> 
+          <WhatsAppFloat />
+          <SupportChat />
       </RideProvider>
      
     </AuthProvider>
