@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MessageCircle, X, Send } from "lucide-react";
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 /**
  * Customer support chat — floating widget.
@@ -39,14 +40,16 @@ export default function SupportChat() {
   const listRef = useRef(null);
 
   // Logged out user ko mat dikhao — endpoint login ke peeche hai, aur logged-out
-  // visitor ke liye WhatsApp float already hai.
-  const loggedIn = typeof window !== "undefined" && !!localStorage.getItem("token");
+  // visitor ke liye WhatsApp float hai. AuthContext se le rahe hain, localStorage
+  // se nahi: localStorage reactive nahi hai, isliye login karte hi chat apne aap
+  // nahi aati thi — page reload karna padta.
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, open]);
 
-  if (!loggedIn) return null;
+  if (!isAuthenticated) return null;
 
   const send = async (text) => {
     const msg = (text || input).trim();
@@ -81,15 +84,15 @@ export default function SupportChat() {
         <button
           onClick={() => setOpen(true)}
           aria-label="Support chat kholein"
-          className="fixed right-4 bottom-24 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-saffron text-white shadow-lg transition hover:scale-105 active:scale-95"
+          className="fixed right-5 bottom-5 z-50 flex h-[60px] w-[60px] items-center justify-center rounded-full text-white shadow-lg transition hover:scale-105 active:scale-95"
           style={{ backgroundColor: "#F5A623" }}
         >
-          <MessageCircle size={26} />
+          <MessageCircle size={28} />
         </button>
       )}
 
       {open && (
-        <div className="fixed right-4 bottom-24 z-50 flex w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
+        <div className="fixed right-5 bottom-5 z-50 flex w-[calc(100vw-2.5rem)] max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
           {/* Header */}
           <div
             className="flex items-center justify-between px-4 py-3 text-white"
