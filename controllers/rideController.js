@@ -261,11 +261,27 @@ exports.createRide = async (req, res) => {
     // (client-supplied fare/estimatedFare trust karna price tampering allow karta tha)
     let finalFare = 0;
     if (serviceCategory && serviceType) {
-      const hourlyResult = await getDynamicHourlyFare(vehicleType, serviceCategory, serviceType, estimatedHours, finalDist);
+      const hourlyResult = await getDynamicHourlyFare(
+        vehicleType, serviceCategory, serviceType, estimatedHours, finalDist,
+        { quantity: req.body.serviceQuantity || 0 },
+      );
       finalFare = hourlyResult.fare || 0;
+
+      // Rate 0 ya service band ho to fare 0 aata hai — aisi booking banne
+      // dena galat hoga, customer aur driver dono ko baad mein pata chalega.
+      if (!finalFare) {
+        return res.status(400).json({
+          success: false,
+          message: 'Is service ka rate abhi set nahi hai. Thodi der baad koshish karein ya doosri service chunein.',
+        });
+      }
     }
     if (!finalFare) {
-      const fareBreakdown = await getDynamicFare(finalDist, vehicleType);
+      // Extras client se aate hain par unka daam settings se — isliye customer
+      // ko wahi total dikhta hai jo yahan bhi banta hai.
+      const fareBreakdown = await getDynamicFare(finalDist, vehicleType, {
+        extras: req.body.extras || {},
+      });
       finalFare = fareBreakdown.totalFare;
     }
 
@@ -310,6 +326,12 @@ exports.createRide = async (req, res) => {
       serviceCategory,
       serviceType,
       estimatedHours,
+      serviceQuantity: req.body.serviceQuantity || 0,
+      extras: {
+        loading:   Boolean(req.body.extras?.loading),
+        unloading: Boolean(req.body.extras?.unloading),
+        helper:    Boolean(req.body.extras?.helper),
+      },
       hourlyRate,
       workNote,
     });
@@ -587,6 +609,7 @@ exports.updateRideStatus = async (req, res) => {
           const recalculated = await getDynamicHourlyFare(
             ride.vehicleType, ride.serviceCategory, ride.serviceType,
             updateFields.actualHours, ride.distance,
+            { quantity: ride.serviceQuantity || 0 },
           );
           if (recalculated.fare) updateFields.fare = recalculated.fare;
         }
@@ -668,8 +691,27 @@ exports.updateRideStatus = async (req, res) => {
       creditDriverIncentive(provider._id).catch(() => {});
 
       // Driver earnings update
-      const commission    = Math.round(ride.fare * 0); // abhi 0% commission
+      // Commission ki value pehle yahan `ride.fare * 0` likhi thi — yaani
+      // admin dashboard mein commission kuch bhi set kare, katta hamesha 0 hi
+      // tha. Ab settings se aata hai: gaadi ke rate card mein alag commission
+      // ho to wo, warna platform ka global. Launch pe dono 0 hain, isliye
+      // driver ko poora kiraya milta hai — par ab ye chalu bhi ho sakta hai.
+      const completionSettings = await getSettings();
+      const vehicleRate   = completionSettings?.vehicleRates?.[ride.vehicleType] || {};
+      const perVehiclePct = vehicleRate.commissionPercent;
+      const commissionPct = (perVehiclePct !== null && perVehiclePct !== undefined && perVehiclePct !== '')
+        ? Number(perVehiclePct)
+        : Number(completionSettings?.commission?.percentage ?? 0);
+
+      const commission    = Math.round(ride.fare * (Number.isFinite(commissionPct) ? commissionPct : 0) / 100);
       const driverEarning = ride.fare - commission;
+
+      // Driver app ko dikhane ke liye ride pe hi rakh do — baad mein history
+      // kholne par bhi wahi hisaab dikhega jo us waqt laga tha.
+      ride.commissionPercent = commissionPct;
+      ride.platformFee       = commission;
+      ride.driverEarning     = driverEarning;
+      await ride.save();
 
       // Atomic $inc — do parallel ride-completions (alag rides) ek hi provider
       // ke wallet ko simultaneously credit karein to bhi lost update na ho.
@@ -814,11 +856,18 @@ exports.cancelRide = async (req, res) => {
     const cancelConf   = settings?.cancellation || {};
     const freeWindowMs = (cancelConf.freeWindowMinutes ?? 2) * 60000;
 
+    // Har vehicle ka cancellation fee alag hai — bike chhodne ka nuksan aur JCB
+    // chhodne ka nuksan ek jaisa nahi hota. Rate card mein value ho to wahi
+    // chalti hai, warna platform ki global setting.
+    const vehicleRate    = settings?.vehicleRates?.[ride.vehicleType] || {};
+    const perVehicleFee  = Number(vehicleRate.cancellationFee);
+    const customerFee    = Number.isFinite(perVehicleFee) && perVehicleFee > 0
+      ? perVehicleFee
+      : (cancelConf.customerFee ?? 20);
+
     let cancellationFee = 0;
     if (ride.acceptedAt && Date.now() - new Date(ride.acceptedAt).getTime() > freeWindowMs) {
-      cancellationFee = isCustomer
-        ? (cancelConf.customerFee ?? 20)
-        : (cancelConf.driverFee   ?? 30);
+      cancellationFee = isCustomer ? customerFee : (cancelConf.driverFee ?? 30);
     }
 
     // ─── Driver cancel kare to ride dobara driver dhoondhe ───────────────────

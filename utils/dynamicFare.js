@@ -58,9 +58,48 @@ const getDynamicServices = async (vehicleType) => {
 };
 
 // ─── Tractor/JCB hourly fare (booking create karte waqt server-side use hota hai) ─
-const getDynamicHourlyFare = async (vehicleType, category, service, hours, distance) => {
+const getDynamicHourlyFare = async (vehicleType, category, service, hours, distance, options = {}) => {
   const settings = await getSettings();
-  return calculateHourlyFare(vehicleType, category, service, hours, distance, settings?.hourlyRates);
+  return calculateHourlyFare(vehicleType, category, service, hours, distance, settings?.hourlyRates, options);
+};
+
+// ─── Wedding car packages (app + website dono dikhate hain) ─────────────────
+const getDynamicWeddingPackages = async () => {
+  const settings = await getSettings();
+  return (settings?.weddingPackages || []).filter((p) => p.isActive !== false);
+};
+
+// ─── Ek vehicle ka rate card (bina trip ke bhi dikhana hai) ──────────────────
+// "No hidden charges" tabhi sach lagta hai jab customer booking se pehle hi
+// poora rate card dekh sake.
+const getRateCard = async (vehicleType) => {
+  const settings = await getSettings();
+  const r = settings?.vehicleRates?.[vehicleType];
+  if (!r) return null;
+
+  return {
+    vehicleType,
+    label:       r.label || vehicleType,
+    icon:        r.icon  || '',
+    image:       r.image || '',
+    pricingType: r.pricingType || 'distance',
+
+    minimumFare: r.minimumFare,
+    includedKm:  r.includedKm,
+    perKmRate:   r.perKmRate,
+
+    freeWaitingMinutes: r.freeWaitingMinutes,
+    waitingPerMinute:   r.waitingPerMinute,
+    waitingPerHour:     r.waitingPerHour,
+
+    freePickupKm:    r.freePickupKm,
+    longPickupPerKm: r.longPickupPerKm,
+
+    nightChargePercent: r.nightChargePercent,
+    cancellationFee:    r.cancellationFee,
+    extras:             r.extras || {},
+    currency: '₹',
+  };
 };
 
 // ─── Bookable vehicle-type catalog (apps ke liye — icon, label, hourly support) ──
@@ -76,7 +115,7 @@ const getDynamicVehicleTypes = async () => {
       label: r.label || id,
       icon:  r.icon || '',
       image: r.image || '',
-      pricingType: 'distance',
+      pricingType: r.pricingType || 'distance',
       supportsHourly: Array.isArray(hourlyRates[id]) && hourlyRates[id].length > 0,
     }));
 };
@@ -86,7 +125,9 @@ const getCurrentSurgeInfo = async () => {
   const settings = await getSettings();
   const surge    = settings?.surge;
 
-  if (!surge) return { active: false, multiplier: 1.0, reason: null };
+  // fareCalculator surge tabhi lagata hai jab master switch on ho — yahan bhi
+  // wahi shart honi chahiye, warna banner dikhega aur fare mein surge hoga hi nahi.
+  if (!surge || !surge.enabled) return { active: false, multiplier: 1.0, reason: null };
 
   const hour = new Date().getHours();
   let   active     = false;
@@ -127,4 +168,6 @@ module.exports = {
   getDynamicServices,
   getDynamicHourlyFare,
   getDynamicVehicleTypes,
+  getDynamicWeddingPackages,
+  getRateCard,
 };

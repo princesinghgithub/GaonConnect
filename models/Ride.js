@@ -111,6 +111,25 @@ const RideSchema = new mongoose.Schema(
       type: Number, // Can be different due to extra charges or discounts
     },
 
+    // Ride poori hone par jo hisaab laga, wahi yahan jam jaata hai. Baad mein
+    // admin commission badal de to purani rides ka hisaab nahi badalna
+    // chahiye — driver ne jo kamaya, wo kamaya.
+    // Acre/quintal wale kaam ki maatra. Ride complete hone par dobara hisaab
+    // lagta hai, tab bhi yahi value use hoti hai.
+    serviceQuantity:   { type: Number, default: 0 },
+
+    // Customer ne kaunse extras maange the. Ride complete hone par dobara
+    // hisaab lagta hai, tab bhi yahi list dekhi jaati hai.
+    extras: {
+      loading:   { type: Boolean, default: false },
+      unloading: { type: Boolean, default: false },
+      helper:    { type: Boolean, default: false },
+    },
+
+    commissionPercent: { type: Number, default: 0 },
+    platformFee:       { type: Number, default: 0 },
+    driverEarning:     { type: Number, default: 0 },
+
     otp: {
       type: String,
       required: true,

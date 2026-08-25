@@ -3873,6 +3873,8 @@ const getSettings = async (req, res) => {
 // Body: partial settings object â€” jo bhejo woh update hoga
 const updateSettings = async (req, res) => {
   try {
+    if (rejectNegatives(req.body, res)) return;
+
     const settings = await Setting.findOneAndUpdate(
       {},
       { $set: req.body },
@@ -3893,6 +3895,8 @@ const updateSettings = async (req, res) => {
 // Ya surge update: { surge: { highDemand: { enabled: true, multiplier: 1.5, reason: "Festival" } } }
 const updatePricing = async (req, res) => {
   try {
+    if (rejectNegatives(req.body, res)) return;
+
     const { vehicleType, baseFare, perKmRate, minimumFare, surge, waiting, commission } = req.body;
 
     const updateObj = {};
@@ -3961,7 +3965,14 @@ const getHourlyRates = async (req, res) => {
 // Body: { vehicleType: 'tractor', categoryId: 'farming', serviceId: 'ploughing', rate: 850, minimumHours: 1, label: '...' }
 const updateHourlyRate = async (req, res) => {
   try {
-    const { vehicleType, categoryId, serviceId, rate, minimumHours, label } = req.body;
+    if (rejectNegatives(req.body, res)) return;
+
+    const {
+      vehicleType, categoryId, serviceId,
+      rate, minimumHours, label,
+      unit, minimumQuantity, perAcreRate, isActive,
+      travelCharge, freeArrivalKm,
+    } = req.body;
 
     let settings = await Setting.findOne();
     if (!settings) settings = await Setting.create({});
@@ -3986,6 +3997,29 @@ const updateHourlyRate = async (req, res) => {
     if (minimumHours !== undefined) service.minimumHours = Number(minimumHours);
     if (label) service.label = label;
 
+    // Thresher/Harvester ghante se nahi, acre/quintal se chalte hain — unit
+    // yahin se tay hota hai. Inke rate defaults mein 0 hain aur isActive false,
+    // kyunki har ilaake ka rate alag hai; admin apna rate bharke chaalu karta hai.
+    if (unit !== undefined) {
+      const ALLOWED = ['hour', 'acre', 'quintal', 'km', 'job'];
+      if (!ALLOWED.includes(unit)) {
+        return res.status(400).json({ success: false, message: `unit inme se hona chahiye: ${ALLOWED.join(', ')}` });
+      }
+      service.unit = unit;
+    }
+    if (minimumQuantity !== undefined) service.minimumQuantity = Number(minimumQuantity);
+    if (perAcreRate     !== undefined) service.perAcreRate     = Number(perAcreRate);
+    if (isActive        !== undefined) service.isActive        = Boolean(isActive);
+
+    // Category-level: gaadi ko site tak laane ka charge.
+    if (travelCharge && typeof travelCharge === 'object') {
+      category.travelCharge = {
+        enabled: Boolean(travelCharge.enabled),
+        amount:  Math.max(0, Number(travelCharge.amount) || 0),
+      };
+    }
+    if (freeArrivalKm !== undefined) category.freeArrivalKm = Number(freeArrivalKm);
+
     // Mutating an array nested inside a Map value in place doesn't always
     // get picked up by Mongoose's dirty-tracking — mark the whole map dirty.
     settings.markModified('hourlyRates');
@@ -3998,6 +4032,40 @@ const updateHourlyRate = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: 'Hourly rate update error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
+};
+
+// ─── Negative value guard ────────────────────────────────────────────────────
+// Rate card mein kahin bhi minus value nahi ja sakti — na rate, na percent, na
+// charge. Ek galat "-" fare ko ulta kar deta hai aur driver ko nuksan.
+// Settings mein koi aisa field nahi jo waajib taur pe negative ho (lat/lng
+// yahan nahi rehte), isliye poore object mein recursively check karte hain.
+const findNegative = (obj, path = '') => {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj === 'number') return obj < 0 ? (path || 'value') : null;
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i += 1) {
+      const hit = findNegative(obj[i], `${path}[${i}]`);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (typeof obj === 'object') {
+    for (const [k, v] of Object.entries(obj)) {
+      const hit = findNegative(v, path ? `${path}.${k}` : k);
+      if (hit) return hit;
+    }
+  }
+  return null;
+};
+
+const rejectNegatives = (body, res) => {
+  const bad = findNegative(body);
+  if (!bad) return false;
+  res.status(400).json({
+    success: false,
+    message: `"${bad}" negative nahi ho sakta — koi bhi rate ya charge minus mein set nahi kiya ja sakta`,
+  });
+  return true;
 };
 
 // GET /api/admin/vehicle-types
@@ -4013,13 +4081,33 @@ const getVehicleTypes = async (req, res) => {
     const vehicleRates = settings.vehicleRates || {};
     const hourlyRates   = settings.hourlyRates  || {};
 
+    // Poora rate card bhejo — dashboard ka rate-card tab isi par bana hai.
+    // Pehle sirf baseFare/perKmRate/minimumFare jaate the, isliye waiting,
+    // night charge waghera admin ko dikhte hi nahi the.
     const types = Object.entries(vehicleRates).map(([id, r]) => ({
       id,
       label:        r.label || id,
-      icon:         r.icon || '',
-      baseFare:     r.baseFare,
-      perKmRate:    r.perKmRate,
+      icon:         r.icon  || '',
+      image:        r.image || '',
+      pricingType:  r.pricingType || 'distance',
+      fuelType:     r.fuelType    || 'petrol',
+
       minimumFare:  r.minimumFare,
+      includedKm:   r.includedKm,
+      perKmRate:    r.perKmRate,
+
+      freeWaitingMinutes: r.freeWaitingMinutes,
+      waitingPerMinute:   r.waitingPerMinute,
+      waitingPerHour:     r.waitingPerHour,
+
+      freePickupKm:       r.freePickupKm,
+      longPickupPerKm:    r.longPickupPerKm,
+
+      nightChargePercent: r.nightChargePercent,
+      cancellationFee:    r.cancellationFee,
+      commissionPercent:  r.commissionPercent ?? null,
+
+      extras:       r.extras || {},
       isActive:     r.isActive !== false,
       supportsHourly: Array.isArray(hourlyRates[id]) && hourlyRates[id].length > 0,
     }));
@@ -4046,22 +4134,67 @@ const updateVehicleType = async (req, res) => {
       return res.status(404).json({ success: false, message: `"${id}" vehicle type nahi mila` });
     }
 
-    const current = settings.vehicleRates.get(id);
-    const { label, icon, image, baseFare, perKmRate, minimumFare, isActive } = req.body;
+    if (rejectNegatives(req.body, res)) return;
 
-    // Sirf wahi fields badlo jo bheji gayi hain — baaki jaise the waise rahein.
-    const next = {
-      baseFare:    baseFare    !== undefined ? Number(baseFare)    : current.baseFare,
-      perKmRate:   perKmRate   !== undefined ? Number(perKmRate)   : current.perKmRate,
-      minimumFare: minimumFare !== undefined ? Number(minimumFare) : current.minimumFare,
-      isActive:    isActive    !== undefined ? Boolean(isActive)   : current.isActive !== false,
-      label:       label !== undefined ? label : current.label,
-      icon:        icon  !== undefined ? icon  : current.icon,
-      image:       image !== undefined ? image : (current.image || ''),
-    };
+    const raw     = settings.vehicleRates.get(id);
+    const current = raw && typeof raw.toObject === 'function' ? raw.toObject() : { ...raw };
 
-    if ([next.baseFare, next.perKmRate, next.minimumFare].some((v) => !Number.isFinite(v) || v < 0)) {
-      return res.status(400).json({ success: false, message: 'Fare values sahi nahi hain' });
+    // Purane version mein yahan ek naya object banake poori entry replace hoti
+    // thi, jisme sirf 7 fields the. Matlab admin sirf label badalta to bhi
+    // includedKm, waiting charge, night %, extras — sab uud jaate. Isliye ab
+    // current ke upar sirf bheje hue fields likhte hain.
+    const next = { ...current };
+
+    const NUMERIC = [
+      'baseFare', 'minimumFare', 'includedKm', 'perKmRate',
+      'freeWaitingMinutes', 'waitingPerMinute', 'waitingPerHour',
+      'freePickupKm', 'longPickupPerKm',
+      'nightChargePercent', 'cancellationFee',
+    ];
+    for (const key of NUMERIC) {
+      if (req.body[key] === undefined) continue;
+      const v = Number(req.body[key]);
+      if (!Number.isFinite(v) || v < 0) {
+        return res.status(400).json({ success: false, message: `"${key}" ki value sahi nahi hai` });
+      }
+      next[key] = v;
+    }
+
+    const TEXT = ['label', 'icon', 'image', 'pricingType', 'fuelType'];
+    for (const key of TEXT) {
+      if (req.body[key] !== undefined) next[key] = req.body[key];
+    }
+
+    if (req.body.isActive !== undefined) next.isActive = Boolean(req.body.isActive);
+
+    // commissionPercent null rakhna maayne rakhta hai: "global commission use karo".
+    if (req.body.commissionPercent !== undefined) {
+      const c = req.body.commissionPercent;
+      if (c === null || c === '') {
+        next.commissionPercent = null;
+      } else {
+        const v = Number(c);
+        if (!Number.isFinite(v) || v < 0 || v > 100) {
+          return res.status(400).json({ success: false, message: 'Commission 0 se 100 ke beech hona chahiye' });
+        }
+        next.commissionPercent = v;
+      }
+    }
+
+    if (req.body.extras && typeof req.body.extras === 'object') {
+      next.extras = { ...(current.extras || {}) };
+      for (const key of ['loading', 'unloading', 'helper']) {
+        const e = req.body.extras[key];
+        if (!e) continue;
+        next.extras[key] = {
+          enabled: Boolean(e.enabled),
+          amount:  Math.max(0, Number(e.amount) || 0),
+        };
+      }
+    }
+
+    if (!Number.isFinite(Number(next.minimumFare)) || Number(next.minimumFare) < 0) {
+      return res.status(400).json({ success: false, message: 'Minimum fare sahi nahi hai' });
     }
 
     settings.vehicleRates.set(id, next);
@@ -4077,7 +4210,15 @@ const updateVehicleType = async (req, res) => {
 
 const createVehicleType = async (req, res) => {
   try {
-    const { id, label, icon = '', image = '', baseFare, perKmRate, minimumFare, hourlyCategories } = req.body;
+    if (rejectNegatives(req.body, res)) return;
+
+    const {
+      id, label, icon = '', image = '', baseFare = 0, perKmRate, minimumFare, hourlyCategories,
+      includedKm, pricingType, fuelType,
+      freeWaitingMinutes, waitingPerMinute, waitingPerHour,
+      freePickupKm, longPickupPerKm,
+      nightChargePercent, cancellationFee, commissionPercent, extras,
+    } = req.body;
 
     if (!id || !/^[a-z0-9_]+$/.test(id)) {
       return res.status(400).json({ success: false, message: 'id sirf lowercase letters, numbers, underscore mein dena hai (jaise "pickup")' });
@@ -4085,8 +4226,10 @@ const createVehicleType = async (req, res) => {
     if (!label) {
       return res.status(400).json({ success: false, message: 'Label dena zaroori hai' });
     }
-    if ([baseFare, perKmRate, minimumFare].some((v) => v === undefined || v === null || Number(v) < 0)) {
-      return res.status(400).json({ success: false, message: 'Valid baseFare, perKmRate, minimumFare dena zaroori hai' });
+    // baseFare ab fare formula mein use nahi hota (minimumFare + includedKm ne
+    // uski jagah le li), isliye wo required nahi rakha.
+    if ([perKmRate, minimumFare].some((v) => v === undefined || v === null || Number(v) < 0)) {
+      return res.status(400).json({ success: false, message: 'Valid perKmRate aur minimumFare dena zaroori hai' });
     }
 
     let settings = await Setting.findOne();
@@ -4096,14 +4239,37 @@ const createVehicleType = async (req, res) => {
       return res.status(409).json({ success: false, message: `"${id}" vehicle type pehle se maujood hai` });
     }
 
+    // Naya vehicle bhi poore rate card ke saath bane — warna waiting/night charge
+    // jaise fields khaali reh jaate hain aur fare adha-adhoora banta hai.
+    const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+
     settings.vehicleRates.set(id, {
-      baseFare:    Number(baseFare),
-      perKmRate:   Number(perKmRate),
-      minimumFare: Number(minimumFare),
-      isActive:    true,
       label,
       icon,
       image,
+      pricingType: pricingType || 'distance',
+      fuelType:    fuelType    || 'petrol',
+
+      baseFare:    num(baseFare, 0),
+      minimumFare: Number(minimumFare),
+      includedKm:  num(includedKm, 2),
+      perKmRate:   Number(perKmRate),
+
+      freeWaitingMinutes: num(freeWaitingMinutes, 5),
+      waitingPerMinute:   num(waitingPerMinute, 1),
+      waitingPerHour:     num(waitingPerHour, 0),
+
+      freePickupKm:    num(freePickupKm, 3),
+      longPickupPerKm: num(longPickupPerKm, 0),
+
+      nightChargePercent: num(nightChargePercent, 10),
+      cancellationFee:    num(cancellationFee, 0),
+      // null = global commission use karo.
+      commissionPercent: (commissionPercent === undefined || commissionPercent === null || commissionPercent === '')
+        ? null : Number(commissionPercent),
+
+      extras: extras && typeof extras === 'object' ? extras : undefined,
+      isActive: true,
     });
 
     if (Array.isArray(hourlyCategories) && hourlyCategories.length > 0) {
@@ -4118,6 +4284,212 @@ const createVehicleType = async (req, res) => {
     res.status(201).json({ success: true, message: 'Vehicle type add ho gaya! ðŸŽ‰', data: { id, label, icon, image, baseFare, perKmRate, minimumFare } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Vehicle type create error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// Wedding Car Packages
+// Wedding car per-km nahi chalti — log "8 ghante / 80 km" jaisa package lete
+// hain. Isliye iske daam vehicleRates mein nahi, alag list mein rehte hain.
+// -----------------------------------------------------------------------------
+
+// GET /api/admin/wedding-packages
+const getWeddingPackages = async (req, res) => {
+  try {
+    let settings = await Setting.findOne().lean();
+    if (!settings) {
+      settings = await Setting.create({});
+      settings = settings.toObject();
+    }
+    return res.json({ success: true, data: settings.weddingPackages || [] });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /api/admin/wedding-packages
+// Body: { category, name, includedHours, includedKm, price, extraKmCharge, ... }
+const createWeddingPackage = async (req, res) => {
+  try {
+    if (rejectNegatives(req.body, res)) return;
+
+    const { category, name, price } = req.body;
+    if (!category || !name) {
+      return res.status(400).json({ success: false, message: 'Category aur package ka naam dena zaroori hai' });
+    }
+    if (price === undefined || price === null || !Number.isFinite(Number(price))) {
+      return res.status(400).json({ success: false, message: 'Package ka daam dena zaroori hai' });
+    }
+
+    let settings = await Setting.findOne();
+    if (!settings) settings = await Setting.create({});
+
+    const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+    const id  = req.body.id || `${category}_${Date.now()}`;
+
+    if ((settings.weddingPackages || []).some((p) => p.id === id)) {
+      return res.status(409).json({ success: false, message: 'Is id ka package pehle se hai' });
+    }
+
+    settings.weddingPackages.push({
+      id,
+      category,
+      name,
+      includedHours:      num(req.body.includedHours),
+      includedKm:         num(req.body.includedKm),
+      price:              num(price),
+      extraKmCharge:      num(req.body.extraKmCharge),
+      extraHourCharge:    num(req.body.extraHourCharge),
+      nightChargePercent: num(req.body.nightChargePercent),
+      decorationCharge: {
+        enabled: Boolean(req.body.decorationCharge?.enabled),
+        amount:  num(req.body.decorationCharge?.amount),
+      },
+      commissionPercent: (req.body.commissionPercent === undefined
+        || req.body.commissionPercent === null
+        || req.body.commissionPercent === '') ? null : num(req.body.commissionPercent),
+      isActive: req.body.isActive !== false,
+    });
+
+    settings.markModified('weddingPackages');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.status(201).json({ success: true, message: 'Package add ho gaya', data: settings.weddingPackages });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// PUT /api/admin/wedding-packages/:id
+const updateWeddingPackage = async (req, res) => {
+  try {
+    if (rejectNegatives(req.body, res)) return;
+
+    const settings = await Setting.findOne();
+    const pkg = settings?.weddingPackages?.find((p) => p.id === req.params.id);
+    if (!pkg) {
+      return res.status(404).json({ success: false, message: 'Package nahi mila' });
+    }
+
+    const NUMERIC = ['includedHours', 'includedKm', 'price', 'extraKmCharge', 'extraHourCharge', 'nightChargePercent'];
+    for (const key of NUMERIC) {
+      if (req.body[key] === undefined) continue;
+      const v = Number(req.body[key]);
+      if (!Number.isFinite(v) || v < 0) {
+        return res.status(400).json({ success: false, message: `"${key}" ki value sahi nahi hai` });
+      }
+      pkg[key] = v;
+    }
+    if (req.body.category !== undefined) pkg.category = req.body.category;
+    if (req.body.name     !== undefined) pkg.name     = req.body.name;
+    if (req.body.isActive !== undefined) pkg.isActive = Boolean(req.body.isActive);
+
+    if (req.body.decorationCharge) {
+      pkg.decorationCharge = {
+        enabled: Boolean(req.body.decorationCharge.enabled),
+        amount:  Math.max(0, Number(req.body.decorationCharge.amount) || 0),
+      };
+    }
+    if (req.body.commissionPercent !== undefined) {
+      const c = req.body.commissionPercent;
+      pkg.commissionPercent = (c === null || c === '') ? null : Number(c);
+    }
+
+    settings.markModified('weddingPackages');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.json({ success: true, message: 'Package update ho gaya', data: settings.weddingPackages });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// DELETE /api/admin/wedding-packages/:id
+const deleteWeddingPackage = async (req, res) => {
+  try {
+    const settings = await Setting.findOne();
+    if (!settings) return res.status(404).json({ success: false, message: 'Settings nahi mili' });
+
+    const before = settings.weddingPackages?.length || 0;
+    settings.weddingPackages = settings.weddingPackages.filter((p) => p.id !== req.params.id);
+    if (settings.weddingPackages.length === before) {
+      return res.status(404).json({ success: false, message: 'Package nahi mila' });
+    }
+
+    settings.markModified('weddingPackages');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.json({ success: true, message: 'Package hata diya', data: settings.weddingPackages });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// Fuel Adjustment
+// Diesel-petrol ka daam admin khud daalta hai. Jaan-bujhkar koi internet API
+// nahi lagayi — warna raat ko daam badle aur subah customer ko bina bataye
+// zyada kiraya dikhe. Yahan se badalne par turant sab jagah lagta hai.
+// -----------------------------------------------------------------------------
+
+// GET /api/admin/fuel-adjustment
+const getFuelAdjustment = async (req, res) => {
+  try {
+    let settings = await Setting.findOne().lean();
+    if (!settings) {
+      settings = await Setting.create({});
+      settings = settings.toObject();
+    }
+    return res.json({ success: true, data: settings.fuelAdjustment || {} });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// PUT /api/admin/fuel-adjustment
+const updateFuelAdjustment = async (req, res) => {
+  try {
+    if (rejectNegatives(req.body, res)) return;
+
+    let settings = await Setting.findOne();
+    if (!settings) settings = await Setting.create({});
+
+    const cur = settings.fuelAdjustment || {};
+    const NUMERIC = [
+      'petrolReferencePrice', 'dieselReferencePrice',
+      'currentPetrolPrice', 'currentDieselPrice', 'maxAdjustmentPercent',
+    ];
+    for (const key of NUMERIC) {
+      if (req.body[key] === undefined) continue;
+      const v = Number(req.body[key]);
+      if (!Number.isFinite(v) || v < 0) {
+        return res.status(400).json({ success: false, message: `"${key}" ki value sahi nahi hai` });
+      }
+      cur[key] = v;
+    }
+    if (req.body.enabled !== undefined) cur.enabled = Boolean(req.body.enabled);
+
+    // Cap 0 rakhne ka matlab hoga "adjustment on hai par asar kuch nahi" —
+    // aisi uljhan se bachne ke liye kam se kam 1% zaroori hai.
+    if (cur.enabled && !(Number(cur.maxAdjustmentPercent) > 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Fuel adjustment on karne ke liye maximum adjustment percent 0 se zyada rakho',
+      });
+    }
+
+    cur.effectiveDate = new Date();
+    settings.fuelAdjustment = cur;
+    settings.markModified('fuelAdjustment');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.json({ success: true, message: 'Fuel adjustment update ho gaya', data: settings.fuelAdjustment });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -5070,6 +5442,12 @@ module.exports = {
   createVehicleType,
   updateVehicleType,
   deleteVehicleType,
+  getWeddingPackages,
+  createWeddingPackage,
+  updateWeddingPackage,
+  deleteWeddingPackage,
+  getFuelAdjustment,
+  updateFuelAdjustment,
   getSystemConfig,
   getAnalytics,
   exportReport,

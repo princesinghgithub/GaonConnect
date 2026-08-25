@@ -3,7 +3,8 @@ const router  = express.Router();
 const { protect }  = require('../middleware/auth');
 const { validate, schemas } = require('../middleware/validate');
 const { calculateDistance, calculateDuration } = require('../utils/fareCalculator');
-const { getAllDynamicFares, getDynamicFare, getCurrentSurgeInfo, getDynamicServices, getDynamicVehicleTypes } = require('../utils/dynamicFare');
+const { getAllDynamicFares, getDynamicFare, getCurrentSurgeInfo, getDynamicServices,
+        getDynamicVehicleTypes, getDynamicWeddingPackages, getRateCard } = require('../utils/dynamicFare');
 
 const {
   createRide,
@@ -78,6 +79,31 @@ router.get('/vehicle-types', async (req, res) => {
   }
 });
 
+// ─── Wedding Car Packages ────────────────────────────────────────────────────
+// Wedding car ka kiraya per-km nahi banta — "8 ghante / 80 km" jaisa package
+// hota hai. Public rakha hai taaki website ka pricing page bhi dikha sake.
+router.get('/wedding-packages', async (req, res) => {
+  try {
+    const packages = await getDynamicWeddingPackages();
+    return res.json({ success: true, data: packages });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ─── Rate Card (bina trip ke) ────────────────────────────────────────────────
+// Customer booking se pehle hi dekh le ki kis cheez ka kitna lagta hai —
+// isi se "No Hidden Charges" ka dawa sach hota hai.
+router.get('/rate-card/:vehicleType', async (req, res) => {
+  try {
+    const card = await getRateCard(req.params.vehicleType);
+    if (!card) return res.status(404).json({ success: false, message: 'Is vehicle ka rate card nahi mila' });
+    return res.json({ success: true, data: card });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ─── Current Surge Status (App home screen pe badge dikhao) ──────────────────
 // GET /api/ride/surge-status
 router.get('/surge-status', protect, async (req, res) => {
@@ -96,7 +122,10 @@ router.get('/fare-estimate',
   validate(schemas.fareEstimate, 'query'),
   async (req, res) => {
     try {
-      const { pickupLat, pickupLng, dropLat, dropLng, vehicleType } = req.query;
+      const {
+        pickupLat, pickupLng, dropLat, dropLng, vehicleType,
+        pickupKm, waitMinutes, loading, unloading, helper,
+      } = req.query;
 
       const distance = calculateDistance(
         Number(pickupLat), Number(pickupLng),
@@ -105,10 +134,16 @@ router.get('/fare-estimate',
       const duration = calculateDuration(distance);
 
       const bookingDate = new Date();
+      const fareOptions = {
+        bookingDate,
+        pickupKm:    Number(pickupKm)    || 0,
+        waitMinutes: Number(waitMinutes) || 0,
+        extras: { loading: !!loading, unloading: !!unloading, helper: !!helper },
+      };
 
       // Specific vehicle — detailed breakdown
       if (vehicleType) {
-        const breakdown = await getDynamicFare(distance, vehicleType, { bookingDate });
+        const breakdown = await getDynamicFare(distance, vehicleType, fareOptions);
         return res.json({
           success: true,
           data: { distance, duration, ...breakdown },
@@ -116,7 +151,7 @@ router.get('/fare-estimate',
       }
 
       // Sab vehicles — comparison ke liye
-      const allFares = await getAllDynamicFares(distance, { bookingDate });
+      const allFares = await getAllDynamicFares(distance, fareOptions);
 
       // App ke liye simplified list bhi bhejo
       const fareList = Object.entries(allFares).map(([type, data]) => ({
@@ -129,6 +164,10 @@ router.get('/fare-estimate',
         surgeType:    data.surgeType,
         breakdown:    data.breakdown,
         driverEarnings: data.driverEarnings,
+        commissionPercent:  data.commissionPercent,
+        nightChargeApplied: data.nightChargeApplied,
+        pricingType:  data.pricingType,
+        currency:     data.currency,
         rateCard:     data.rateCard,
       }));
 

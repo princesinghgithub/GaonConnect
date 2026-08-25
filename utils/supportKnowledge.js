@@ -98,13 +98,42 @@ const buildLiveFacts = async () => {
 
   if (active.length) {
     lines.push('AAJ KE RATE (per-km sevayein):');
+    // Formula ab minimum-fare based hai: minimum fare mein kuch km shaamil hain,
+    // uske aage hi per-km lagta hai. Bot ko wahi batana chahiye jo app dikhati
+    // hai — warna customer ko do alag jawab milte hain.
     active.forEach(([id, r]) => {
+      const inc = Number(r.includedKm) || 0;
       lines.push(
-        `- ${r.label || id}: ${money(r.baseFare)} base + ${money(r.perKmRate)}/km, ` +
-        `kam se kam ${money(r.minimumFare)}`
+        `- ${r.label || id}: ${money(r.minimumFare)} minimum` +
+        (inc > 0 ? ` (pehle ${inc} km isi mein)` : '') +
+        `, uske aage ${money(r.perKmRate)} per km`
       );
+
+      const freeWait = Number(r.freeWaitingMinutes) || 0;
+      if (Number(r.waitingPerHour) > 0) {
+        lines.push(`   waiting: ${freeWait} minute muft, phir ${money(r.waitingPerHour)} per ghanta`);
+      } else if (Number(r.waitingPerMinute) > 0) {
+        lines.push(`   waiting: ${freeWait} minute muft, phir ${money(r.waitingPerMinute)} per minute`);
+      }
+      if (Number(r.nightChargePercent) > 0) {
+        lines.push(`   raat (10 baje se subah 6 baje tak): ${r.nightChargePercent}% zyada`);
+      }
+      if (Number(r.longPickupPerKm) > 0) {
+        lines.push(
+          `   driver ${Number(r.freePickupKm) || 0} km tak aane ka kuch nahi leta, ` +
+          `usse door se ${money(r.longPickupPerKm)} per km`
+        );
+      }
+      if (Number(r.cancellationFee) > 0) {
+        lines.push(`   cancellation (accept hone ke baad): ${money(r.cancellationFee)}`);
+      }
+      const ex = r.extras || {};
+      const exLines = ['loading', 'unloading', 'helper']
+        .filter((k) => ex[k]?.enabled && Number(ex[k].amount) > 0)
+        .map((k) => `${k} ${money(ex[k].amount)}`);
+      if (exLines.length) lines.push(`   extra (customer chune tab): ${exLines.join(', ')}`);
     });
-    lines.push('(Asli kiraya doori pe nirbhar karta hai — app booking se pehle exact dikhati hai.)');
+    lines.push('(Asli kiraya doori pe nirbhar karta hai — app booking se pehle poora breakdown dikhati hai. Koi chhupa hua charge nahi hai.)');
   }
 
   // ── Hourly (tractor/JCB) ───────────────────────────────────────────────
@@ -112,11 +141,20 @@ const buildLiveFacts = async () => {
   Object.entries(hourly).forEach(([vehicle, categories]) => {
     if (!Array.isArray(categories) || !categories.length) return;
     const label = rates[vehicle]?.label || vehicle;
-    lines.push(`\n${String(label).toUpperCase()} — ghante ke hisaab se:`);
+    lines.push(`\n${String(label).toUpperCase()} — kaam ke hisaab se:`);
     categories.forEach((cat) => {
       (cat.sub || []).forEach((sv) => {
+        // Jinka rate abhi set nahi hua (thresher/harvester) unhe batana galat
+        // hoga — customer ko "0 rupaye" wala jawab milega.
+        if (sv.isActive === false || !(Number(sv.rate) > 0)) return;
+
+        const UNIT_TEXT = {
+          hour: 'per ghanta', acre: 'per acre', quintal: 'per quintal',
+          km: 'per km', job: 'poore kaam ka',
+        };
+        const unitText = UNIT_TEXT[sv.unit] || 'per ghanta';
         lines.push(
-          `- ${cat.label || cat.id} / ${sv.label || sv.id}: ${money(sv.rate)} per ghanta` +
+          `- ${cat.label || cat.id} / ${sv.label || sv.id}: ${money(sv.rate)} ${unitText}` +
           (sv.minimumHours > 1 ? `, kam se kam ${sv.minimumHours} ghante` : '')
         );
       });
@@ -131,11 +169,28 @@ const buildLiveFacts = async () => {
     `Driver dhoondte waqt cancel karna hamesha muft hai.`
   );
 
-  const w = s.waiting || {};
-  if (w.enabled !== false) {
+  // Waiting ab har vehicle ka apna hai — upar rate ke saath hi likh diya gaya
+  // hai. Yahan dobara ek global number likhne se galat jaankari jaati thi.
+  lines.push('WAITING: har gaadi ka apna free time aur rate hai — upar list mein dekho.');
+
+  // Wedding car per-km nahi chalti, isliye upar wali list mein nahi aati.
+  const weddingPkgs = (s.weddingPackages || []).filter((pk) => pk.isActive !== false);
+  if (weddingPkgs.length) {
+    lines.push('\nWEDDING CAR (package ke hisaab se, per-km nahi):');
+    weddingPkgs.forEach((pk) => {
+      lines.push(
+        `- ${pk.category} / ${pk.name}: ${money(pk.price)}` +
+        (pk.extraKmCharge ? `, extra km ${money(pk.extraKmCharge)}` : '') +
+        (pk.extraHourCharge ? `, extra ghanta ${money(pk.extraHourCharge)}` : '')
+      );
+    });
+  }
+
+  const fuel = s.fuelAdjustment || {};
+  if (fuel.enabled) {
     lines.push(
-      `WAITING: driver ke pahunchne ke baad ${w.freeMinutes ?? 3} minute muft. ` +
-      `Uske baad ${money(w.perMinuteRate ?? 2)} per minute, zyada se zyada ${money(w.maxCharge ?? 50)}.`
+      `FUEL ADJUSTMENT: diesel-petrol mehnga hone par kiraya thoda badhta hai, ` +
+      `par zyada se zyada ${fuel.maxAdjustmentPercent ?? 5}% — usse upar kabhi nahi.`
     );
   }
 

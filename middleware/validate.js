@@ -107,6 +107,16 @@ const schemas = {
     serviceCategory:    Joi.string().optional().allow(''),
     serviceType:        Joi.string().optional().allow(''),
     estimatedHours:     Joi.number().min(0).optional(),
+    // Katai acre se hoti hai, gehun nikalna quintal se — sirf ghante se kaam
+    // nahi chalta. Kitne acre/quintal ka kaam hai, wo yahan aata hai.
+    serviceQuantity:    Joi.number().min(0).max(10000).optional(),
+    // Goods/Tempo ke extras jo customer ne chune. Daam admin ki setting se
+    // aata hai — client sirf "chahiye/nahi chahiye" bhejta hai.
+    extras: Joi.object({
+      loading:   Joi.boolean().optional(),
+      unloading: Joi.boolean().optional(),
+      helper:    Joi.boolean().optional(),
+    }).optional(),
     hourlyRate:         Joi.number().min(0).optional(),
     workNote:           Joi.string().max(500).optional().allow(''),
     promoCode:          Joi.string().optional().allow(null, ''),
@@ -119,11 +129,25 @@ const schemas = {
   }),
 
   // Fare estimate query params
+  // `stripUnknown: true` ke chalte jo field yahan nahi likhi, wo request se ud
+  // jaati hai. vehicleType pehle missing tha, isliye route ka single-vehicle
+  // breakdown wala branch kabhi chalta hi nahi tha.
   fareEstimate: Joi.object({
     pickupLat: Joi.number().min(-90).max(90).required(),
     pickupLng: Joi.number().min(-180).max(180).required(),
     dropLat:   Joi.number().min(-90).max(90).required(),
     dropLng:   Joi.number().min(-180).max(180).required(),
+
+    vehicleType: Joi.string().max(40).optional().allow(''),
+
+    // Driver customer se kitni door hai — long pickup charge iske hisaab se.
+    pickupKm:    Joi.number().min(0).max(500).optional(),
+    waitMinutes: Joi.number().min(0).max(600).optional(),
+
+    // Goods/Tempo ke extras — customer chunta hai, admin ne enable kiya ho tabhi lagte hain.
+    loading:   Joi.boolean().truthy('true').falsy('false').optional(),
+    unloading: Joi.boolean().truthy('true').falsy('false').optional(),
+    helper:    Joi.boolean().truthy('true').falsy('false').optional(),
   }),
 };
 

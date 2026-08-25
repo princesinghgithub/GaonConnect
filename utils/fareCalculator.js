@@ -3,16 +3,16 @@
 // Default rates (fallback jab DB available nahi ho)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Fallback — sirf tab lagta hai jab Settings load na ho paaye. Numbers wahi
+// rate card wale hain jo Setting.js seed karti hai, taaki dono kabhi alag na hon.
 const DEFAULT_RATES = {
-  bike:    { baseFare: 20,  perKmRate: 8,  minimumFare: 25  },
-  auto:    { baseFare: 25,  perKmRate: 12, minimumFare: 30  },
-  car:     { baseFare: 50,  perKmRate: 15, minimumFare: 70  },
-  tractor: { baseFare: 100, perKmRate: 25, minimumFare: 150 },
-  tempo:   { baseFare: 80,  perKmRate: 20, minimumFare: 120 },
-  truck:   { baseFare: 150, perKmRate: 30, minimumFare: 200 },
-  jcb:     { baseFare: 200, perKmRate: 40, minimumFare: 300 },
-  ambulance: { baseFare: 100, perKmRate: 18, minimumFare: 150 },
-  wedding:   { baseFare: 500, perKmRate: 35, minimumFare: 1500 },
+  bike:      { minimumFare: 30,  includedKm: 2, perKmRate: 15, freeWaitingMinutes: 5, waitingPerMinute: 1,   freePickupKm: 3, longPickupPerKm: 3, nightChargePercent: 10, fuelType: 'petrol' },
+  auto:      { minimumFare: 50,  includedKm: 2, perKmRate: 16, freeWaitingMinutes: 5, waitingPerMinute: 1.5, freePickupKm: 3, longPickupPerKm: 4, nightChargePercent: 10, fuelType: 'cng' },
+  erickshaw: { minimumFare: 40,  includedKm: 2, perKmRate: 19, freeWaitingMinutes: 5, waitingPerMinute: 1,   freePickupKm: 3, longPickupPerKm: 3, nightChargePercent: 10, fuelType: 'electric' },
+  car:       { minimumFare: 80,  includedKm: 3, perKmRate: 14, freeWaitingMinutes: 5, waitingPerMinute: 2,   freePickupKm: 3, longPickupPerKm: 5, nightChargePercent: 10, fuelType: 'petrol' },
+  goods:     { minimumFare: 150, includedKm: 3, perKmRate: 20, freeWaitingMinutes: 15, waitingPerHour: 100,  freePickupKm: 3, nightChargePercent: 10, fuelType: 'diesel' },
+  tempo:     { minimumFare: 150, includedKm: 3, perKmRate: 18, freeWaitingMinutes: 15, waitingPerHour: 100,  freePickupKm: 3, nightChargePercent: 10, fuelType: 'diesel' },
+  ambulance: { minimumFare: 150, includedKm: 3, perKmRate: 18, freeWaitingMinutes: 10, freePickupKm: 5, nightChargePercent: 0, fuelType: 'diesel' },
 };
 
 const DEFAULT_SURGE = {
@@ -108,10 +108,13 @@ exports.calculateCommission = (fare, commissionPercent = DEFAULT_COMMISSION) => 
 
 // ─── Base Fare (simple, backward compat) ─────────────────────────────────────
 exports.calculateFare = (distance, vehicleType, rates = DEFAULT_RATES) => {
-  const r    = rates[vehicleType] || rates.auto;
-  let   fare = r.baseFare + distance * r.perKmRate;
-  if (fare < r.minimumFare) fare = r.minimumFare;
-  return Math.ceil(fare / 5) * 5;
+  const r = rates[vehicleType] || rates.auto;
+  // Wahi formula jo getFareBreakdown use karta hai: minimumFare includedKm tak
+  // cover karta hai, uske aage perKmRate. Do jagah do alag formula rakhne se
+  // ek din dono ke jawab alag ho jaate.
+  const extraKm = Math.max(0, Number(distance) - Number(r.includedKm || 0));
+  const fare    = Number(r.minimumFare || 0) + Math.round(extraKm * Number(r.perKmRate || 0));
+  return Math.max(Number(r.minimumFare || 0), Math.ceil(fare / 5) * 5);
 };
 
 // ─── FULL FARE BREAKDOWN (Uber-style) ─────────────────────────────────────────
@@ -125,82 +128,184 @@ exports.calculateFare = (distance, vehicleType, rates = DEFAULT_RATES) => {
 exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
   const {
     waitMinutes  = 0,
+    pickupKm     = 0,          // driver customer se kitni door tha
     bookingDate  = new Date(),
-    settings     = {},              // DB se aaya Setting document
+    settings     = {},
+    extras       = {},         // { loading: true, unloading: false, helper: true }
   } = options;
 
-  // Rates — DB se ya default
-  const rates      = settings.vehicleRates || DEFAULT_RATES;
-  const surgeConf  = settings.surge        || DEFAULT_SURGE;
-  const waitConf   = settings.waiting      || DEFAULT_WAITING;
-  const bookFeeConf = settings.bookingFee  || DEFAULT_BOOKING_FEE;
-  const commPct    = settings.commission?.percentage ?? DEFAULT_COMMISSION;
+  const rates       = settings.vehicleRates   || DEFAULT_RATES;
+  const surgeConf   = settings.surge          || DEFAULT_SURGE;
+  const bookFeeConf = settings.bookingFee     || DEFAULT_BOOKING_FEE;
+  const fuelConf    = settings.fuelAdjustment || {};
+  const globalComm  = settings.commission?.percentage ?? DEFAULT_COMMISSION;
 
-  const r = rates[vehicleType] || rates.auto;
+  const r = rates[vehicleType] || rates.auto || Object.values(rates)[0] || {};
 
-  // 1. Base fare
-  let baseFare = r.baseFare + distance * r.perKmRate;
-  if (baseFare < r.minimumFare) baseFare = r.minimumFare;
-  baseFare = Math.ceil(baseFare / 5) * 5;
+  // Per-vehicle commission set ho to wahi, warna global.
+  const commPct = (r.commissionPercent !== null && r.commissionPercent !== undefined && r.commissionPercent !== '')
+    ? Number(r.commissionPercent)
+    : globalComm;
 
-  // 2. Surge
+  const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  const lines = [];
+
+  // 1. Distance fare
+  // minimumFare `includedKm` tak cover karta hai; uske aage har km ka perKmRate.
+  // Purana model (baseFare + km*rate, floor minimum) chhoti rides pe driver ka
+  // pickup tak ka kharcha bhi nahi nikalta tha.
+  const minimumFare = num(r.minimumFare);
+  const includedKm  = num(r.includedKm);
+  const perKmRate   = num(r.perKmRate);
+
+  const extraKm        = Math.max(0, num(distance) - includedKm);
+  const distanceCharge = Math.round(extraKm * perKmRate);
+  const baseFare       = minimumFare + distanceCharge;
+
+  lines.push({ label: 'Minimum Fare', amount: minimumFare, show: minimumFare > 0 });
+  lines.push({
+    label:  'Distance Charge (' + extraKm.toFixed(1) + ' km)',
+    amount: distanceCharge,
+    show:   distanceCharge > 0,
+  });
+
+  // 2. Waiting — goods/tempo per-hour charge karte hain, baaki per-minute.
+  const freeWait     = num(r.freeWaitingMinutes, 5);
+  const billableWait = Math.max(0, num(waitMinutes) - freeWait);
+  let   waitingCharge = 0;
+  if (billableWait > 0) {
+    waitingCharge = num(r.waitingPerHour) > 0
+      ? Math.round((billableWait / 60) * num(r.waitingPerHour))
+      : Math.round(billableWait * num(r.waitingPerMinute, 1));
+  }
+  lines.push({
+    label:  'Waiting Charge (' + billableWait + ' min)',
+    amount: waitingCharge,
+    show:   waitingCharge > 0,
+  });
+
+  // 3. Long pickup — driver ko customer tak aane mein bhi petrol lagta hai.
+  // Kuch km muft, uske aage charge; warna door wale customer par driver ka nuksan.
+  const freePickup  = num(r.freePickupKm, 3);
+  const extraPickup = Math.max(0, num(pickupKm) - freePickup);
+  const longPickup  = Math.round(extraPickup * num(r.longPickupPerKm));
+  lines.push({
+    label:  'Long Pickup (' + extraPickup.toFixed(1) + ' km)',
+    amount: longPickup,
+    show:   longPickup > 0,
+  });
+
+  // 4. Goods extras — sirf tab jab admin ne enable kiya ho AUR customer ne chuna ho.
+  let extrasTotal = 0;
+  ['loading', 'unloading', 'helper'].forEach((key) => {
+    const conf = r.extras && r.extras[key];
+    if (!conf || !conf.enabled || !extras[key]) return;
+    const amt = num(conf.amount);
+    extrasTotal += amt;
+    lines.push({
+      label:  key.charAt(0).toUpperCase() + key.slice(1) + ' Charge',
+      amount: amt,
+      show:   amt > 0,
+    });
+  });
+
+  // 5. Night charge — per-vehicle percent. Surge se alag cheez hai: night charge
+  // hamesha ek jaisa aur pehle se maloom hota hai, surge demand pe badalta hai.
+  const nightPct  = num(r.nightChargePercent);
+  const hour      = bookingDate.getHours();
+  const isNight   = nightPct > 0 && (hour >= 22 || hour < 6);
+  const preNight  = baseFare + waitingCharge + longPickup + extrasTotal;
+  const nightCharge = isNight ? Math.round(preNight * nightPct / 100) : 0;
+  lines.push({
+    label:  'Night Charge (' + nightPct + '%)',
+    amount: nightCharge,
+    show:   nightCharge > 0,
+  });
+
+  // 6. Fuel adjustment
+  const fuelAdj = exports.calculateFuelAdjustment(preNight + nightCharge, r.fuelType, fuelConf);
+  lines.push({ label: 'Fuel Adjustment', amount: fuelAdj, show: fuelAdj !== 0 });
+
+  // 7. Surge — launch pe band hai (Setting.surge.enabled = false).
   const { multiplier, surgeType } = getSurgeMultiplier(surgeConf, bookingDate);
-  const surgeAmount = multiplier > 1
+  const surgeAmount = (surgeConf.enabled && multiplier > 1)
     ? Math.round(baseFare * (multiplier - 1))
     : 0;
+  lines.push({ label: surgeType || 'Surge', amount: surgeAmount, show: surgeAmount > 0 });
 
-  // 3. Waiting charge
-  const waitingCharge = exports.calculateWaitingCharge(waitMinutes, waitConf);
+  // 8. Booking fee
+  const bookingFee = bookFeeConf.enabled ? num(bookFeeConf.amount, 5) : 0;
+  lines.push({ label: 'Booking Fee', amount: bookingFee, show: bookingFee > 0 });
 
-  // 4. Booking fee
-  const bookingFee = bookFeeConf.enabled ? (bookFeeConf.amount || 5) : 0;
+  // 9. Total — minimumFare se neeche kabhi nahi.
+  const subtotal  = preNight + nightCharge + fuelAdj + surgeAmount + bookingFee;
+  const totalFare = Math.max(minimumFare, Math.ceil(subtotal / 5) * 5);
 
-  // 5. Total
-  const subtotal  = baseFare + surgeAmount + waitingCharge + bookingFee;
-  const totalFare = Math.ceil(subtotal / 5) * 5;
-
-  // 6. Commission split
   const commission     = Math.round(totalFare * commPct / 100);
   const driverEarnings = totalFare - commission;
 
   return {
-    // Summary (App mein bada dikhao)
     totalFare,
     currency: '₹',
 
-    // Breakdown (expandable section)
-    breakdown: [
-      { label: 'Base Fare',      amount: baseFare,      show: true             },
-      { label: surgeType || '',  amount: surgeAmount,    show: surgeAmount > 0  },
-      { label: 'Waiting Charge', amount: waitingCharge,  show: waitingCharge > 0},
-      { label: 'Booking Fee',    amount: bookingFee,     show: bookingFee > 0   },
-    ].filter((item) => item.show),
+    breakdown: lines.filter((l) => l.show),
 
-    // Surge info
-    surgeActive:    multiplier > 1,
-    surgeType:      surgeType || null,
-    surgeMultiplier: multiplier,
+    surgeActive:        surgeAmount > 0,
+    surgeType:          surgeAmount > 0 ? surgeType : null,
+    surgeMultiplier:    surgeAmount > 0 ? multiplier : 1,
+    nightChargeApplied: nightCharge > 0,
 
-    // Driver earnings
-    platformFee:     commission,
+    platformFee:       commission,
     driverEarnings,
     commissionPercent: commPct,
 
-    // Meta
     vehicleType,
     distance,
-    // Label aur icon bhi bhejo — app ke paas admin ke naye vehicle types ke
-    // liye koi translation ya emoji nahi hoti, aur bina inke wo raw key
-    // ("home.vehicles.ambulance") dikha deti thi.
-    label: r.label || vehicleType,
-    icon:  r.icon  || '',
-    image: r.image || '',
+    label:       r.label || vehicleType,
+    icon:        r.icon  || '',
+    image:       r.image || '',
+    pricingType: r.pricingType || 'distance',
+
     rateCard: {
-      baseFare:    r.baseFare,
-      perKmRate:   r.perKmRate,
-      minimumFare: r.minimumFare,
+      minimumFare,
+      includedKm,
+      perKmRate,
+      freeWaitingMinutes: freeWait,
+      waitingPerMinute:   num(r.waitingPerMinute),
+      waitingPerHour:     num(r.waitingPerHour),
+      freePickupKm:       freePickup,
+      longPickupPerKm:    num(r.longPickupPerKm),
+      nightChargePercent: nightPct,
+      cancellationFee:    num(r.cancellationFee),
+      // App ko pata hona chahiye ki is gaadi pe kaunse extras chalu hain aur
+      // kitne ke — tabhi wo customer ko chunne ka option de paayegi.
+      extras: ['loading', 'unloading', 'helper'].reduce((acc, key) => {
+        const c = r.extras && r.extras[key];
+        if (c && c.enabled && num(c.amount) > 0) acc[key] = num(c.amount);
+        return acc;
+      }, {}),
     },
   };
+};
+
+// Fuel adjustment
+// Reference price ke muqable aaj ka price kitna upar/neeche hai, usi anupaat
+// mein fare thoda adjust hota hai -- par maxAdjustmentPercent se zyada kabhi
+// nahi, taaki customer par ek jhatke mein bada bojh na aaye.
+exports.calculateFuelAdjustment = (amount, fuelType = 'petrol', conf = {}) => {
+  if (!conf.enabled) return 0;
+  // Electric/CNG pe petrol-diesel ka utaar-chadhav lagana galat hoga.
+  if (fuelType !== 'petrol' && fuelType !== 'diesel') return 0;
+
+  const isDiesel = fuelType === 'diesel';
+  const ref = Number(isDiesel ? conf.dieselReferencePrice : conf.petrolReferencePrice);
+  const now = Number(isDiesel ? conf.currentDieselPrice   : conf.currentPetrolPrice);
+  if (!ref || !now || ref <= 0) return 0;
+
+  const cap       = Math.abs(Number(conf.maxAdjustmentPercent) || 5);
+  const changePct = ((now - ref) / ref) * 100;
+  const capped    = Math.max(-cap, Math.min(cap, changePct));
+  return Math.round(amount * capped / 100);
 };
 
 // ─── All vehicles ka estimate ek saath ───────────────────────────────────────
@@ -228,31 +333,102 @@ exports.getAllFareEstimates = (distance, options = {}) => {
 const DEFAULT_HOURLY_RATES = require('../config/hourlyRatesDefaults');
 
 // categories: array of { id, label, emoji, pricingType, sub: [{ id, label, rate, minimumHours }] }
-exports.calculateHourlyFare = (vehicleType, category, service, hours = 1, distance = 0, hourlyRatesConfig = DEFAULT_HOURLY_RATES) => {
+// Tractor/JCB/Thresher/Harvester ka kiraya.
+//
+// Ye sab ek hisaab se nahi chalte: hal chalana ghante se, fasal dhona km se,
+// katai acre se, gehun nikalna quintal se. Isliye rate ke saath uska `unit`
+// bhi dekhna zaroori hai. Pehle sab kuch ghanta ya km maan liya jaata tha,
+// aur per-km pe ek hardcoded ₹150 ka minimum laga hua tha jo kisi admin
+// setting se nahi aata tha.
+exports.calculateHourlyFare = (
+  vehicleType, category, service,
+  hours = 1, distance = 0,
+  hourlyRatesConfig = DEFAULT_HOURLY_RATES,
+  options = {},
+) => {
+  const empty = { fare: 0, rateType: 'hourly', rate: 0 };
+
   const categories = hourlyRatesConfig?.[vehicleType];
-  if (!categories) return { fare: 0, rateType: 'hourly', rate: 0 };
+  if (!categories) return empty;
 
   const categoryConf = categories.find((c) => c.id === category);
-  if (!categoryConf) return { fare: 0, rateType: 'hourly', rate: 0 };
+  if (!categoryConf) return empty;
 
   const serviceRate = categoryConf.sub?.find((s) => s.id === service);
-  if (!serviceRate) return { fare: 0, rateType: 'hourly', rate: 0 };
+  if (!serviceRate) return empty;
 
-  const isPerKm = categoryConf.pricingType === 'per_km';
+  // Jis service ka rate admin ne abhi set hi nahi kiya (thresher/harvester),
+  // uski booking nahi banni chahiye — warna ride ₹0 pe ban jaayegi.
+  if (serviceRate.isActive === false || !(Number(serviceRate.rate) > 0)) return empty;
+
+  const { quantity = 0, arrivalKm = 0 } = options;
+  const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+
+  const rate = num(serviceRate.rate);
+  // Purane records mein `unit` nahi hai — tab category ka pricingType hi
+  // bataata tha ki per-km hai ya per-hour.
+  const unit = serviceRate.unit || (categoryConf.pricingType === 'per_km' ? 'km' : 'hour');
+
   let fare = 0;
-  const rateType = isPerKm ? 'per_km' : 'hourly';
-
-  if (isPerKm) {
-    fare = Math.max(distance * serviceRate.rate, 150);
-  } else {
-    fare = Math.max(hours, serviceRate.minimumHours || 1) * serviceRate.rate;
+  switch (unit) {
+    case 'km':
+      fare = num(distance) * rate;
+      break;
+    case 'acre':
+    case 'quintal': {
+      const qty = Math.max(num(quantity), num(serviceRate.minimumQuantity, 1));
+      fare = qty * rate;
+      break;
+    }
+    case 'job':
+      fare = rate;   // poore kaam ka ek daam
+      break;
+    case 'hour':
+    default:
+      fare = Math.max(num(hours), num(serviceRate.minimumHours, 1)) * rate;
+      break;
   }
 
+  // Gaadi ko site tak laane ka charge — admin chaalu kare tabhi lagta hai,
+  // aur kuch km tak muft rehta hai.
+  const travel = categoryConf.travelCharge || {};
+  let travelCharge = 0;
+  if (travel.enabled && num(arrivalKm) > num(categoryConf.freeArrivalKm, 5)) {
+    travelCharge = num(travel.amount);
+    fare += travelCharge;
+  }
+
+  // Minimum ab category ki apni setting se aata hai (default 0), pehle yahan
+  // per-km ke liye ₹150 code mein likha hua tha.
+  fare = Math.max(fare, num(categoryConf.minimumFare));
   fare = Math.ceil(fare / 10) * 10;
-  return { fare, rateType, rate: serviceRate.rate, label: serviceRate.label };
+
+  return {
+    fare,
+    rateType: unit === 'km' ? 'per_km' : unit === 'hour' ? 'hourly' : unit,
+    unit,
+    rate,
+    travelCharge,
+    label: serviceRate.label,
+  };
 };
 
-exports.getServicesForVehicle = (vehicleType, hourlyRatesConfig = DEFAULT_HOURLY_RATES) =>
-  hourlyRatesConfig?.[vehicleType] || null;
+// Customer ko sirf wahi services dikhni chahiye jinka rate admin ne set kiya hai.
+// Thresher/Harvester defaults mein rate 0 aur isActive false hain — kyunki inka
+// bhaav har gaon aur har fasal mein alag hota hai. Agar ye list mein aa jaayein
+// to customer ko "0 rupaye" wali service dikhegi aur booking pe jhagda hoga.
+// `includeInactive` admin dashboard ke liye hai — wahan sab dikhna chahiye.
+exports.getServicesForVehicle = (vehicleType, hourlyRatesConfig = DEFAULT_HOURLY_RATES, includeInactive = false) => {
+  const categories = hourlyRatesConfig?.[vehicleType];
+  if (!categories) return null;
+  if (includeInactive) return categories;
+
+  return categories
+    .map((c) => ({
+      ...(typeof c.toObject === 'function' ? c.toObject() : c),
+      sub: (c.sub || []).filter((sv) => sv.isActive !== false && Number(sv.rate) > 0),
+    }))
+    .filter((c) => c.sub.length > 0);
+};
 
 exports.DEFAULT_HOURLY_RATES = DEFAULT_HOURLY_RATES;

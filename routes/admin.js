@@ -128,6 +128,16 @@ router.post('/upload/image', adminAssetUpload.single('image'), (req, res) => {
 });
 router.delete('/vehicle-types/:id', adminController.deleteVehicleType);
 
+// Wedding car packages — per-km nahi, package ke daam.
+router.get('/wedding-packages',        adminController.getWeddingPackages);
+router.post('/wedding-packages',       adminController.createWeddingPackage);
+router.put('/wedding-packages/:id',    adminController.updateWeddingPackage);
+router.delete('/wedding-packages/:id', adminController.deleteWeddingPackage);
+
+// Diesel/petrol ka aaj ka daam — admin khud update karta hai, koi auto API nahi.
+router.get('/fuel-adjustment', adminController.getFuelAdjustment);
+router.put('/fuel-adjustment', adminController.updateFuelAdjustment);
+
 // ===== REPORTS & ANALYTICS =====
 router.get('/analytics', adminController.getAnalytics);
 router.get('/reports/export', adminController.exportReport);
