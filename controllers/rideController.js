@@ -8,7 +8,7 @@ const Notification = require('../models/Notification');
 const Transaction  = require('../models/Transaction');
 const Message      = require('../models/Message');
 const { getDynamicFare, getDynamicHourlyFare, getDynamicWeddingFare, getSettings } = require('../utils/dynamicFare');
-const { calculateWaitingCharge } = require('../utils/fareCalculator');
+const { calculateWaitingCharge, calculateDuration } = require('../utils/fareCalculator');
 const { rewardReferralIfFirstRide } = require('../utils/referral');
 const { creditDriverIncentive } = require('../utils/incentive');
 const { getIO }                     = require('../socket');
@@ -307,6 +307,11 @@ exports.createRide = async (req, res) => {
       // ko wahi total dikhta hai jo yahan bhi banta hai.
       const fareBreakdown = await getDynamicFare(finalDist, vehicleType, {
         extras: req.body.extras || {},
+        // Ride ke waqt ka charge booking ke andaaze par — ride ke baad ke
+        // asli time par nahi. Customer ko jo daam dikha wahi lagega, chahe
+        // raste mein jaam mile.
+        durationMinutes: Number(req.body.estimatedDuration) || calculateDuration(finalDist),
+        bookingDate: scheduledAt ? new Date(scheduledAt) : new Date(),
       });
       finalFare = fareBreakdown.totalFare;
     }

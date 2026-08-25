@@ -109,6 +109,10 @@ const buildLiveFacts = async () => {
         `, uske aage ${money(r.perKmRate)} per km`
       );
 
+      if (Number(r.perMinuteRate) > 0) {
+        lines.push(`   ride ke waqt ka: ${money(r.perMinuteRate)} per minute`);
+      }
+
       const freeWait = Number(r.freeWaitingMinutes) || 0;
       if (Number(r.waitingPerHour) > 0) {
         lines.push(`   waiting: ${freeWait} minute muft, phir ${money(r.waitingPerHour)} per ghanta`);

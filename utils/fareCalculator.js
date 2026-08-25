@@ -129,6 +129,7 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
   const {
     waitMinutes  = 0,
     pickupKm     = 0,          // driver customer se kitni door tha
+    durationMinutes = 0,       // ride mein kitna waqt lagega (andaaza)
     bookingDate  = new Date(),
     settings     = {},
     extras       = {},         // { loading: true, unloading: false, helper: true }
@@ -160,7 +161,8 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
 
   const extraKm        = Math.max(0, num(distance) - includedKm);
   const distanceCharge = Math.round(extraKm * perKmRate);
-  const baseFare       = minimumFare + distanceCharge;
+  // NOTE: time charge neeche judta hai (perMinuteRate padhne ke baad).
+  let   baseFare       = minimumFare + distanceCharge;
 
   lines.push({ label: 'Minimum Fare', amount: minimumFare, show: minimumFare > 0 });
   lines.push({
@@ -168,6 +170,21 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
     amount: distanceCharge,
     show:   distanceCharge > 0,
   });
+
+  // 1b. Waqt ka charge — default 0, yaani band.
+  // Booking ke waqt ke andaaze par, isliye customer ko jo daam dikha wahi
+  // lagta hai chahe raste mein jaam mile.
+  const perMinuteRate = num(r.perMinuteRate);
+  const timeCharge    = perMinuteRate > 0
+    ? Math.round(num(durationMinutes) * perMinuteRate)
+    : 0;
+  lines.push({
+    label:  'Time Charge (' + Math.round(num(durationMinutes)) + ' min)',
+    amount: timeCharge,
+    show:   timeCharge > 0,
+  });
+
+  baseFare += timeCharge;
 
   // 2. Waiting — goods/tempo per-hour charge karte hain, baaki per-minute.
   const freeWait     = num(r.freeWaitingMinutes, 5);
@@ -270,6 +287,7 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
       minimumFare,
       includedKm,
       perKmRate,
+      perMinuteRate,
       freeWaitingMinutes: freeWait,
       waitingPerMinute:   num(r.waitingPerMinute),
       waitingPerHour:     num(r.waitingPerHour),

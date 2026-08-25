@@ -92,6 +92,7 @@ const getRateCard = async (vehicleType) => {
     minimumFare: r.minimumFare,
     includedKm:  r.includedKm,
     perKmRate:   r.perKmRate,
+    perMinuteRate: r.perMinuteRate,
 
     freeWaitingMinutes: r.freeWaitingMinutes,
     waitingPerMinute:   r.waitingPerMinute,

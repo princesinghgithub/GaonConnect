@@ -4161,6 +4161,7 @@ const getVehicleTypes = async (req, res) => {
       minimumFare:  r.minimumFare,
       includedKm:   r.includedKm,
       perKmRate:    r.perKmRate,
+      perMinuteRate: r.perMinuteRate,
 
       freeWaitingMinutes: r.freeWaitingMinutes,
       waitingPerMinute:   r.waitingPerMinute,
@@ -4212,7 +4213,7 @@ const updateVehicleType = async (req, res) => {
     const next = { ...current };
 
     const NUMERIC = [
-      'baseFare', 'minimumFare', 'includedKm', 'perKmRate',
+      'baseFare', 'minimumFare', 'includedKm', 'perKmRate', 'perMinuteRate',
       'freeWaitingMinutes', 'waitingPerMinute', 'waitingPerHour',
       'freePickupKm', 'longPickupPerKm',
       'nightChargePercent', 'cancellationFee',
@@ -4280,7 +4281,7 @@ const createVehicleType = async (req, res) => {
 
     const {
       id, label, icon = '', image = '', baseFare = 0, perKmRate, minimumFare, hourlyCategories,
-      includedKm, pricingType, fuelType,
+      includedKm, perMinuteRate, pricingType, fuelType,
       freeWaitingMinutes, waitingPerMinute, waitingPerHour,
       freePickupKm, longPickupPerKm,
       nightChargePercent, cancellationFee, commissionPercent, extras,
@@ -4320,6 +4321,8 @@ const createVehicleType = async (req, res) => {
       minimumFare: Number(minimumFare),
       includedKm:  num(includedKm, 2),
       perKmRate:   Number(perKmRate),
+      // Default 0 — waqt ka charge tab tak band jab tak admin na chaahe.
+      perMinuteRate: num(perMinuteRate, 0),
 
       freeWaitingMinutes: num(freeWaitingMinutes, 5),
       waitingPerMinute:   num(waitingPerMinute, 1),

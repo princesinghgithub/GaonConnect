@@ -16,6 +16,22 @@ const vehicleRateSchema = new mongoose.Schema({
   includedKm:  { type: Number, default: 2 },
   perKmRate:   { type: Number, required: true },
 
+  /**
+   * Ride ke waqt ka charge. Sirf doori se kiraya banane mein ek dikkat hai:
+   * 7 km ki ride jo jaam mein 45 minute legi aur wahi 7 km jo 15 minute mein
+   * ho jaaye — driver ko dono mein utna hi milta hai. Teen guna waqt, utna
+   * hi paisa.
+   *
+   * Default 0 hai — yaani abhi kuch nahi lagta. Gaon mein jaam kam hai to
+   * zarurat bhi kam. Jab zarurat pade, admin yahin se chaalu kar dega; app
+   * release ka intezaar nahi karna padega.
+   *
+   * Hisaab booking ke waqt ke ANDAAZE se lagta hai, ride ke baad ke asli
+   * time se nahi — warna customer ko dikhe ₹130 aur jaam mein phasne par
+   * lag jaayein ₹190. "Koi chhupa hua charge nahi" ka matlab yahi hai.
+   */
+  perMinuteRate: { type: Number, default: 0 },
+
   // ─── Per-vehicle charges ───────────────────────────────────────────────────
   // Pehle waiting/cancellation poore platform ke liye ek hi thi. Bike aur JCB
   // pe ek hi waiting rate lagana galat hai — unki lagat alag hai.

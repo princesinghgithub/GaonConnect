@@ -162,6 +162,9 @@ router.get('/fare-estimate',
         bookingDate,
         pickupKm:    Number(pickupKm)    || 0,
         waitMinutes: Number(waitMinutes) || 0,
+        // Waqt ka charge (agar admin ne chaalu kiya ho) isi andaaze par
+        // lagta hai — wahi jo customer ko booking se pehle dikhta hai.
+        durationMinutes: duration,
         extras: { loading: !!loading, unloading: !!unloading, helper: !!helper },
       };
 
