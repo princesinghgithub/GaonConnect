@@ -10,12 +10,10 @@ import { GiMineTruck } from 'react-icons/gi';
 import { HOURS_OPTIONS } from '../constants/tractorJcbServices';
 import { trackEvent } from '../utils/analytics';
 
-// ── Fare configs (non-tractor/JCB) ───────────────────────────────────────────
-const FARE_CONFIG = {
-  bike: { base: 20, perKm: 8 },
-  auto: { base: 50, perKm: 12 },
-  car:  { base: 80, perKm: 15 },
-};
+// Yahan pehle FARE_CONFIG naam ka ek hardcoded rate table tha (bike ₹20 + ₹8/km
+// waghera). Wo na admin dashboard se badalta tha, na app ke rate se milta tha —
+// yaani ek hi ride ka daam website pe kuch aur dikhta aur book karne par kuch
+// aur lagta. Ab kiraya backend hi banata hai, ek hi jagah se.
 
 // ── Vehicle options ───────────────────────────────────────────────────────────
 const VEHICLE_OPTIONS = [
@@ -109,6 +107,9 @@ const BookRide = () => {
   // Distance / Fare
   const [distance, setDistance] = useState(null);
   const [fare,     setFare]     = useState(null);
+  // Backend ka poora hisaab — customer ko dikhana zaroori hai, warna ek number
+  // dekhkar bharosa nahi banta.
+  const [fareBreakdown, setFareBreakdown] = useState([]);
 
   // UI
   const [loading, setLoading] = useState(false);
@@ -143,13 +144,17 @@ const BookRide = () => {
     if (!selectedSub) return 0;
     if (isHourly) return selectedHours * selectedSub.rate;
     const km = distance ? distance.distance.value / 1000 : 0;
-    return Math.max(Math.ceil(km * selectedSub.rate / 10) * 10, 150);
+    // Sirf dikhane ka andaaza — booking pe backend ka hisaab hi chalta hai.
+    // Minimum yahan se hata diya: wo ab admin ki setting hai, code mein likha
+    // hua ₹150 nahi.
+    return Math.ceil(km * selectedSub.rate / 10) * 10;
   };
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleVehicleChange = (type) => {
     setVehicleType(type);
     setFare(null);
+    setFareBreakdown([]);
     setDistance(null);
     setSelectedCategory(null);
     setSelectedSub(null);
@@ -187,10 +192,23 @@ const BookRide = () => {
       );
       if (response.data.success) {
         setDistance(response.data.data);
+
         if (!isTractorJcb) {
-          const km = response.data.data.distance.value / 1000;
-          const cfg = FARE_CONFIG[vehicleType] || FARE_CONFIG.auto;
-          setFare(Math.round(cfg.base + km * cfg.perKm));
+          // Fare backend se — wahi hisaab jo app mein aur booking ke waqt
+          // lagta hai, poore breakdown ke saath.
+          const est = await rideAPI.getFareEstimate({
+            pickupLat: origin.location.latitude,
+            pickupLng: origin.location.longitude,
+            dropLat:   destination.location.latitude,
+            dropLng:   destination.location.longitude,
+            vehicleType,
+          });
+
+          const d = est?.data?.data;
+          if (typeof d?.totalFare === 'number') {
+            setFare(d.totalFare);
+            setFareBreakdown(Array.isArray(d.breakdown) ? d.breakdown : []);
+          }
         }
       }
     } catch {
@@ -270,12 +288,23 @@ const BookRide = () => {
           if (!distRes.data.success) throw new Error('Distance calculate nahi ho paya');
 
           const distData = distRes.data.data;
-          const km = distData.distance.value / 1000;
-          const cfg = FARE_CONFIG[type] || FARE_CONFIG.auto;
-          const estimatedFare = Math.round(cfg.base + km * cfg.perKm);
           if (cancelled) return;
           setDistance(distData);
+
+          // Backend hi kiraya batata hai. `estimatedFare` sirf dikhane ke liye
+          // jaata hai — ride banate waqt server dobara khud calculate karta hai,
+          // isliye client se bheja hua number kabhi charge nahi hota.
+          const est = await rideAPI.getFareEstimate({
+            pickupLat: pickup.location.latitude,
+            pickupLng: pickup.location.longitude,
+            dropLat:   dropoff.location.latitude,
+            dropLng:   dropoff.location.longitude,
+            vehicleType: type,
+          });
+          const estimatedFare = est?.data?.data?.totalFare ?? 0;
+          if (cancelled) return;
           setFare(estimatedFare);
+          setFareBreakdown(est?.data?.data?.breakdown || []);
 
           rideData = {
             pickup,
@@ -557,10 +586,23 @@ const BookRide = () => {
                   <span className="text-gray-600">Estimated Time</span>
                   <span className="font-semibold">{distance.duration.text}</span>
                 </div>
+                {/* Poora hisaab — customer ko dikhna chahiye ki kis cheez ka
+                    kitna paisa laga. Ek akela number bharosa nahi banata. */}
+                {fareBreakdown.length > 0 && fareBreakdown.map((line, i) => (
+                  <div key={`${line.label}-${i}`} className="flex justify-between items-center py-1.5 text-sm">
+                    <span className="text-gray-500">{line.label}</span>
+                    <span className="text-gray-700 font-medium">₹{line.amount}</span>
+                  </div>
+                ))}
+
                 <div className="flex justify-between items-center py-3 bg-orange-50 rounded-lg px-4">
                   <span className="text-gray-700 font-semibold">Total Fare</span>
                   <span className="text-3xl font-bold text-orange-600">₹{fare}</span>
                 </div>
+
+                <p className="text-xs text-green-700 text-center font-medium">
+                  Koi chhupa hua charge nahi — itna hi dena hai.
+                </p>
               </div>
             )}
 
@@ -575,7 +617,9 @@ const BookRide = () => {
                   </div>
                   <div className="flex justify-between py-2 border-b">
                     <span className="text-gray-600">Rate</span>
-                    <span className="font-semibold">₹{selectedSub.rate}/{isHourly ? 'hr' : 'km'}</span>
+                    <span className="font-semibold">
+                      ₹{selectedSub.rate}/{selectedSub.unit || (isHourly ? 'ghanta' : 'km')}
+                    </span>
                   </div>
                   {isHourly ? (
                     <div className="flex justify-between py-2 border-b">

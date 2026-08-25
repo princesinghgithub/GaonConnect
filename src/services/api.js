@@ -357,6 +357,15 @@ export const rideAPI = {
     }),
   getSearchingRides: () => api.get("/ride/searching"),
 
+  // Kiraya hamesha backend se poochho. Website pe pehle apna alag hisaab
+  // (base + per-km) code mein likha tha, jo app ke rate se mel hi nahi khaata
+  // tha — ek hi ride ka daam website pe kuch aur, app mein kuch aur dikhta.
+  getFareEstimate: (params) => api.get('/ride/fare-estimate', { params }),
+
+  getRateCard: (vehicleType) => api.get(`/ride/rate-card/${vehicleType}`),
+
+  getWeddingPackages: () => api.get('/ride/wedding-packages'),
+
   createRazorpayOrder: (rideId) => api.post(`/ride/${rideId}/razorpay-order`),
   verifyRazorpayPayment: (data) => api.post("/ride/razorpay-verify", data),
 
