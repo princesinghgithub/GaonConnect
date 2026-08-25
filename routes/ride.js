@@ -4,7 +4,7 @@ const { protect }  = require('../middleware/auth');
 const { validate, schemas } = require('../middleware/validate');
 const { calculateDistance, calculateDuration } = require('../utils/fareCalculator');
 const { getAllDynamicFares, getDynamicFare, getCurrentSurgeInfo, getDynamicServices,
-        getDynamicVehicleTypes, getDynamicWeddingPackages, getRateCard } = require('../utils/dynamicFare');
+        getDynamicVehicleTypes, getDynamicWeddingPackages, getDynamicWeddingFare, getRateCard } = require('../utils/dynamicFare');
 
 const {
   createRide,
@@ -86,6 +86,30 @@ router.get('/wedding-packages', async (req, res) => {
   try {
     const packages = await getDynamicWeddingPackages();
     return res.json({ success: true, data: packages });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ─── Wedding package ka estimate ─────────────────────────────────────────────
+// Booking se pehle customer dekh le ki package ke bahar jaane par kya lagega.
+router.get('/wedding-estimate', protect, async (req, res) => {
+  try {
+    const { packageId, hours, distance, decoration } = req.query;
+    if (!packageId) {
+      return res.status(400).json({ success: false, message: 'packageId dena zaroori hai' });
+    }
+
+    const result = await getDynamicWeddingFare(packageId, {
+      hours:      Number(hours) || 0,
+      distance:   Number(distance) || 0,
+      decoration: decoration === 'true' || decoration === true,
+    });
+
+    if (!result.found) {
+      return res.status(404).json({ success: false, message: 'Ye package nahi mila' });
+    }
+    return res.json({ success: true, data: result });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

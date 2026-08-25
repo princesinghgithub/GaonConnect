@@ -3875,6 +3875,19 @@ const updateSettings = async (req, res) => {
   try {
     if (rejectNegatives(req.body, res)) return;
 
+    // Percent wale field 100 se upar nahi ja sakte.
+    const pctChecks = [
+      ['commission.percentage',            req.body.commission?.percentage],
+      ['fuelAdjustment.maxAdjustmentPercent', req.body.fuelAdjustment?.maxAdjustmentPercent],
+    ];
+    for (const [name, value] of pctChecks) {
+      if (value === undefined || value === null) continue;
+      const v = Number(value);
+      if (!Number.isFinite(v) || v > 100) {
+        return res.status(400).json({ success: false, message: `"${name}" 0 se 100 ke beech hona chahiye` });
+      }
+    }
+
     const settings = await Setting.findOneAndUpdate(
       {},
       { $set: req.body },
@@ -3923,8 +3936,18 @@ const updatePricing = async (req, res) => {
     }
 
     // Commission update
+    // 0 se 100 ke bahar commission ka koi matlab nahi — 120% ka matlab hoga
+    // driver ulta paisa de. rejectNegatives minus rok deta hai, upar ki seema
+    // yahan.
     if (commission?.percentage !== undefined) {
-      updateObj['commission.percentage'] = commission.percentage;
+      const pct = Number(commission.percentage);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Commission 0 se 100 percent ke beech hona chahiye',
+        });
+      }
+      updateObj['commission.percentage'] = pct;
     }
 
     if (!Object.keys(updateObj).length) {
@@ -3994,20 +4017,35 @@ const updateHourlyRate = async (req, res) => {
     }
 
     service.rate = Number(rate);
-    if (minimumHours !== undefined) service.minimumHours = Number(minimumHours);
+    // Minimum 0 ya usse kam rakhne ka matlab hoga "koi minimum nahi", jo
+    // ghante wale kaam mein driver ke liye nuksan hai — 5 minute ka kaam bhi
+    // 5 minute ka hi paisa dega.
+    if (minimumHours !== undefined) {
+      const mh = Number(minimumHours);
+      if (!Number.isFinite(mh) || mh <= 0) {
+        return res.status(400).json({ success: false, message: 'Kam se kam ghante 0 se zyada hone chahiye' });
+      }
+      service.minimumHours = mh;
+    }
     if (label) service.label = label;
 
     // Thresher/Harvester ghante se nahi, acre/quintal se chalte hain — unit
     // yahin se tay hota hai. Inke rate defaults mein 0 hain aur isActive false,
     // kyunki har ilaake ka rate alag hai; admin apna rate bharke chaalu karta hai.
     if (unit !== undefined) {
-      const ALLOWED = ['hour', 'acre', 'quintal', 'km', 'job'];
+      const ALLOWED = ['hour', 'acre', 'quintal', 'km', 'job', 'either'];
       if (!ALLOWED.includes(unit)) {
         return res.status(400).json({ success: false, message: `unit inme se hona chahiye: ${ALLOWED.join(', ')}` });
       }
       service.unit = unit;
     }
-    if (minimumQuantity !== undefined) service.minimumQuantity = Number(minimumQuantity);
+    if (minimumQuantity !== undefined) {
+      const mq = Number(minimumQuantity);
+      if (!Number.isFinite(mq) || mq <= 0) {
+        return res.status(400).json({ success: false, message: 'Kam se kam maatra 0 se zyada honi chahiye' });
+      }
+      service.minimumQuantity = mq;
+    }
     if (perAcreRate     !== undefined) service.perAcreRate     = Number(perAcreRate);
     if (isActive        !== undefined) service.isActive        = Boolean(isActive);
 
@@ -4015,10 +4053,38 @@ const updateHourlyRate = async (req, res) => {
     if (travelCharge && typeof travelCharge === 'object') {
       category.travelCharge = {
         enabled: Boolean(travelCharge.enabled),
+        perKm:   Math.max(0, Number(travelCharge.perKm) || 0),
         amount:  Math.max(0, Number(travelCharge.amount) || 0),
       };
     }
     if (freeArrivalKm !== undefined) category.freeArrivalKm = Number(freeArrivalKm);
+
+    // Category-level rate card: minimum, waiting, raat aur commission.
+    const CATEGORY_NUMERIC = ['minimumFare', 'minimumKm', 'freeWaitingMinutes', 'waitingPerHour', 'nightChargePercent'];
+    for (const key of CATEGORY_NUMERIC) {
+      if (req.body[key] === undefined) continue;
+      const v = Number(req.body[key]);
+      if (!Number.isFinite(v) || v < 0) {
+        return res.status(400).json({ success: false, message: `"${key}" ki value sahi nahi hai` });
+      }
+      if (key === 'nightChargePercent' && v > 100) {
+        return res.status(400).json({ success: false, message: 'Night charge 100% se zyada nahi ho sakta' });
+      }
+      category[key] = v;
+    }
+
+    if (req.body.commissionPercent !== undefined) {
+      const c = req.body.commissionPercent;
+      if (c === null || c === '') {
+        category.commissionPercent = null;   // global commission use hoga
+      } else {
+        const v = Number(c);
+        if (!Number.isFinite(v) || v < 0 || v > 100) {
+          return res.status(400).json({ success: false, message: 'Commission 0 se 100 ke beech hona chahiye' });
+        }
+        category.commissionPercent = v;
+      }
+    }
 
     // Mutating an array nested inside a Map value in place doesn't always
     // get picked up by Mongoose's dirty-tracking — mark the whole map dirty.

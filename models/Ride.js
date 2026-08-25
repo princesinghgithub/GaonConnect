@@ -117,6 +117,13 @@ const RideSchema = new mongoose.Schema(
     // Acre/quintal wale kaam ki maatra. Ride complete hone par dobara hisaab
     // lagta hai, tab bhi yahi value use hoti hai.
     serviceQuantity:   { type: Number, default: 0 },
+    /** "Customer ki marzi" wali service mein usne kya chuna — hour ya acre. */
+    chosenUnit:        { type: String, default: '' },
+
+    // Wedding car ka chuna hua package.
+    packageId:         { type: String, default: '' },
+    packageName:       { type: String, default: '' },
+    decoration:        { type: Boolean, default: false },
 
     // Customer ne kaunse extras maange the. Ride complete hone par dobara
     // hisaab lagta hai, tab bhi yahi list dekhi jaati hai.
@@ -201,10 +208,10 @@ const RideSchema = new mongoose.Schema(
 // TRACTOR / JCB HOURLY BOOKING FIELDS
 // ═══════════════════════════════════════
 
-// Booking mode — distance ya hourly
+// Booking mode — distance, hourly ya package (wedding car)
 bookingMode: {
   type: String,
-  enum: ['distance', 'hourly'],
+  enum: ['distance', 'hourly', 'package'],
   default: 'distance'
 },
 

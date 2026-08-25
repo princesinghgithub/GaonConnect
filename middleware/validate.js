@@ -95,7 +95,9 @@ const schemas = {
     // Vehicle types are admin-managed (Setting.vehicleRates), not a fixed
     // list — fareCalculator falls back to 'auto' pricing for unknown types.
     vehicleType:        Joi.string().lowercase().required(),
-    distance:           Joi.number().min(0).required(),
+    // Negative doori ka koi matlab nahi, aur 2000 km se lambi ride is app ka
+    // kaam nahi — dono taraf seema.
+    distance:           Joi.number().min(0).max(2000).required(),
     estimatedDuration:  Joi.number().min(0).required(),
     fare:               Joi.number().min(0).optional(),
     estimatedFare:      Joi.number().min(0).optional(),
@@ -103,13 +105,19 @@ const schemas = {
     bookingType:        Joi.string().valid('instant', 'scheduled').default('instant'),
     scheduledAt:        Joi.date().iso().optional().allow(null),
     scheduledNote:      Joi.string().max(500).optional().allow(''),
-    bookingMode:        Joi.string().valid('distance', 'hourly').default('distance'),
+    bookingMode:        Joi.string().valid('distance', 'hourly', 'package').default('distance'),
+    // Wedding car package-based hai — kaunsa package chuna, aur sajawat chahiye ya nahi.
+    packageId:          Joi.string().max(100).optional().allow(''),
+    decoration:         Joi.boolean().optional(),
+    packageHours:       Joi.number().min(0).max(48).optional(),
     serviceCategory:    Joi.string().optional().allow(''),
     serviceType:        Joi.string().optional().allow(''),
-    estimatedHours:     Joi.number().min(0).optional(),
+    estimatedHours:     Joi.number().min(0).max(24).optional(),
     // Katai acre se hoti hai, gehun nikalna quintal se — sirf ghante se kaam
     // nahi chalta. Kitne acre/quintal ka kaam hai, wo yahan aata hai.
     serviceQuantity:    Joi.number().min(0).max(10000).optional(),
+    // Jab admin ne service ko "customer ki marzi" pe rakha ho.
+    chosenUnit:         Joi.string().valid('hour', 'acre').optional(),
     // Goods/Tempo ke extras jo customer ne chune. Daam admin ki setting se
     // aata hai — client sirf "chahiye/nahi chahiye" bhejta hai.
     extras: Joi.object({

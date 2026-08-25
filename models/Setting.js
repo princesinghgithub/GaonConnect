@@ -181,7 +181,12 @@ const hourlySubServiceSchema = new mongoose.Schema({
 
   // Thresher/Harvester per acre ya per quintal chalte hain, ghante se nahi.
   // Rate wahi field hai; unit yahan se tay hota hai.
-  unit:            { type: String, enum: ['hour', 'acre', 'quintal', 'km', 'job'], default: 'hour' },
+  /**
+   * `either` ka matlab: customer khud chunega ki ghante se karana hai ya acre
+   * se. Aise mein `rate` per-ghanta hai aur `perAcreRate` per-acre — dono
+   * bhare hone chahiye, warna customer ko aadha option dikhega.
+   */
+  unit:            { type: String, enum: ['hour', 'acre', 'quintal', 'km', 'job', 'either'], default: 'hour' },
   minimumQuantity: { type: Number, default: 1 },
 
   /** Per-acre bhi allow ho to yahan rate do — customer ko dono option milte hain. */
@@ -200,15 +205,39 @@ const hourlyCategorySchema = new mongoose.Schema({
     default: 'hourly',
   },
 
-  /** JCB/tractor ko customer tak laane ka charge — admin on/off kare. */
-  travelCharge:  { enabled: { type: Boolean, default: false }, amount: { type: Number, default: 0 } },
+  /**
+   * JCB/tractor ko site tak laane ka charge. Gaadi jitni door se aayegi utna
+   * diesel lagega, isliye `perKm` asli field hai — `amount` sirf un purane
+   * records ke liye hai jinme flat charge bhara tha.
+   * `freeArrivalKm` tak kuch nahi lagta.
+   */
+  travelCharge: {
+    enabled: { type: Boolean, default: false },
+    perKm:   { type: Number,  default: 0 },
+    amount:  { type: Number,  default: 0 },
+  },
   freeArrivalKm: { type: Number, default: 5 },
+
   /**
    * Is category ka kam se kam kiraya. Pehle per-km wale kaam pe ₹150 ka
    * minimum code mein likha hua tha — admin use badal hi nahi sakta tha.
    * Default 0 hai: jab tak admin na rakhe, koi minimum nahi lagta.
    */
   minimumFare:   { type: Number, default: 0 },
+  /** Kam se kam itne km ka charge lagega, chahe trip usse chhoti ho. */
+  minimumKm:     { type: Number, default: 0 },
+
+  /**
+   * Waiting, raat aur commission — ye teeno pehle sirf passenger gaadiyon ke
+   * rate card mein the. Matlab tractor/JCB ka driver raat ko kaam kare ya
+   * ghanton khada rahe, use ek rupaya extra nahi milta tha.
+   */
+  freeWaitingMinutes: { type: Number, default: 15 },
+  waitingPerHour:     { type: Number, default: 0 },
+  nightChargePercent: { type: Number, default: 0 },
+  /** null = platform ka global commission use karo. */
+  commissionPercent:  { type: Number, default: null },
+
   sub:         { type: [hourlySubServiceSchema], default: [] },
 }, { _id: false });
 

@@ -3,7 +3,8 @@ const Setting                = require('../models/Setting');
 const { getFareBreakdown,
         getAllFareEstimates,
         getServicesForVehicle,
-        calculateHourlyFare } = require('./fareCalculator');
+        calculateHourlyFare,
+        calculateWeddingFare } = require('./fareCalculator');
 
 const SETTINGS_CACHE_KEY = 'app:settings';
 const SETTINGS_CACHE_TTL = 300; // 5 minutes
@@ -60,7 +61,11 @@ const getDynamicServices = async (vehicleType) => {
 // ─── Tractor/JCB hourly fare (booking create karte waqt server-side use hota hai) ─
 const getDynamicHourlyFare = async (vehicleType, category, service, hours, distance, options = {}) => {
   const settings = await getSettings();
-  return calculateHourlyFare(vehicleType, category, service, hours, distance, settings?.hourlyRates, options);
+  return calculateHourlyFare(vehicleType, category, service, hours, distance, settings?.hourlyRates, {
+    // Category ka apna commission na ho to platform ka global chalta hai.
+    globalCommission: settings?.commission?.percentage ?? 0,
+    ...options,
+  });
 };
 
 // ─── Wedding car packages (app + website dono dikhate hain) ─────────────────
@@ -100,6 +105,16 @@ const getRateCard = async (vehicleType) => {
     extras:             r.extras || {},
     currency: '₹',
   };
+};
+
+// ─── Wedding package ka kiraya ───────────────────────────────────────────────
+const getDynamicWeddingFare = async (packageId, options = {}) => {
+  const settings = await getSettings();
+  return calculateWeddingFare(packageId, {
+    packages: settings?.weddingPackages || [],
+    globalCommission: settings?.commission?.percentage ?? 0,
+    ...options,
+  });
 };
 
 // ─── Bookable vehicle-type catalog (apps ke liye — icon, label, hourly support) ──
@@ -169,5 +184,6 @@ module.exports = {
   getDynamicHourlyFare,
   getDynamicVehicleTypes,
   getDynamicWeddingPackages,
+  getDynamicWeddingFare,
   getRateCard,
 };

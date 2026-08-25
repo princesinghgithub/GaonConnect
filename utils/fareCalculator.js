@@ -337,16 +337,19 @@ const DEFAULT_HOURLY_RATES = require('../config/hourlyRatesDefaults');
 //
 // Ye sab ek hisaab se nahi chalte: hal chalana ghante se, fasal dhona km se,
 // katai acre se, gehun nikalna quintal se. Isliye rate ke saath uska `unit`
-// bhi dekhna zaroori hai. Pehle sab kuch ghanta ya km maan liya jaata tha,
-// aur per-km pe ek hardcoded ₹150 ka minimum laga hua tha jo kisi admin
-// setting se nahi aata tha.
+// bhi dekhna zaroori hai.
+//
+// Waiting, raat ka charge aur commission pehle sirf passenger gaadiyon pe
+// lagte the — yaani tractor ka driver raat ko kaam kare ya ghanton khada rahe,
+// use ek rupaya extra nahi milta tha. Ab ye teeno yahan bhi lagte hain, har
+// category ki apni setting se.
 exports.calculateHourlyFare = (
   vehicleType, category, service,
   hours = 1, distance = 0,
   hourlyRatesConfig = DEFAULT_HOURLY_RATES,
   options = {},
 ) => {
-  const empty = { fare: 0, rateType: 'hourly', rate: 0 };
+  const empty = { fare: 0, rateType: 'hourly', rate: 0, breakdown: [] };
 
   const categories = hourlyRatesConfig?.[vehicleType];
   if (!categories) return empty;
@@ -361,55 +364,217 @@ exports.calculateHourlyFare = (
   // uski booking nahi banni chahiye — warna ride ₹0 pe ban jaayegi.
   if (serviceRate.isActive === false || !(Number(serviceRate.rate) > 0)) return empty;
 
-  const { quantity = 0, arrivalKm = 0 } = options;
-  const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  const {
+    quantity = 0,
+    arrivalKm = 0,
+    waitMinutes = 0,
+    bookingDate = new Date(),
+    globalCommission = 0,
+    // `either` wali service mein customer ne kya chuna — 'hour' ya 'acre'.
+    chosenUnit = null,
+  } = options;
 
-  const rate = num(serviceRate.rate);
+  const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  const lines = [];
+
   // Purane records mein `unit` nahi hai — tab category ka pricingType hi
   // bataata tha ki per-km hai ya per-hour.
-  const unit = serviceRate.unit || (categoryConf.pricingType === 'per_km' ? 'km' : 'hour');
+  const configuredUnit = serviceRate.unit || (categoryConf.pricingType === 'per_km' ? 'km' : 'hour');
 
-  let fare = 0;
+  // `either` = customer ki marzi. Usne acre chuna to per-acre rate chalega,
+  // warna ghante wala. Acre ka rate bhara hi na ho to ghante pe hi rahega —
+  // aadha bhara hua option dikhana galat hoga.
+  let unit = configuredUnit;
+  let rate = num(serviceRate.rate);
+
+  if (configuredUnit === 'either') {
+    const acreRate = num(serviceRate.perAcreRate);
+    if (chosenUnit === 'acre' && acreRate > 0) {
+      unit = 'acre';
+      rate = acreRate;
+    } else {
+      unit = 'hour';
+    }
+  }
+
+  if (!(rate > 0)) return empty;
+
+  // ── 1. Kaam ka daam ────────────────────────────────────────────────────────
+  let workCharge = 0;
+  let qtyLabel   = '';
+
   switch (unit) {
-    case 'km':
-      fare = num(distance) * rate;
+    case 'km': {
+      // Chhoti trip pe bhi kam se kam itne km ka charge — gaadi nikaalne ka
+      // apna kharcha hota hai.
+      const km = Math.max(num(distance), num(categoryConf.minimumKm));
+      workCharge = km * rate;
+      qtyLabel   = km.toFixed(1) + ' km';
       break;
+    }
     case 'acre':
     case 'quintal': {
       const qty = Math.max(num(quantity), num(serviceRate.minimumQuantity, 1));
-      fare = qty * rate;
+      workCharge = qty * rate;
+      qtyLabel   = qty + ' ' + unit;
       break;
     }
     case 'job':
-      fare = rate;   // poore kaam ka ek daam
+      workCharge = rate;          // poore kaam ka ek daam
+      qtyLabel   = 'poora kaam';
       break;
     case 'hour':
-    default:
-      fare = Math.max(num(hours), num(serviceRate.minimumHours, 1)) * rate;
+    default: {
+      const hrs = Math.max(num(hours), num(serviceRate.minimumHours, 1));
+      workCharge = hrs * rate;
+      qtyLabel   = hrs + ' ghante';
       break;
+    }
   }
 
-  // Gaadi ko site tak laane ka charge — admin chaalu kare tabhi lagta hai,
-  // aur kuch km tak muft rehta hai.
-  const travel = categoryConf.travelCharge || {};
+  workCharge = Math.round(workCharge);
+  lines.push({ label: (serviceRate.label || 'Kaam') + ' (' + qtyLabel + ')', amount: workCharge });
+
+  // ── 2. Site tak aane ka charge ─────────────────────────────────────────────
+  // Gaadi jitni door se aayegi utna diesel lagega. `freeArrivalKm` tak muft.
+  const travel     = categoryConf.travelCharge || {};
+  const freeArrive = num(categoryConf.freeArrivalKm, 5);
+  const extraArrive = Math.max(0, num(arrivalKm) - freeArrive);
   let travelCharge = 0;
-  if (travel.enabled && num(arrivalKm) > num(categoryConf.freeArrivalKm, 5)) {
-    travelCharge = num(travel.amount);
-    fare += travelCharge;
+
+  if (travel.enabled) {
+    travelCharge = num(travel.perKm) > 0
+      ? Math.round(extraArrive * num(travel.perKm))
+      // Purane records jinme flat amount bhara tha — wo tabhi lagta hai jab
+      // gaadi free doori se aage se aa rahi ho.
+      : (extraArrive > 0 ? num(travel.amount) : 0);
+
+    if (travelCharge > 0) {
+      lines.push({ label: 'Gaadi aane ka charge (' + extraArrive.toFixed(1) + ' km)', amount: travelCharge });
+    }
   }
 
-  // Minimum ab category ki apni setting se aata hai (default 0), pehle yahan
-  // per-km ke liye ₹150 code mein likha hua tha.
+  // ── 3. Waiting ─────────────────────────────────────────────────────────────
+  // Khet/site pe driver ka intezaar bhi uska waqt hai.
+  const freeWait     = num(categoryConf.freeWaitingMinutes, 15);
+  const billableWait = Math.max(0, num(waitMinutes) - freeWait);
+  const waitingCharge = (billableWait > 0 && num(categoryConf.waitingPerHour) > 0)
+    ? Math.round((billableWait / 60) * num(categoryConf.waitingPerHour))
+    : 0;
+  if (waitingCharge > 0) {
+    lines.push({ label: 'Waiting (' + billableWait + ' min)', amount: waitingCharge });
+  }
+
+  // ── 4. Raat ka charge ──────────────────────────────────────────────────────
+  const nightPct = num(categoryConf.nightChargePercent);
+  const hour     = bookingDate.getHours();
+  const isNight  = nightPct > 0 && (hour >= 22 || hour < 6);
+  const preNight = workCharge + travelCharge + waitingCharge;
+  const nightCharge = isNight ? Math.round(preNight * nightPct / 100) : 0;
+  if (nightCharge > 0) {
+    lines.push({ label: 'Night Charge (' + nightPct + '%)', amount: nightCharge });
+  }
+
+  // ── 5. Total ───────────────────────────────────────────────────────────────
+  let fare = preNight + nightCharge;
   fare = Math.max(fare, num(categoryConf.minimumFare));
   fare = Math.ceil(fare / 10) * 10;
 
+  // Category ka apna commission ho to wahi, warna platform ka global.
+  const catComm = categoryConf.commissionPercent;
+  const commissionPct = (catComm !== null && catComm !== undefined && catComm !== '')
+    ? num(catComm)
+    : num(globalCommission);
+  const commission = Math.round(fare * commissionPct / 100);
+
   return {
     fare,
+    currency: '₹',
     rateType: unit === 'km' ? 'per_km' : unit === 'hour' ? 'hourly' : unit,
     unit,
     rate,
+    breakdown: lines,
     travelCharge,
+    waitingCharge,
+    nightCharge,
+    nightChargeApplied: nightCharge > 0,
+    commissionPercent: commissionPct,
+    platformFee: commission,
+    driverEarnings: fare - commission,
     label: serviceRate.label,
+  };
+};
+
+// Wedding car ka kiraya.
+//
+// Shaadi ki gaadi per-km nahi chalti — log "8 ghante / 80 km" jaisa package
+// lete hain. Package ke andar sab shaamil; uske bahar jaane par hi extra
+// lagta hai. Package ke daam code mein nahi hain, admin banata hai.
+exports.calculateWeddingFare = (packageId, options = {}) => {
+  const {
+    packages = [],
+    hours = 0,
+    distance = 0,
+    decoration = false,
+    bookingDate = new Date(),
+    globalCommission = 0,
+  } = options;
+
+  const pkg = packages.find((p) => p.id === packageId && p.isActive !== false);
+  if (!pkg) return { fare: 0, breakdown: [], found: false };
+
+  const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  const lines = [];
+
+  const base = num(pkg.price);
+  lines.push({
+    label: (pkg.name || 'Package') + ' (' + num(pkg.includedHours) + ' ghante / ' + num(pkg.includedKm) + ' km)',
+    amount: base,
+  });
+
+  // Package ke bahar gaya to hi extra.
+  const extraHours = Math.max(0, num(hours) - num(pkg.includedHours));
+  const extraKm    = Math.max(0, num(distance) - num(pkg.includedKm));
+  const hourCharge = Math.round(extraHours * num(pkg.extraHourCharge));
+  const kmCharge   = Math.round(extraKm * num(pkg.extraKmCharge));
+
+  if (hourCharge > 0) lines.push({ label: 'Extra ' + extraHours.toFixed(1) + ' ghante', amount: hourCharge });
+  if (kmCharge > 0)   lines.push({ label: 'Extra ' + extraKm.toFixed(1) + ' km',        amount: kmCharge });
+
+  // Sajawat tabhi jab admin ne chaalu ki ho AUR customer ne maangi ho.
+  const dec = pkg.decorationCharge || {};
+  const decorationCharge = (dec.enabled && decoration) ? num(dec.amount) : 0;
+  if (decorationCharge > 0) lines.push({ label: 'Sajawat (Decoration)', amount: decorationCharge });
+
+  const preNight = base + hourCharge + kmCharge + decorationCharge;
+  const nightPct = num(pkg.nightChargePercent);
+  const hour     = bookingDate.getHours();
+  const isNight  = nightPct > 0 && (hour >= 22 || hour < 6);
+  const nightCharge = isNight ? Math.round(preNight * nightPct / 100) : 0;
+  if (nightCharge > 0) lines.push({ label: 'Night Charge (' + nightPct + '%)', amount: nightCharge });
+
+  const fare = Math.ceil((preNight + nightCharge) / 10) * 10;
+
+  const pkgComm = pkg.commissionPercent;
+  const commissionPct = (pkgComm !== null && pkgComm !== undefined && pkgComm !== '')
+    ? num(pkgComm)
+    : num(globalCommission);
+  const commission = Math.round(fare * commissionPct / 100);
+
+  return {
+    found: true,
+    fare,
+    currency: '₹',
+    pricingType: 'package',
+    packageId: pkg.id,
+    packageName: pkg.name,
+    category: pkg.category,
+    breakdown: lines,
+    nightCharge,
+    nightChargeApplied: nightCharge > 0,
+    commissionPercent: commissionPct,
+    platformFee: commission,
+    driverEarnings: fare - commission,
   };
 };
 

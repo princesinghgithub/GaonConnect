@@ -7,7 +7,7 @@ const User         = require('../models/User');
 const Notification = require('../models/Notification');
 const Transaction  = require('../models/Transaction');
 const Message      = require('../models/Message');
-const { getDynamicFare, getDynamicHourlyFare, getSettings } = require('../utils/dynamicFare');
+const { getDynamicFare, getDynamicHourlyFare, getDynamicWeddingFare, getSettings } = require('../utils/dynamicFare');
 const { calculateWaitingCharge } = require('../utils/fareCalculator');
 const { rewardReferralIfFirstRide } = require('../utils/referral');
 const { creditDriverIncentive } = require('../utils/incentive');
@@ -260,10 +260,36 @@ exports.createRide = async (req, res) => {
     // Fare — client jo bhi bheje usse IGNORE karo, hamesha server-side calculate karo.
     // (client-supplied fare/estimatedFare trust karna price tampering allow karta tha)
     let finalFare = 0;
-    if (serviceCategory && serviceType) {
+
+    // Wedding car — package ka daam. Per-km hisaab isme lagta hi nahi.
+    if (req.body.packageId) {
+      const weddingResult = await getDynamicWeddingFare(req.body.packageId, {
+        hours:       req.body.packageHours || 0,
+        distance:    finalDist,
+        decoration:  Boolean(req.body.decoration),
+        bookingDate: scheduledAt ? new Date(scheduledAt) : new Date(),
+      });
+
+      if (!weddingResult.found) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ye package ab uplabdh nahi hai. Doosra package chunein.',
+        });
+      }
+      finalFare = weddingResult.fare;
+      req.weddingResult = weddingResult;
+    }
+    if (!finalFare && serviceCategory && serviceType) {
       const hourlyResult = await getDynamicHourlyFare(
         vehicleType, serviceCategory, serviceType, estimatedHours, finalDist,
-        { quantity: req.body.serviceQuantity || 0 },
+        {
+          quantity:    req.body.serviceQuantity || 0,
+          chosenUnit:  req.body.chosenUnit || null,
+          // Gaadi ko site tak aana bhi padta hai — pickup se drop ki doori
+          // hi uska andaaza hai jab tak driver assign na ho.
+          arrivalKm:   0,
+          bookingDate: scheduledAt ? new Date(scheduledAt) : new Date(),
+        },
       );
       finalFare = hourlyResult.fare || 0;
 
@@ -322,11 +348,17 @@ exports.createRide = async (req, res) => {
       bookingType,
       scheduledAt:   scheduledAt ? new Date(scheduledAt) : null,
       scheduledNote: scheduledNote || '',
-      bookingMode,
+      // Package chuna hai to mode server hi tay karta hai — client se aaya
+      // hua mode aur asli hisaab alag nahi hone chahiye.
+      bookingMode: req.body.packageId ? 'package' : bookingMode,
       serviceCategory,
       serviceType,
       estimatedHours,
       serviceQuantity: req.body.serviceQuantity || 0,
+      chosenUnit:      req.body.chosenUnit || '',
+      packageId:   req.body.packageId || '',
+      packageName: req.weddingResult?.packageName || '',
+      decoration:  Boolean(req.body.decoration),
       extras: {
         loading:   Boolean(req.body.extras?.loading),
         unloading: Boolean(req.body.extras?.unloading),
@@ -594,6 +626,7 @@ exports.updateRideStatus = async (req, res) => {
     if (status === 'working') updateFields.workStartedAt = new Date();
     if (status === 'completed') {
       updateFields.completedAt = new Date();
+      let hourlyOwnsWaiting = false;
       if (ride.workStartedAt) {
         updateFields.workEndedAt = updateFields.completedAt;
         updateFields.actualHours = parseFloat(
@@ -609,9 +642,21 @@ exports.updateRideStatus = async (req, res) => {
           const recalculated = await getDynamicHourlyFare(
             ride.vehicleType, ride.serviceCategory, ride.serviceType,
             updateFields.actualHours, ride.distance,
-            { quantity: ride.serviceQuantity || 0 },
+            {
+              quantity:    ride.serviceQuantity || 0,
+              chosenUnit:  ride.chosenUnit || null,
+              waitMinutes: ride.waitMinutes || 0,
+              bookingDate: ride.acceptedAt || ride.createdAt || new Date(),
+            },
           );
-          if (recalculated.fare) updateFields.fare = recalculated.fare;
+          if (recalculated.fare) {
+            updateFields.fare = recalculated.fare;
+            // Hourly ka hisaab apna waiting khud jodta hai (category ki apni
+            // per-ghanta setting se). Neeche wala global waiting charge iske
+            // upar dobara nahi lagna chahiye, warna ek hi intezaar ka paisa
+            // do baar kat jaata.
+            hourlyOwnsWaiting = true;
+          }
         }
       }
 
@@ -620,7 +665,7 @@ exports.updateRideStatus = async (req, res) => {
       // fare hi rehta hai, isliye yeh ek hi baar judta hai; aur status
       // transition atomic hai to retry pe dobara nahi judega.
       const waitCharge = ride.waitingCharge || 0;
-      if (waitCharge > 0) {
+      if (waitCharge > 0 && !hourlyOwnsWaiting) {
         updateFields.fare = (updateFields.fare ?? ride.fare) + waitCharge;
       }
     }
