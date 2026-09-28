@@ -102,6 +102,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+app.use('/api/auth/admin', require('./routes/adminAuth')); // admin dashboard: password + Google Authenticator
 app.use('/api/auth',     require('./routes/auth'));
 app.use('/api/user',     require('./routes/auth')); // user app calls /user/fcm-token
 app.use('/api/provider', require('./routes/provider'));
