@@ -15,6 +15,10 @@ const DEFAULT_RATES = {
   ambulance: { minimumFare: 150, includedKm: 3, perKmRate: 18, freeWaitingMinutes: 10, freePickupKm: 5, nightChargePercent: 0, fuelType: 'diesel' },
 };
 
+// Car jaisi type ke andar ki categories (Mini / Sedan / SUV). Database mein na
+// hon to yahi lagti hain — dekho config/vehicleVariantDefaults.js.
+const DEFAULT_VARIANTS = require('../config/vehicleVariantDefaults');
+
 const DEFAULT_SURGE = {
   peakHours:   { enabled: true, multiplier: 1.2, slots: [{ from: 8, to: 10 }, { from: 17, to: 20 }] },
   nightCharge: { enabled: true, multiplier: 1.25, fromHour: 22, toHour: 6 },
@@ -98,6 +102,36 @@ exports.calculateWaitingCharge = (waitMinutes = 0, waitingConfig = DEFAULT_WAITI
   return Math.min(charge, waitingConfig.maxCharge || 50);
 };
 
+// ─── Ride ka waiting charge — us gaadi ke rate card se ───────────────────────
+// Customer ko fare screen par us gaadi ka rate card dikhta hai ("5 minute muft
+// waiting"), par asal charge ek alag global setting se lagta tha (3 minute
+// muft, ₹2/min). Yaani dikhaya kuch, laga kuch. Ab wahi rate card lagta hai jo
+// dikhaya gaya; uske khaali hone par hi purani global setting.
+//
+// Saamaan wali gaadiyon ka waiting per-ghanta hai. Per-minute wale par global
+// `maxCharge` ki seema rehti hai — customer par anant charge na chadhe.
+exports.calculateRideWaitingCharge = (waitMinutes = 0, rate = {}, globalConf = DEFAULT_WAITING) => {
+  if (globalConf && globalConf.enabled === false) return 0;
+
+  const perMin  = Number(rate?.waitingPerMinute) || 0;
+  const perHour = Number(rate?.waitingPerHour)   || 0;
+  if (!perMin && !perHour) {
+    return exports.calculateWaitingCharge(waitMinutes, globalConf || DEFAULT_WAITING);
+  }
+
+  const free = Number.isFinite(Number(rate?.freeWaitingMinutes))
+    ? Number(rate.freeWaitingMinutes)
+    : (globalConf?.freeMinutes ?? 5);
+  const billable = Math.max(0, Number(waitMinutes) - free);
+  if (billable <= 0) return 0;
+
+  if (perHour > 0) return Math.round((billable / 60) * perHour);
+
+  const charge = Math.round(billable * perMin);
+  const cap    = Number(globalConf?.maxCharge) || 0;
+  return cap > 0 ? Math.min(charge, cap) : charge;
+};
+
 // ─── Commission Split ─────────────────────────────────────────────────────────
 exports.calculateCommission = (fare, commissionPercent = DEFAULT_COMMISSION) => {
   const rate          = commissionPercent / 100;
@@ -117,12 +151,37 @@ exports.calculateFare = (distance, vehicleType, rates = DEFAULT_RATES) => {
   return Math.max(Number(r.minimumFare || 0), Math.ceil(fare / 5) * 5);
 };
 
+// ─── Is gaadi ka kiraya kis tareeke se banta hai ─────────────────────────────
+// 'distance' = per-km sawaari/dhulai. Baaki ('hourly', 'per_acre', 'package'...)
+// kaam wali gaadiyan hain — unki apni booking screen hai aur per-km fare
+// screen par wo aati hi nahi.
+const NON_DISTANCE_DEFAULTS = require('../config/vehiclePricingTypes');
+
+exports.pricingTypeOf = (vehicleType, rate, hourlyRates) => {
+  if (rate?.pricingType && rate.pricingType !== 'distance') return rate.pricingType;
+  if (NON_DISTANCE_DEFAULTS[vehicleType]) return NON_DISTANCE_DEFAULTS[vehicleType];
+  const services = hourlyRates?.[vehicleType];
+  if (Array.isArray(services) && services.length > 0) return 'hourly';
+  return 'distance';
+};
+
+// ─── Vehicle type ki chaalu categories ───────────────────────────────────────
+// Rate card mein `variants` ho to wahi; na ho to code ke defaults. Jis type ke
+// liye dono jagah kuch nahi (bike, auto...), uske liye khaali list — matlab
+// us type ka ek hi rate hai.
+exports.getVariantsFor = (vehicleType, rate) => {
+  const list = Array.isArray(rate?.variants) && rate.variants.length
+    ? rate.variants
+    : (DEFAULT_VARIANTS[vehicleType] || []);
+  return list.filter((v) => v && v.id && v.isActive !== false);
+};
+
 // ─── FULL FARE BREAKDOWN (Uber-style) ─────────────────────────────────────────
 /**
  * Detailed fare breakdown — User App mein dikhao
  * @param {number}  distance      km
  * @param {string}  vehicleType
- * @param {object}  options       { waitMinutes, bookingDate, settings }
+ * @param {object}  options       { waitMinutes, bookingDate, settings, variant, ac }
  * @returns {object}              Detailed breakdown
  */
 exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
@@ -155,14 +214,36 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
   // minimumFare `includedKm` tak cover karta hai; uske aage har km ka perKmRate.
   // Purana model (baseFare + km*rate, floor minimum) chhoti rides pe driver ka
   // pickup tak ka kharcha bhi nahi nikalta tha.
-  const minimumFare = num(r.minimumFare);
+  //
+  // Type ke andar categories hon (car → Mini / Sedan / SUV) to chuni hui
+  // category ka rate lagta hai. Client ne category bheji hi nahi (purana app)
+  // to pehli category, Non-AC — jiska daam wahi hai jo pehle car ka tha.
+  const variants = exports.getVariantsFor(vehicleType, r);
+  const variant  = variants.length
+    ? (variants.find((v) => v.id === String(options.variant || '').toLowerCase()) || variants[0])
+    : null;
+
+  // Jo mode us category mein hai hi nahi, wo lag nahi sakta — sirf-AC wali
+  // category mein Non-AC maangne par bhi AC ka hi daam banega.
+  const acOk    = !!variant && variant.acAvailable    !== false;
+  const nonAcOk = !!variant && variant.nonAcAvailable !== false;
+  const wantAc  = options.ac ? acOk : (acOk && !nonAcOk);
+
+  const own = (v, fallback) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))
+    ? num(fallback)
+    : Number(v));
+
+  const minimumFare = variant ? own(variant.minimumFare, r.minimumFare) : num(r.minimumFare);
   const includedKm  = num(r.includedKm);
-  const perKmRate   = num(r.perKmRate);
+  const perKmRate   = variant ? own(variant.perKmRate, r.perKmRate) : num(r.perKmRate);
 
   const extraKm        = Math.max(0, num(distance) - includedKm);
   const distanceCharge = Math.round(extraKm * perKmRate);
+  // AC ka extra poori doori par — chhoti ride mein bhi AC chalta hi hai.
+  const acPerKm        = variant ? num(variant.acPerKm) : 0;
+  const acCharge       = wantAc ? Math.round(num(distance) * acPerKm) : 0;
   // NOTE: time charge neeche judta hai (perMinuteRate padhne ke baad).
-  let   baseFare       = minimumFare + distanceCharge;
+  let   baseFare       = minimumFare + distanceCharge + acCharge;
 
   lines.push({ label: 'Minimum Fare', amount: minimumFare, show: minimumFare > 0 });
   lines.push({
@@ -170,6 +251,7 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
     amount: distanceCharge,
     show:   distanceCharge > 0,
   });
+  lines.push({ label: 'AC Charge', amount: acCharge, show: acCharge > 0 });
 
   // 1b. Waqt ka charge — default 0, yaani band.
   // Booking ke waqt ke andaaze par, isliye customer ko jo daam dikha wahi
@@ -281,12 +363,18 @@ exports.getFareBreakdown = (distance, vehicleType, options = {}) => {
     label:       r.label || vehicleType,
     icon:        r.icon  || '',
     image:       r.image || '',
-    pricingType: r.pricingType || 'distance',
+    pricingType: exports.pricingTypeOf(vehicleType, r, settings.hourlyRates),
+
+    // Kaunsi category aur mode ka daam bana — booking mein yahi save hota hai.
+    variant:      variant ? variant.id : '',
+    variantLabel: variant ? (variant.label || variant.id) : '',
+    ac:           wantAc,
 
     rateCard: {
       minimumFare,
       includedKm,
       perKmRate,
+      acPerKm,
       perMinuteRate,
       freeWaitingMinutes: freeWait,
       waitingPerMinute:   num(r.waitingPerMinute),
@@ -334,11 +422,49 @@ exports.getAllFareEstimates = (distance, options = {}) => {
   // deta tha jabki getDynamicVehicleTypes inhe filter karta hai — is farak ki
   // wajah se admin ke band kiye hue vehicle home screen se to gayab ho jaate
   // the, par fare screen unhe ab bhi dikha kar book karne deti thi.
-  const vehicles = Object.keys(rates).filter((v) => rates[v]?.isActive !== false);
+  // Sirf per-km wali gaadiyan. Tractor/JCB/wedding ka kiraya ghante ya package
+  // se banta hai — unhe yahan per-km ka daam laga kar dikhana galat hai, aur
+  // customer use book bhi kar leta tha.
+  const vehicles = Object.keys(rates).filter((v) =>
+    rates[v]?.isActive !== false
+    && exports.pricingTypeOf(v, rates[v], options.settings?.hourlyRates) === 'distance');
+
+  // Driver kitni door se aayega, ye har gaadi (aur category / AC) ke liye
+  // alag hai — paas mein auto ho sakta hai aur SUV 8 km door. `pickupKmFor`
+  // diya ho to har ek ki apni doori lagti hai.
+  const kmFor = typeof options.pickupKmFor === 'function' ? options.pickupKmFor : null;
+  const withKm = (v, variant, ac) => (kmFor
+    ? { ...options, pickupKm: kmFor(v, variant, ac) }
+    : options);
 
   const result = {};
   vehicles.forEach((v) => {
-    result[v] = exports.getFareBreakdown(distance, v, options);
+    result[v] = exports.getFareBreakdown(distance, v, withKm(v, '', false));
+
+    // Categories wali type (car) — har category ka AC aur Non-AC dono daam
+    // saath bhejo. App khud jodega to dikhaya hua aur charge hua daam alag ho
+    // sakte hain; isliye har number yahin se banta hai.
+    const variants = exports.getVariantsFor(v, rates[v]);
+    if (!variants.length) return;
+
+    result[v].variants = variants.map((variant) => {
+      const modes = [];
+      if (variant.nonAcAvailable !== false) modes.push(false);
+      if (variant.acAvailable    !== false) modes.push(true);
+      if (!modes.length) modes.push(false);
+
+      return {
+        id:     variant.id,
+        label:  variant.label || variant.id,
+        models: variant.models || '',
+        seats:  Number(variant.seats) || 0,
+        image:  variant.image || '',
+        options: modes.map((ac) => {
+          const b = exports.getFareBreakdown(distance, v, { ...withKm(v, variant.id, ac), variant: variant.id, ac });
+          return { ac: b.ac, totalFare: b.totalFare, breakdown: b.breakdown, rateCard: b.rateCard };
+        }),
+      };
+    });
   });
   return result;
 };
@@ -443,9 +569,19 @@ exports.calculateHourlyFare = (
       break;
     case 'hour':
     default: {
-      const hrs = Math.max(num(hours), num(serviceRate.minimumHours, 1));
+      // Jitna chala utna — admin ke tay kiye tukdon (billingStepMinutes) mein
+      // upar gol, phir kam se kam `minimumHours`.
+      let worked = num(hours);
+      const step = num(categoryConf.billingStepMinutes);
+      if (step > 0 && worked > 0) {
+        worked = (Math.ceil((worked * 60 - 0.001) / step) * step) / 60;
+      }
+      const hrs = Math.max(worked, num(serviceRate.minimumHours, 1));
       workCharge = hrs * rate;
-      qtyLabel   = hrs + ' ghante';
+      // "1.25 ghante" se "1 ghanta 15 min" zyada saaf padhta hai
+      const totalMin = Math.round(hrs * 60);
+      const h = Math.floor(totalMin / 60), m = totalMin % 60;
+      qtyLabel = m ? `${h} ghante ${m} min` : `${h} ghante`;
       break;
     }
   }

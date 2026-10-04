@@ -1,5 +1,27 @@
 const mongoose = require('mongoose');
 const HOURLY_RATE_DEFAULTS = require('../config/hourlyRatesDefaults');
+const VEHICLE_VARIANT_DEFAULTS = require('../config/vehicleVariantDefaults');
+
+// ─── Ek vehicle type ke andar ki categories (car → Mini / Sedan / SUV) ────────
+const vehicleVariantSchema = new mongoose.Schema({
+  id:     { type: String, required: true },
+  label:  { type: String, required: true },
+  /** Customer ko dikhane ke liye — "Swift, WagonR, Alto". */
+  models: { type: String, default: '' },
+  seats:  { type: Number, default: 4 },
+
+  /** null = vehicle type ka apna rate lagega. */
+  minimumFare: { type: Number, default: null },
+  perKmRate:   { type: Number, default: null },
+
+  acAvailable:    { type: Boolean, default: true },
+  nonAcAvailable: { type: Boolean, default: true },
+  /** AC chalane par har km ka extra — poori trip ki doori par. */
+  acPerKm:        { type: Number, default: 0 },
+
+  image:    { type: String, default: '' },
+  isActive: { type: Boolean, default: true },
+}, { _id: false });
 
 // ─── Per-vehicle rate structure ───────────────────────────────────────────────
 const vehicleRateSchema = new mongoose.Schema({
@@ -78,6 +100,13 @@ const vehicleRateSchema = new mongoose.Schema({
     helper:    { enabled: { type: Boolean, default: false }, amount: { type: Number, default: 0 } },
   },
 
+  /**
+   * Is type ke andar ki categories. Khaali ho to config/vehicleVariantDefaults
+   * wale lagte hain (abhi sirf car ke liye hain); jis type ke liye wahan bhi
+   * kuch nahi, uska ek hi rate chalta hai — jaise pehle tha.
+   */
+  variants: { type: [vehicleVariantSchema], default: undefined },
+
   isActive:    { type: Boolean, default: true  },
   label:       { type: String, default: '' },
   /** Emoji fallback — jab tak asli photo na ho. */
@@ -128,6 +157,7 @@ const DEFAULT_VEHICLE_RATES = {
     freeWaitingMinutes: 5, waitingPerMinute: 2,
     freePickupKm: 3, longPickupPerKm: 5,
     nightChargePercent: 10, cancellationFee: 30,
+    variants: VEHICLE_VARIANT_DEFAULTS.car,
   },
 
   // Goods aur tempo passenger vehicle nahi hain — inka waiting per-hour hai
@@ -253,6 +283,14 @@ const hourlyCategorySchema = new mongoose.Schema({
   nightChargePercent: { type: Number, default: 0 },
   /** null = platform ka global commission use karo. */
   commissionPercent:  { type: Number, default: null },
+
+  /**
+   * Ghante wale kaam ka bill kitne minute ke tukdon mein bane. 0 = har minute
+   * ka (jitna chala utna). 15 = 1 ghanta 5 minute → 1 ghanta 15 minute; 30 =
+   * aadhe ghante mein. Gaon mein aksar aadhe ghante ka chalan hota hai — yeh
+   * admin tay karta hai, code nahi. Ruka hua waqt pehle hi ghat chuka hota hai.
+   */
+  billingStepMinutes: { type: Number, default: 0 },
 
   sub:         { type: [hourlySubServiceSchema], default: [] },
 }, { _id: false });
@@ -432,3 +470,7 @@ const SettingSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 module.exports = mongoose.model('Setting', SettingSchema);
+// Scripts (syncVehicleActive, upgradeRateCard) ko naye rate card ke defaults
+// chahiye hote hain. Pehle ye export tha hi nahi, isliye
+// `require('../models/Setting').DEFAULT_VEHICLE_RATES` hamesha undefined aata tha.
+module.exports.DEFAULT_VEHICLE_RATES = DEFAULT_VEHICLE_RATES;

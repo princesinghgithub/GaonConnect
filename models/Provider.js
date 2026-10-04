@@ -15,13 +15,24 @@ const ProviderSchema = new mongoose.Schema({
     default: null
   },
 
+  // Registration par driver se li gayi niji jaankari (Rapido jaisa). Naam,
+  // phone, email, city User par hain — yeh sirf driver ke liye hain.
+  personal: {
+    fatherName:  { type: String, trim: true },
+    dateOfBirth: Date,
+    gender:      { type: String, enum: ['male', 'female', 'other'] },
+  },
+
   documents: {
     aadhaar: {
+      // Sirf masked number (XXXXXXXX1234) — Aadhaar Act poora number rakhne
+      // nahi deta. Admin poora number photo se dekh sakta hai.
       number: {
         type: String,
         trim: true
       },
-      photo: String,
+      photo: String,      // aage ki taraf
+      backPhoto: String,  // peeche ki taraf (address)
       verified: {
         type: Boolean,
         default: false
@@ -31,6 +42,15 @@ const ProviderSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
       }
+    },
+    // PAN — payout par TDS ke liye. Gaon ke kai driver ke paas nahi hota, isliye
+    // registration par optional hai.
+    pan: {
+      number: { type: String, trim: true, uppercase: true },
+      photo: String,
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
     },
     photo: {
       type: String // Driver's selfie/profile photo
@@ -121,6 +141,7 @@ const ProviderSchema = new mongoose.Schema({
     accountNumber: String,
     ifscCode: String,
     bankName: String,
+    upiId: String,
     verified: {
       type: Boolean,
       default: false

@@ -1967,9 +1967,11 @@ const getDashboardMetrics = async (req, res) => {
 
 // Service categories jaise dashboard pe dikhte hain â€” vehicleType ko inme group karte hain
 const VEHICLE_GROUPS = {
-  auto_cab:  ['auto', 'car', 'bike'],
-  tractor:   ['tractor'],
-  goods:     ['truck', 'tempo'],
+  auto_cab:  ['auto', 'car', 'bike', 'erickshaw'],
+  // Thresher/harvester bhi khet ka kaam hain — inki booking pehle kisi
+  // group mein nahi thi, to dashboard ki ginti se gaayab rehti.
+  tractor:   ['tractor', 'thresher', 'harvester'],
+  goods:     ['truck', 'tempo', 'goods'],
   jcb:       ['jcb'],
   ambulance: ['ambulance'],
   wedding:   ['wedding'],
@@ -1978,6 +1980,7 @@ const VEHICLE_GROUPS = {
 const SERVICE_LABELS = {
   auto: 'Auto', bike: 'Bike', car: 'Cab', tractor: 'Tractor',
   tempo: 'Tempo', truck: 'Goods', jcb: 'JCB', ambulance: 'Ambulance', wedding: 'Wedding',
+  goods: 'Goods', erickshaw: 'E-Rickshaw', thresher: 'Thresher', harvester: 'Harvester',
 };
 
 const ACTIVE_RIDE_STATUSES = ['accepted', 'arrived', 'started', 'working'];
@@ -2647,7 +2650,7 @@ const verifyDocument = async (req, res) => {
   try {
     const { documentType, status, reason } = req.body;
 
-    const VERIFIABLE_DOCS = ['aadhaar'];
+    const VERIFIABLE_DOCS = ['aadhaar', 'pan'];
     if (!VERIFIABLE_DOCS.includes(documentType)) {
       return res.status(400).json({
         success: false,
@@ -2800,7 +2803,7 @@ const uploadDriverDocumentAdmin = async (req, res) => {
     }
 
     const { documentType } = req.body;
-    const validTypes = ['aadhaar', 'photo'];
+    const validTypes = ['aadhaar', 'pan', 'photo'];
     if (!documentType || !validTypes.includes(documentType)) {
       return res.status(400).json({ success: false, message: `documentType ek inme se hona chahiye: ${validTypes.join(', ')}` });
     }
@@ -2865,7 +2868,7 @@ const addVehicleAdmin = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Driver not found' });
     }
 
-    const { vehicleType, vehicleNumber, vehicleModel, vehicleColor, registrationYear } = req.body;
+    const { vehicleType, vehicleNumber, vehicleModel, vehicleColor, registrationYear, vehicleVariant, hasAC } = req.body;
     if (!vehicleType || !vehicleNumber) {
       return res.status(400).json({ success: false, message: 'Vehicle type aur number required hai' });
     }
@@ -2882,6 +2885,8 @@ const addVehicleAdmin = async (req, res) => {
       model: vehicleModel || '',
       color: vehicleColor || '',
       registrationYear,
+      variant: vehicleVariant || '',
+      ...(typeof hasAC === 'boolean' ? { hasAC } : {}),
       isVerified: false,
       isActive: true,
     });
@@ -3012,7 +3017,7 @@ const verifyVehicleDocument = async (req, res) => {
 // Driver khud upload nahi kar pa raha to admin uski vehicle ke docs (license/rc/
 // insurance/etc) seedhe upload kar deta hai — providerController.uploadVehicleDocument
 // jaisa hi, bas provider-ownership check yahan nahi (admin kisi bhi vehicle pe kar sakta hai).
-const VEHICLE_DOC_TYPES_ADMIN = ['rc', 'insurance', 'license', 'permit', 'fitness', 'machineRegistration', 'operatorLicense'];
+const VEHICLE_DOC_TYPES_ADMIN = ['rc', 'insurance', 'license', 'puc', 'permit', 'fitness', 'machineRegistration', 'operatorLicense'];
 const uploadVehicleDocumentAdmin = async (req, res) => {
   try {
     const { documentType } = req.body;
@@ -3050,12 +3055,30 @@ const updateVehicleAdmin = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Vehicle not found' });
     }
 
-    const { type, number, model, color, registrationYear } = req.body;
+    const { type, number, model, color, registrationYear, variant, hasAC } = req.body;
     if (type !== undefined) vehicle.type = type;
     if (number !== undefined) vehicle.number = number.trim().toUpperCase();
     if (model !== undefined) vehicle.model = model;
     if (color !== undefined) vehicle.color = color;
     if (registrationYear !== undefined) vehicle.registrationYear = registrationYear;
+
+    // Car ki category aur AC — ride dispatch inhi se tay karta hai ki Sedan ya
+    // AC wali request is gaadi ko jaaye ya nahi. Type badal jaaye (car → auto)
+    // to purani category ka koi matlab nahi rehta.
+    if (variant !== undefined) vehicle.variant = variant || '';
+    else if (type !== undefined && vehicle.isModified('type')) vehicle.variant = '';
+    // null = "pata nahi" — tab is gaadi ko AC wali request bhi jaati hai.
+    if (hasAC !== undefined) vehicle.hasAC = typeof hasAC === 'boolean' ? hasAC : undefined;
+
+    // Auzaar (tractor/JCB), wedding (car), HP — driver phone par khud na kar
+    // paaye to admin uski taraf se. Booking inhi se milti hai.
+    const { sanitizeEquipment } = require('../utils/vehicleMatch');
+    const eq = sanitizeEquipment(vehicle.type, req.body.equipment);
+    if (eq !== undefined) vehicle.equipment = eq;
+    if (req.body.horsepower !== undefined) {
+      const hp = Math.round(Number(req.body.horsepower));
+      vehicle.horsepower = Number.isFinite(hp) && hp >= 10 && hp <= 150 ? hp : undefined;
+    }
 
     await vehicle.save();
 
@@ -3854,6 +3877,7 @@ const unblockUser = async (req, res) => {
 // ===== SETTINGS =====
 
 const { invalidateSettingsCache } = require('../utils/dynamicFare');
+const VEHICLE_VARIANT_DEFAULTS = require('../config/vehicleVariantDefaults');
 
 // GET /api/admin/settings
 const getSettings = async (req, res) => {
@@ -4060,7 +4084,7 @@ const updateHourlyRate = async (req, res) => {
     if (freeArrivalKm !== undefined) category.freeArrivalKm = Number(freeArrivalKm);
 
     // Category-level rate card: minimum, waiting, raat aur commission.
-    const CATEGORY_NUMERIC = ['minimumFare', 'minimumKm', 'freeWaitingMinutes', 'waitingPerHour', 'nightChargePercent'];
+    const CATEGORY_NUMERIC = ['minimumFare', 'minimumKm', 'freeWaitingMinutes', 'waitingPerHour', 'nightChargePercent', 'billingStepMinutes'];
     for (const key of CATEGORY_NUMERIC) {
       if (req.body[key] === undefined) continue;
       const v = Number(req.body[key]);
@@ -4069,6 +4093,9 @@ const updateHourlyRate = async (req, res) => {
       }
       if (key === 'nightChargePercent' && v > 100) {
         return res.status(400).json({ success: false, message: 'Night charge 100% se zyada nahi ho sakta' });
+      }
+      if (key === 'billingStepMinutes' && v > 60) {
+        return res.status(400).json({ success: false, message: 'Bill ka tukda 60 minute se bada nahi ho sakta' });
       }
       category[key] = v;
     }
@@ -4155,7 +4182,8 @@ const getVehicleTypes = async (req, res) => {
       label:        r.label || id,
       icon:         r.icon  || '',
       image:        r.image || '',
-      pricingType:  r.pricingType || 'distance',
+      // Purane rate card mein pricingType nahi hota — tab wahi jo apps ko milta hai.
+      pricingType:  require('../utils/fareCalculator').pricingTypeOf(id, r, hourlyRates),
       fuelType:     r.fuelType    || 'petrol',
 
       minimumFare:  r.minimumFare,
@@ -4175,6 +4203,8 @@ const getVehicleTypes = async (req, res) => {
       commissionPercent:  r.commissionPercent ?? null,
 
       extras:       r.extras || {},
+      // Database mein na hon to wahi defaults dikhao jo fare mein lag rahe hain.
+      variants:     Array.isArray(r.variants) && r.variants.length ? r.variants : (VEHICLE_VARIANT_DEFAULTS[id] || []),
       isActive:     r.isActive !== false,
       supportsHourly: Array.isArray(hourlyRates[id]) && hourlyRates[id].length > 0,
     }));
@@ -4258,6 +4288,40 @@ const updateVehicleType = async (req, res) => {
           amount:  Math.max(0, Number(e.amount) || 0),
         };
       }
+    }
+
+    // Type ke andar ki categories (car → Mini / Sedan / SUV). Poori list ek
+    // saath aati hai aur purani ko replace karti hai.
+    if (Array.isArray(req.body.variants)) {
+      // Khaali chhoda hua rate null rehta hai — matlab "vehicle type ka apna rate".
+      const rateOrNull = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+      const cleaned = [];
+      for (const v of req.body.variants) {
+        const vid = String(v?.id || '').trim().toLowerCase();
+        if (!vid || !v.label) {
+          return res.status(400).json({ success: false, message: 'Har category ka id aur label zaroori hai' });
+        }
+        const minFare = rateOrNull(v.minimumFare);
+        const perKm   = rateOrNull(v.perKmRate);
+        const bad = (n) => n !== null && (!Number.isFinite(n) || n < 0);
+        if (bad(minFare) || bad(perKm)) {
+          return res.status(400).json({ success: false, message: `"${v.label}" ka rate sahi nahi hai` });
+        }
+        cleaned.push({
+          id:     vid,
+          label:  String(v.label),
+          models: String(v.models || ''),
+          seats:  Math.max(0, Number(v.seats) || 0),
+          minimumFare: minFare,
+          perKmRate:   perKm,
+          acAvailable:    v.acAvailable    !== false,
+          nonAcAvailable: v.nonAcAvailable !== false,
+          acPerKm:  Math.max(0, Number(v.acPerKm) || 0),
+          image:    String(v.image || ''),
+          isActive: v.isActive !== false,
+        });
+      }
+      next.variants = cleaned;
     }
 
     if (!Number.isFinite(Number(next.minimumFare)) || Number(next.minimumFare) < 0) {
@@ -5217,12 +5281,72 @@ const assignDriverToRide = async (req, res) => {
 
     const ride = await Ride.findById(req.params.id).populate('customer', 'name phone');
     if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
-    if (ride.status !== 'searching') return res.status(400).json({ success: false, message: `Ride abhi "${ride.status}" status mein hai — assign nahi ho sakti` });
+    // Pre-booking jiska driver abhi tay nahi — admin bhi driver pakka kar sakta hai
+    const isAdvance = ride.status === 'scheduled' && !ride.provider;
+    if (ride.status !== 'searching' && !isAdvance) return res.status(400).json({ success: false, message: `Ride abhi "${ride.status}" status mein hai — assign nahi ho sakti` });
 
-    const driver = await Driver.findById(driverId).populate('user', 'name phone');
+    const driver = await Driver.findById(driverId).populate('user', 'name phone').populate('activeVehicle');
     if (!driver) return res.status(404).json({ success: false, message: 'Driver nahi mila' });
     if (!driver.isApproved) return res.status(400).json({ success: false, message: 'Driver approved nahi hai' });
     if (driver.isBlocked) return res.status(400).json({ success: false, message: 'Driver blocked hai' });
+
+    // Galat gaadi na jaaye — thresher ka kaam bina thresher wale tractor ko,
+    // ya tractor ki booking auto wale ko. Wahi niyam jo dispatch mein lagta hai.
+    const { vehicleFitsRide } = require('../utils/vehicleMatch');
+    if (driver.activeVehicle && !vehicleFitsRide(driver.activeVehicle, ride)) {
+      return res.status(400).json({ success: false, message: `Is driver ki gaadi (${driver.activeVehicle.type}) is booking (${ride.vehicleType}${ride.equipment?.length ? ' + ' + ride.equipment.join(', ') : ''}) se match nahi karti` });
+    }
+
+    if (isAdvance) {
+      // Ek hi samay par do pre-bookings nahi — rideController.acceptRide jaisa
+      const at = new Date(ride.scheduledAt).getTime();
+      const spanMs = (Math.max(1, Number(ride.estimatedHours) || 1) + 1) * 3_600_000;
+      const clash = await Ride.findOne({
+        _id: { $ne: ride._id },
+        provider: driver._id,
+        status: { $in: ['scheduled', 'accepted', 'arrived', 'started', 'working'] },
+        scheduledAt: { $gte: new Date(at - spanMs), $lte: new Date(at + spanMs) },
+      }).select('_id');
+      if (clash) return res.status(400).json({ success: false, message: 'Is driver ki is samay pehle se ek booking hai' });
+
+      // Status 'scheduled' hi rehta hai — samay se pehle cron ise chalu karega
+      // (jobs/scheduledRideJob.js), bilkul driver ke khud accept karne jaisa.
+      const booked = await Ride.findOneAndUpdate(
+        { _id: ride._id, status: 'scheduled', provider: null },
+        { provider: driver._id, vehicle: driver.activeVehicle?._id || null, scheduledAcceptedAt: new Date(), nextDispatchAt: null },
+        { new: true },
+      );
+      if (!booked) return res.status(409).json({ success: false, message: 'Is beech kisi driver ne ye pre-booking le li' });
+
+      const { getIO } = require('../socket');
+      const { scheduleLabel } = require('./rideController');
+      const io = getIO();
+      (booked.notifiedDrivers || []).forEach((id) => {
+        if (String(id) !== String(driver._id)) io.to(`driver_${id}`).emit('rideNoLongerAvailable', { rideId: String(booked._id) });
+      });
+
+      const when = scheduleLabel(booked.scheduledAt);
+      const driverName = driver.user?.name || 'Driver';
+      const vehicleNo = driver.activeVehicle?.number || '';
+      if (driver.deviceInfo?.fcmToken) {
+        notify.custom(driver.deviceInfo.fcmToken, {
+          title: '📅 Aapko Pre-Booking Di Gayi',
+          body:  `${ride.customer?.name || 'Customer'} — ${when}. ${ride.pickup?.address || ''}`,
+          data:  { type: 'SCHEDULED_REMINDER', rideId: String(booked._id) },
+        }).catch(() => {});
+      }
+      io.to(`user_${booked.customer}`).emit('scheduledDriverAssigned', { rideId: booked._id, driverName });
+      const customer = await User.findById(booked.customer).select('fcmToken');
+      if (customer?.fcmToken) {
+        notify.custom(customer.fcmToken, {
+          title: '✅ Pre-Booking Pakki!',
+          body:  `${driverName} (${vehicleNo}) ${when} ko aayenge. App mein call kar sakte hain.`,
+          data:  { type: 'SCHEDULED_DRIVER_ASSIGNED', rideId: String(booked._id) },
+        }).catch(() => {});
+      }
+
+      return res.json({ success: true, message: `${driverName} ko pre-booking (${when}) de di — dono ko bata diya`, data: { driverName, driverPhone: driver.user?.phone, scheduled: true } });
+    }
 
     ride.provider = driverId;
     ride.status = 'accepted';

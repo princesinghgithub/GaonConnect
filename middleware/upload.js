@@ -11,8 +11,14 @@ const sanitizeSegment = (value) => String(value || 'misc').replace(/[^a-zA-Z0-9_
 const REGISTER_FIELD_TO_DOC_TYPE = {
   profilePhoto: 'photo',
   aadhaarPhoto: 'aadhaar',
+  aadhaarBackPhoto: 'aadhaar',
+  panPhoto:     'pan',
+  insurancePhoto: 'insurance',
   licensePhoto: 'license',
+  licenseBackPhoto: 'license',
   rcPhoto:      'rc',
+  rcBackPhoto:  'rc',
+  vehiclePhoto: 'vehicle',
 };
 
 const documentStorage = new CloudinaryStorage({

@@ -5,7 +5,11 @@ const documentFieldSchema = {
     type: String,
     trim: true
   },
-  photo: String,
+  photo: String,       // aage ki taraf (front)
+  // Peeche ki taraf. Licence aur RC dono taraf chhape hote hain — address,
+  // vehicle class, chassis number peeche hi hote hain, sirf front se verify
+  // nahi ho pata. Purane records mein khaali rahega.
+  backPhoto: String,
   expiryDate: Date,
   verified: {
     type: Boolean,
@@ -36,6 +40,39 @@ const VehicleSchema = new mongoose.Schema({
     lowercase: true,
   },
 
+  // Type ke andar ki category — car ke liye hatchback / sedan / suv (dekho
+  // config/vehicleVariantDefaults.js). Khaali ka matlab "abhi tay nahi": aisi
+  // gaadi ko har category ki request jaati hai, taaki purani registered
+  // gaadiyan is field ke aane se band na ho jaayein.
+  variant: {
+    type: String,
+    default: '',
+    trim: true,
+    lowercase: true,
+  },
+  // Gaadi ke paas kaunse auzaar/attachment hain — tractor ke rotavator,
+  // thresher, trolley; JCB ka breaker, auger. Id config/equipmentDefaults.js
+  // wale. Booking sirf usi ko jaati hai jiske paas kaam ka auzaar ho (dekho
+  // utils/vehicleMatch.js). Default undefined jaan-bujh kar: purani gaadiyon
+  // par yeh field hai hi nahi, aur unhe "sab kuch hai" maana jaata hai.
+  equipment: {
+    type: [String],
+    default: undefined,
+  },
+  // Tractor ki takat (HP). Variant mein nahi rakha kyunki 55 HP ka tractor
+  // 45 HP wala kaam bhi kar sakta hai — "barabar" nahi, "kam se kam" ka
+  // hisaab hai, jo number se hi ho sakta hai.
+  horsepower: {
+    type: Number,
+    min: 10,
+    max: 150,
+  },
+  // false = gaadi mein AC nahi hai, AC wali request ise nahi jaayegi.
+  // Set na ho to maan lete hain ki hai (wajah wahi — purani gaadiyan).
+  hasAC: {
+    type: Boolean,
+  },
+
   number: {
     type: String,
     required: true,
@@ -55,11 +92,17 @@ const VehicleSchema = new mongoose.Schema({
   registrationYear: {
     type: Number
   },
+  // Gaadi ki photo (number plate ke saath). Registration par abhi optional hai.
+  photo: {
+    type: String,
+    default: ''
+  },
 
   documents: {
     rc: documentFieldSchema,
     insurance: documentFieldSchema,
     license: documentFieldSchema,             // driving license — vehicle-class specific
+    puc: documentFieldSchema,                  // pollution certificate
     permit: documentFieldSchema,               // commercial car/truck
     fitness: documentFieldSchema,              // commercial car/truck
     machineRegistration: documentFieldSchema,  // tractor/jcb

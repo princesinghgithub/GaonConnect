@@ -9,6 +9,34 @@ let io = null;
 // providerId → socketId mapping (sirf online drivers)
 const connectedDrivers = new Map();
 
+// Chat ka naya message — saamne wale ko uske personal room mein khabar aur
+// phone par notification (app band ho tab bhi). `notifications` yahan lazy
+// require — socket.js bahut jagah se pehle load hota hai.
+const notifyChatRecipient = async (ioRef, ride, fromCustomer, text) => {
+  const { notify } = require('./utils/notifications');
+  const User = require('./models/User');
+  const preview = text.length > 80 ? `${text.slice(0, 77)}…` : text;
+  const data = { type: 'CHAT_MESSAGE', rideId: String(ride._id) };
+
+  if (fromCustomer) {
+    if (!ride.provider) return;
+    ioRef.to(`driver_${ride.provider}`).emit('chat_notice', { rideId: String(ride._id), text: preview });
+    const [p, c] = await Promise.all([
+      Provider.findById(ride.provider).select('deviceInfo'),
+      User.findById(ride.customer).select('name'),
+    ]);
+    const fcm = p?.deviceInfo?.fcmToken;
+    if (fcm) await notify.custom(fcm, { title: `💬 ${c?.name || 'Customer'}`, body: preview, data });
+  } else {
+    ioRef.to(`user_${ride.customer}`).emit('chat_notice', { rideId: String(ride._id), text: preview });
+    const [c, p] = await Promise.all([
+      User.findById(ride.customer).select('fcmToken'),
+      Provider.findById(ride.provider).populate('user', 'name').select('user'),
+    ]);
+    if (c?.fcmToken) await notify.custom(c.fcmToken, { title: `💬 ${p?.user?.name || 'Driver'}`, body: preview, data });
+  }
+};
+
 function initSocket(server) {
   const isProd = process.env.NODE_ENV === 'production';
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
@@ -154,6 +182,12 @@ function initSocket(server) {
         // server-stamped id aur timestamp rahe.
         io.to(`booking_${ride._id}`).emit('chat_message', payload);
         done({ ok: true, message: payload });
+
+        // Saamne wala chat screen khole na baitha ho (pre-booking mein yahi
+        // aam hai — baat ghanton pehle hoti hai) to use pata chale: uske
+        // personal room mein khabar + phone par notification. Number dikhaye
+        // bina baat — customer aur driver dono ki privacy bachi rehti hai.
+        notifyChatRecipient(io, ride, isCustomer, msg.text).catch(() => {});
       } catch (err) {
         console.error('chat_message error:', err.message);
         done({ ok: false, error: 'server' });

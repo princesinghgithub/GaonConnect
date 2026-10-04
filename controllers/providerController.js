@@ -1230,6 +1230,15 @@ const User = require('../models/User');
 const Ride = require('../models/Ride');
 const multer = require('multer');
 const path = require('path');
+const { applyReferralCode } = require('../utils/referral');
+const { sanitizeEquipment, sanitizeVariant } = require('../utils/vehicleMatch');
+const RETIRED_VEHICLE_TYPES = require('../config/retiredVehicleTypes');
+
+/** HP — sirf samajh mein aane wala number, warna undefined. */
+const cleanHp = (raw) => {
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n >= 10 && n <= 150 ? n : undefined;
+};
 
 
 // ================= DOCUMENT UPLOAD HELPER =================
@@ -1308,18 +1317,21 @@ exports.uploadProviderDocument = async (req, res) => {
 
     // Validate document type — sirf provider-level KYC yahan; vehicle docs (rc/insurance/license/etc)
     // /provider/vehicles/:vehicleId/documents se jaate hain, kyunki wo vehicle-specific hote hain.
-    const validTypes = ['aadhaar', 'photo'];
+    const validTypes = ['aadhaar', 'pan', 'photo'];
     if (!validTypes.includes(documentType))
       return res.status(400).json({ success: false, message: 'Invalid document type. Vehicle documents ke liye /provider/vehicles/:vehicleId/documents use karo.' });
 
     // Update document URL (Cloudinary secure URL)
     const documentUrl = req.file.path;
+    // side=back → peeche ki taraf (aadhaar par address peeche hota hai)
+    const photoKey = req.body.side === 'back' ? 'backPhoto' : 'photo';
 
     if (documentType === 'photo') {
       // photo plain String field hai (driver ki selfie), aadhaar jaisa nested object nahi
       provider.documents.photo = documentUrl;
     } else {
-      provider.documents[documentType].photo = documentUrl;
+      provider.documents[documentType] = provider.documents[documentType] || {};
+      provider.documents[documentType][photoKey] = documentUrl;
       provider.documents[documentType].verified = false; // Reset verification
     }
 
@@ -1466,6 +1478,39 @@ exports.registerProvider = async (req, res) => {
 
   try {
     const { name, email, phone, city, vehicleType, vehicleNumber, vehicleModel } = req.body;
+    // Rapido jaisi poori jaankari. Purane app versions inme se kuch nahi
+    // bhejte — isliye sab optional hain, aur aaye to hi jaanche jaate hain.
+    const {
+      fatherName, dateOfBirth, gender, referralCode, vehicleColor,
+      aadhaarNumber, panNumber, licenseNumber,
+      accountHolderName, accountNumber, ifscCode, bankName, upiId,
+    } = req.body;
+
+    const clean = (v) => (typeof v === 'string' ? v.trim() : '');
+    const aadhaarDigits = clean(aadhaarNumber).replace(/\s/g, '');
+    const panUpper      = clean(panNumber).toUpperCase();
+    const ifscUpper     = clean(ifscCode).toUpperCase();
+    const acctDigits    = clean(accountNumber).replace(/\s/g, '');
+
+    if (aadhaarDigits && !/^[2-9]\d{11}$/.test(aadhaarDigits)) {
+      return res.status(400).json({ success: false, message: 'Aadhaar number 12 ankon ka hona chahiye' });
+    }
+    if (panUpper && !/^[A-Z]{5}\d{4}[A-Z]$/.test(panUpper)) {
+      return res.status(400).json({ success: false, message: 'PAN number sahi nahi hai (jaise ABCDE1234F)' });
+    }
+    if (gender && !['male', 'female', 'other'].includes(gender)) {
+      return res.status(400).json({ success: false, message: 'Gender sahi nahi hai' });
+    }
+    // Bank details poori ho ya bilkul na ho — aadhi details se payout fail hota hai.
+    if (acctDigits || ifscUpper) {
+      if (!/^\d{9,18}$/.test(acctDigits)) {
+        return res.status(400).json({ success: false, message: 'Account number sahi nahi hai' });
+      }
+      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscUpper)) {
+        return res.status(400).json({ success: false, message: 'IFSC code sahi nahi hai' });
+      }
+    }
+    const dob = dateOfBirth ? new Date(dateOfBirth) : null;
 
     // ── Validation ──────────────────────────────────────────────
     if (!name || !email || !phone) {
@@ -1473,6 +1518,9 @@ exports.registerProvider = async (req, res) => {
     }
     if (!vehicleType || !vehicleNumber) {
       return res.status(400).json({ success: false, message: 'Vehicle type aur number required hai' });
+    }
+    if (RETIRED_VEHICLE_TYPES.includes(String(vehicleType).toLowerCase())) {
+      return res.status(400).json({ success: false, message: 'Is gaadi ki seva abhi band hai. Doosri gaadi chunein.' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -1516,6 +1564,14 @@ exports.registerProvider = async (req, res) => {
     const aadhaarPhoto  = req.files?.aadhaarPhoto?.[0]?.path || '';
     const licensePhoto  = req.files?.licensePhoto?.[0]?.path || '';
     const rcPhoto       = req.files?.rcPhoto?.[0]?.path || '';
+    // Peeche ki taraf + gaadi ki photo — purane app versions inhe nahi bhejte,
+    // isliye yahan zaroori nahi banaya; khaali string hi save hogi.
+    const licenseBackPhoto = req.files?.licenseBackPhoto?.[0]?.path || '';
+    const rcBackPhoto      = req.files?.rcBackPhoto?.[0]?.path || '';
+    const vehiclePhoto     = req.files?.vehiclePhoto?.[0]?.path || '';
+    const aadhaarBackPhoto = req.files?.aadhaarBackPhoto?.[0]?.path || '';
+    const panPhoto         = req.files?.panPhoto?.[0]?.path || '';
+    const insurancePhoto   = req.files?.insurancePhoto?.[0]?.path || '';
 
     if (!user) {
       // ── Step 1: Naya User banao (koi existing customer nahi mila) ──
@@ -1535,12 +1591,35 @@ exports.registerProvider = async (req, res) => {
       const provider = await Provider.create({
         user: user._id,
 
+        personal: {
+          fatherName:  clean(fatherName) || undefined,
+          dateOfBirth: dob && !isNaN(dob.getTime()) ? dob : undefined,
+          gender:      gender || undefined,
+        },
+
         documents: {
           photo: profilePhoto, // driver ki selfie
           aadhaar: {
+            // Sirf aakhri 4 ank — Aadhaar Act poora number store karne nahi deta
+            number: aadhaarDigits ? `XXXXXXXX${aadhaarDigits.slice(-4)}` : undefined,
             photo: aadhaarPhoto,
+            backPhoto: aadhaarBackPhoto,
+          },
+          pan: {
+            number: panUpper || undefined,
+            photo:  panPhoto,
           },
         },
+
+        ...(acctDigits ? {
+          bankDetails: {
+            accountHolderName: clean(accountHolderName) || name.trim(),
+            accountNumber:     acctDigits,
+            ifscCode:          ifscUpper,
+            bankName:          clean(bankName),
+            upiId:             clean(upiId),
+          },
+        } : {}),
 
         isApproved: false,
         isOnline:   false,
@@ -1554,14 +1633,28 @@ exports.registerProvider = async (req, res) => {
         type:       vehicleType,
         number:     normalizedVehicleNumber,
         model:      vehicleModel || '',
+        color:      clean(vehicleColor),
+        photo:      vehiclePhoto,
+        // Tractor/JCB: kaunse auzaar hain, model, HP — booking inhi se milti hai
+        variant:    sanitizeVariant(vehicleType, req.body.vehicleVariant),
+        equipment:  sanitizeEquipment(vehicleType, req.body.equipment),
+        horsepower: vehicleType === 'tractor' ? cleanHp(req.body.horsepower) : undefined,
         documents: {
-          rc:      { photo: rcPhoto },
-          license: { photo: licensePhoto },
+          rc:      { number: normalizedVehicleNumber, photo: rcPhoto, backPhoto: rcBackPhoto },
+          license: { number: clean(licenseNumber).toUpperCase() || undefined, photo: licensePhoto, backPhoto: licenseBackPhoto },
+          ...(insurancePhoto ? { insurance: { photo: insurancePhoto } } : {}),
         },
       });
 
       provider.activeVehicle = vehicle._id;
       await provider.save();
+
+      // Referral code galat ho to registration nahi rokte — driver ka itna
+      // saara kaam ek code ki wajah se bekaar nahi jaana chahiye.
+      let referral = null;
+      if (clean(referralCode)) {
+        referral = await applyReferralCode(user._id, referralCode).catch(() => null);
+      }
 
       console.log(`✅ New provider registered: ${normalizedEmail}`);
 
@@ -1573,6 +1666,8 @@ exports.registerProvider = async (req, res) => {
           vehicleId:  vehicle._id,
           name:       user.name,
           email:      user.email,
+          referralApplied: referral ? !!referral.ok : undefined,
+          referralMessage: referral && !referral.ok ? referral.message : undefined,
         }
       });
     } catch (innerErr) {
@@ -1976,7 +2071,9 @@ exports.updateFCMToken = async (req, res) => {
 
 // ================= VEHICLES (Step 3 — repeatable, ek provider ke multiple ho sakte hain) =================
 
-const VEHICLE_DOC_TYPES = ['rc', 'insurance', 'license', 'permit', 'fitness', 'machineRegistration', 'operatorLicense'];
+// 'puc' — driver app ka Documents screen PUC upload karta tha, par yahan na
+// hone se har baar 400 aata tha.
+const VEHICLE_DOC_TYPES = ['rc', 'insurance', 'license', 'puc', 'permit', 'fitness', 'machineRegistration', 'operatorLicense'];
 
 // Add Vehicle
 exports.addVehicle = async (req, res) => {
@@ -1985,10 +2082,13 @@ exports.addVehicle = async (req, res) => {
     if (!provider)
       return res.status(404).json({ success: false, message: 'Provider not found' });
 
-    const { vehicleType, vehicleNumber, vehicleModel, vehicleColor, registrationYear } = req.body;
+    const { vehicleType, vehicleNumber, vehicleModel, vehicleColor, registrationYear, vehicleVariant, hasAC } = req.body;
 
     if (!vehicleType || !vehicleNumber) {
       return res.status(400).json({ success: false, message: 'Vehicle type aur number required hai' });
+    }
+    if (RETIRED_VEHICLE_TYPES.includes(String(vehicleType).toLowerCase())) {
+      return res.status(400).json({ success: false, message: 'Is gaadi ki seva abhi band hai. Doosri gaadi chunein.' });
     }
 
     const existingVehicle = await Vehicle.findOne({ number: vehicleNumber.trim().toUpperCase() });
@@ -2003,6 +2103,13 @@ exports.addVehicle = async (req, res) => {
       model:  vehicleModel || '',
       color:  vehicleColor || '',
       registrationYear,
+      // Car ki category aur AC — driver app bheje to save, na bheje to khaali
+      // (tab is gaadi ko har category ki request jaati hai).
+      variant: sanitizeVariant(vehicleType, vehicleVariant),
+      ...(typeof hasAC === 'boolean' ? { hasAC } : {}),
+      // Tractor/JCB ke auzaar aur HP
+      equipment:  sanitizeEquipment(vehicleType, req.body.equipment),
+      horsepower: vehicleType === 'tractor' ? cleanHp(req.body.horsepower) : undefined,
       isVerified: false,
       isActive:   true,
     });
@@ -2017,6 +2124,46 @@ exports.addVehicle = async (req, res) => {
     if (err.code === 11000) {
       return res.status(400).json({ success: false, message: 'Yeh vehicle number pehle se registered hai' });
     }
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Gaadi ke auzaar / HP / model badlo.
+//
+// Verified gaadi ki baaki details driver khud nahi badal sakta (changeRequest
+// se admin ke paas jaata hai) — par auzaar kaagaz nahi hain. Kisan ne aaj naya
+// thresher khareeda to kal se use thresher ki booking milni chahiye, admin ke
+// approve karne ka intezaar kiye bina. Isliye yeh alag endpoint hai aur
+// verification nahi chhedta.
+exports.updateVehicleEquipment = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id });
+    if (!provider)
+      return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const vehicle = await Vehicle.findById(req.params.vehicleId);
+    if (!vehicle)
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    if (vehicle.providerId.toString() !== provider._id.toString())
+      return res.status(403).json({ success: false, message: 'Yeh vehicle aapki nahi hai' });
+
+    const equipment = sanitizeEquipment(vehicle.type, req.body.equipment);
+    if (equipment !== undefined) {
+      if (vehicle.type === 'tractor' && equipment.length === 0) {
+        return res.status(400).json({ success: false, message: 'Kam se kam ek auzaar chunein' });
+      }
+      vehicle.equipment = equipment;
+    }
+    if (req.body.vehicleVariant !== undefined && vehicle.type !== 'car') {
+      vehicle.variant = sanitizeVariant(vehicle.type, req.body.vehicleVariant);
+    }
+    if (req.body.horsepower !== undefined && vehicle.type === 'tractor') {
+      vehicle.horsepower = cleanHp(req.body.horsepower);
+    }
+    await vehicle.save();
+
+    res.json({ success: true, message: 'Auzaar update ho gaye', data: vehicle });
+  } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -2175,8 +2322,10 @@ exports.uploadVehicleDocument = async (req, res) => {
     if (vehicle.providerId.toString() !== provider._id.toString())
       return res.status(403).json({ success: false, message: 'Yeh vehicle aapki nahi hai' });
 
+    // side=back → peeche ki taraf (licence/RC dono taraf chhape hote hain)
+    const photoKey = req.body.side === 'back' ? 'backPhoto' : 'photo';
     vehicle.documents[documentType] = vehicle.documents[documentType] || {};
-    vehicle.documents[documentType].photo = req.file.path;
+    vehicle.documents[documentType][photoKey] = req.file.path;
     vehicle.documents[documentType].verified = false;
 
     await vehicle.save();

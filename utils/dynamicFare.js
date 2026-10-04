@@ -2,9 +2,13 @@ const redis                  = require('../config/redis');
 const Setting                = require('../models/Setting');
 const { getFareBreakdown,
         getAllFareEstimates,
+        getVariantsFor,
+        pricingTypeOf,
         getServicesForVehicle,
         calculateHourlyFare,
         calculateWeddingFare } = require('./fareCalculator');
+const { isRegistrableType } = require('./vehicleMatch');
+const RETIRED_VEHICLE_TYPES = require('../config/retiredVehicleTypes');
 
 const SETTINGS_CACHE_KEY = 'app:settings';
 const SETTINGS_CACHE_TTL = 300; // 5 minutes
@@ -87,7 +91,7 @@ const getRateCard = async (vehicleType) => {
     label:       r.label || vehicleType,
     icon:        r.icon  || '',
     image:       r.image || '',
-    pricingType: r.pricingType || 'distance',
+    pricingType: pricingTypeOf(vehicleType, r, settings?.hourlyRates),
 
     minimumFare: r.minimumFare,
     includedKm:  r.includedKm,
@@ -102,7 +106,12 @@ const getRateCard = async (vehicleType) => {
     longPickupPerKm: r.longPickupPerKm,
 
     nightChargePercent: r.nightChargePercent,
-    cancellationFee:    r.cancellationFee,
+    // Gaadi ka apna fee na ho to platform wala — wahi niyam jo cancelRide mein hai.
+    cancellationFee:    Number(r.cancellationFee) > 0
+      ? r.cancellationFee
+      : (settings?.cancellation?.customerFee ?? 20),
+    // Driver ke accept karne ke itne minute baad tak cancel muft hai.
+    cancellationFreeMinutes: settings?.cancellation?.freeWindowMinutes ?? 2,
     extras:             r.extras || {},
     currency: '₹',
   };
@@ -119,20 +128,45 @@ const getDynamicWeddingFare = async (packageId, options = {}) => {
 };
 
 // ─── Bookable vehicle-type catalog (apps ke liye — icon, label, hourly support) ──
-const getDynamicVehicleTypes = async () => {
+const getDynamicVehicleTypes = async ({ forDriver = false } = {}) => {
   const settings     = await getSettings();
   const vehicleRates = settings?.vehicleRates || {};
   const hourlyRates   = settings?.hourlyRates  || {};
 
+  // Customer ko wo gaadi dikhana jiska ek bhi kaam chalu nahi (thresher,
+  // harvester jab tak admin rate na bhare) — tap karte hi khaali screen.
+  // Isliye customer ki list mein sirf wahi jo abhi sach mein book ho sakti hai.
+  const bookable = (id, r) => {
+    const type = pricingTypeOf(id, r, hourlyRates);
+    if (type === 'package') return (settings?.weddingPackages || []).some((p) => p.isActive !== false);
+    if (type === 'distance') return true;
+    const services = getServicesForVehicle(id, hourlyRates);
+    return Array.isArray(services) && services.length > 0;
+  };
+
   return Object.entries(vehicleRates)
     .filter(([, r]) => r.isActive !== false)
+    .filter(([id]) => !RETIRED_VEHICLE_TYPES.includes(id))
+    .filter(([id, r]) => (forDriver ? isRegistrableType(id) : bookable(id, r)))
     .map(([id, r]) => ({
       id,
       label: r.label || id,
       icon:  r.icon || '',
       image: r.image || '',
-      pricingType: r.pricingType || 'distance',
+      pricingType: pricingTypeOf(id, r, hourlyRates),
       supportsHourly: Array.isArray(hourlyRates[id]) && hourlyRates[id].length > 0,
+      // Type ke andar ki chaalu categories (car → Mini / Sedan / SUV). Daam
+      // yahan nahi — wo fare-estimate deta hai. Ye sirf chunne ke liye hai,
+      // jaise pre-booking screen par.
+      variants: getVariantsFor(id, r).map((v) => ({
+        id:     v.id,
+        label:  v.label || v.id,
+        models: v.models || '',
+        seats:  Number(v.seats) || 0,
+        image:  v.image || '',
+        acAvailable:    v.acAvailable    !== false,
+        nonAcAvailable: v.nonAcAvailable !== false,
+      })),
     }));
 };
 

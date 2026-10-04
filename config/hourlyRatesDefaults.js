@@ -13,6 +13,24 @@ module.exports = {
         { id: 'rotavator',   label: 'Rotavator (Jutai)',         rate: 850,  unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: true },
         { id: 'seed_drill',  label: 'Seed Drill (Beej Bona)',    rate: 650,  unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: true },
         { id: 'harvesting',  label: 'Katai (Harvesting)',        rate: 1100, unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: true },
+        // Neeche wale kaam auzaar ke hisaab se hain — booking sirf usi tractor
+        // ko jaati hai jiske paas wo auzaar ho (utils/vehicleMatch.js).
+        // Rate 0 + isActive:false — har ilaake ka daam alag hai, admin bharega
+        // tab customer ko dikhenge (thresher/harvester wala hi niyam).
+        { id: 'cultivator',    label: 'Cultivator (Jutai)',           rate: 0, unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: false },
+        { id: 'land_leveling', label: 'Khet Samtal (Leveler)',        rate: 0, unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: false },
+        // Thresher alag gaadi nahi, kheti ka kaam hai — gaon mein thresher
+        // tractor se hi chalta hai. Booking sirf thresher wale tractor ko
+        // jaati hai (utils/vehicleMatch.js SERVICE_EQUIPMENT).
+        { id: 'threshing',     label: 'Thresher (Daana Nikalna)',     rate: 0, unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: false },
+      ],
+    },
+    {
+      // Katai ke baad ka kaam — bhusa, gaanth.
+      id: 'post_harvest', label: 'Bhusa / Gaanth', emoji: '🌾', pricingType: 'hourly',
+      sub: [
+        { id: 'straw_reaper', label: 'Bhusa Banana (Straw Reaper)', rate: 0, unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: false },
+        { id: 'baling',       label: 'Gaanth Banana (Baler)',       rate: 0, unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: false },
       ],
     },
     {
@@ -46,6 +64,7 @@ module.exports = {
       id: 'custom', label: 'Custom', emoji: '⚙️', pricingType: 'hourly',
       sub: [
         { id: 'custom_request', label: 'Koi Aur Kaam', rate: 750, unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: true },
+        { id: 'post_hole',      label: 'Gaddhe Karna (Post Hole Digger)', rate: 0, unit: 'hour', minimumHours: 1, perAcreRate: 0, isActive: false },
       ],
     },
   ],
@@ -59,6 +78,9 @@ module.exports = {
         { id: 'leveling',     label: 'Samtal Karna (Levelling)', rate: 1150, unit: 'hour', minimumHours: 1, isActive: true },
         { id: 'loading',      label: 'Loading',                 rate: 1250, unit: 'hour', minimumHours: 1, isActive: true },
         { id: 'construction', label: 'Nirmaan (Construction)',  rate: 1300, unit: 'hour', minimumHours: 1, isActive: true },
+        // Attachment wale kaam — sirf breaker/auger wale JCB ko jaate hain
+        { id: 'breaking',     label: 'Todna (Breaker)',          rate: 0, unit: 'hour', minimumHours: 1, isActive: false },
+        { id: 'drilling',     label: 'Gaddha / Drill (Auger)',   rate: 0, unit: 'hour', minimumHours: 1, isActive: false },
       ],
     },
     {

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const Ride   = require('../models/Ride');
 const { getIO } = require('../socket');
+const { creditPlatformCollection } = require('../utils/walletOps');
 
 // ─── RAZORPAY WEBHOOK ──────────────────────────────────────────────────────────
 // Razorpay dashboard se seedha server-to-server call aata hai (payment.captured /
@@ -61,6 +62,15 @@ exports.razorpayWebhook = async (req, res) => {
         if (payment?.id) ride.razorpayPaymentId = payment.id;
         await ride.save();
         console.log(`Razorpay webhook: ride ${ride._id} QR paid`);
+
+        // Ride complete hote waqt maana gaya tha ki cash driver ke haath mein
+        // hai. Ab wo paisa QR se platform ke paas aaya hai — driver ke wallet
+        // mein jodo. Ek hi baar judta hai, webhook dobara aaye to bhi.
+        try {
+          await creditPlatformCollection(ride._id);
+        } catch (creditErr) {
+          console.error('Razorpay webhook: wallet credit failed:', creditErr.message);
+        }
 
         // Driver aur customer dono ko turant push — 3s polling ka wait nahi karna padta
         // (Rapido jaisa instant feel). DB save ho chuka hai — socket push fail bhi ho to

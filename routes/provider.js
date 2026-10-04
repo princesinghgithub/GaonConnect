@@ -27,6 +27,7 @@ const {
   getMyVehicles,
   getVehicleById,
   updateVehicle,
+  updateVehicleEquipment,
   deleteVehicle,
   uploadVehicleDocument,
   requestVehicleChange,
@@ -47,8 +48,14 @@ router.post('/verify-phone-otp', loginLimiter, validate(schemas.verifyPhoneOTP),
 router.post('/register', docUpload.fields([
   { name: 'profilePhoto',  maxCount: 1 },
   { name: 'aadhaarPhoto',  maxCount: 1 },
+  { name: 'aadhaarBackPhoto', maxCount: 1 },
+  { name: 'panPhoto',      maxCount: 1 }, // optional
+  { name: 'insurancePhoto', maxCount: 1 }, // optional
   { name: 'licensePhoto',  maxCount: 1 },
+  { name: 'licenseBackPhoto', maxCount: 1 },
   { name: 'rcPhoto',       maxCount: 1 },
+  { name: 'rcBackPhoto',   maxCount: 1 },
+  { name: 'vehiclePhoto',  maxCount: 1 }, // optional
 ]), registerProvider);
 
 // Available providers near location
@@ -86,6 +93,33 @@ router.get('/incentive/today', protect, async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
+// Driver ke chalu offers — aaj ke har target ke saath kitna ho chuka.
+// Driver app ki "Mere offer" screen isi se banti hai. Pehle yeh path tha hi
+// nahi, to request neeche wale `/:id` mein gir jaati thi ("offers" ko driver
+// ka id samajh kar).
+router.get('/offers', protect, async (req, res) => {
+  try {
+    const Provider = require('../models/Provider');
+    const provider = await Provider.findOne({ user: req.user.id }).select('_id');
+    if (!provider) return res.status(403).json({ success: false, message: 'Driver nahi mila' });
+
+    const { getDriverIncentiveStatus } = require('../utils/incentive');
+    const inc   = await getDriverIncentiveStatus(provider._id);
+    // Incentive band ho to khaali list — jo bonus milega hi nahi use dikhana
+    // driver se jhooth bolna hai.
+    const tiers = inc?.enabled ? (inc.tiers || []) : [];
+
+    const data = tiers.map((tier, i) => ({
+      _id:       `daily-${i}`,
+      rides:     Number(tier.rides) || 0,
+      ridesDone: Number(inc?.ridesToday) || 0,
+      bonus:     Number(tier.bonus) || 0,
+    }));
+    return res.json({ success: true, data });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 router.get('/earnings/today',  protect, getTodayEarnings);
 router.get('/earnings/weekly', protect, getWeeklyEarnings);
 router.get('/earnings/daily',  protect, require('../controllers/providerController').getDailyEarnings);
@@ -105,6 +139,7 @@ router.post('/vehicles',                       protect, addVehicle);
 router.get('/vehicles',                        protect, getMyVehicles);
 router.get('/vehicles/:vehicleId',             protect, getVehicleById);
 router.put('/vehicles/:vehicleId',             protect, updateVehicle);
+router.put('/vehicles/:vehicleId/equipment',   protect, updateVehicleEquipment);
 router.delete('/vehicles/:vehicleId',          protect, deleteVehicle);
 router.post('/vehicles/:vehicleId/documents',  protect, docUpload.single('document'), uploadVehicleDocument);
 router.post('/vehicles/:vehicleId/request-change', protect, requestVehicleChange);
