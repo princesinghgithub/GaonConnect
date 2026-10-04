@@ -176,11 +176,14 @@ const dispatchRideStage = async (rideId, stageIndex) => {
     await ride.save();
 
     const io = getIO();
-    const customerUser = await User.findById(ride.customer).select('name phone');
+    const customerUser = await User.findById(ride.customer).select('name phone rating');
     const ridePayload = {
       rideId:        ride._id,
       customerName:  customerUser?.name  || 'Customer',
       customerPhone: customerUser?.phone || '',
+      // Rapido jaisa — driver ko pata ho customer kaisa hai. count 0 = naya
+      customerRating:      customerUser?.rating?.count ? customerUser.rating.average : 0,
+      customerRatingCount: customerUser?.rating?.count || 0,
       pickup: {
         address:   ride.pickup.address,
         latitude:  pickupLat,
