@@ -187,7 +187,8 @@ const Press = lazy(() => import('./components/pages/Press'));
 const ContactUs = lazy(() => import('./components/pages/ContactUs'));
 
 const PageLoader = () => (
-  <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-950">
+  <div className="min-h-screen flex flex-col items-center justify-center gap-5 bg-white dark:bg-gray-950">
+    <img src="/gaonconnect-icon.png" alt="GaonConnect" className="h-16 w-16 rounded-2xl" />
     <div className="h-10 w-10 rounded-full border-4 border-orange-200 border-t-saffron animate-spin" />
   </div>
 );
@@ -279,6 +280,9 @@ function App() {
             {/* AUTH PAGE - Opens when user selects a service */}
             <Route path="/auth" element={<AuthScreens />} />
             <Route path="/register" element={<Navigate to="/auth" replace />} />
+            {/* Purane links aur bookmarks /login par aate hain; iske bina wo
+                catch-all NotFound page kholte the. */}
+            <Route path="/login" element={<Navigate to="/auth" replace />} />
 
             {/* CUSTOMER */}
             <Route
@@ -355,7 +359,8 @@ function App() {
             <Route path="/auto-rickshaw-booking" element={<ServiceLanding slugKey="auto-rickshaw-booking" />} />
             <Route path="/bike-taxi-booking" element={<ServiceLanding slugKey="bike-taxi-booking" />} />
             <Route path="/car-booking" element={<ServiceLanding slugKey="car-booking" />} />
-            <Route path="/wedding-car-booking" element={<ServiceLanding slugKey="wedding-car-booking" />} />
+            {/* Wedding car service band hai — purane link/Google result car booking par */}
+            <Route path="/wedding-car-booking" element={<Navigate to="/car-booking" replace />} />
             <Route path="/goods-transport-booking" element={<ServiceLanding slugKey="goods-transport-booking" />} />
             <Route path="/press" element={<Press />} />
             <Route path="/contact" element={<ContactUs />} />

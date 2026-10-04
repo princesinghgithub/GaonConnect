@@ -199,7 +199,11 @@ const Header = ({
 
         {/* Logo Section */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="text-2xl sm:text-3xl">🚜</div>
+          <img
+            src="/gaonconnect-icon.png"
+            alt="GaonConnect"
+            className="h-9 w-9 shrink-0 rounded-lg sm:h-10 sm:w-10"
+          />
           <div>
             <h1 className="text-lg sm:text-xl md:text-2xl font-bold leading-tight">
               GaonConnect

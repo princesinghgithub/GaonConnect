@@ -1,15 +1,40 @@
 <!doctype html>
-<html lang="en">
+<html lang="hi">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/gaonconnect-icon.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Third-party origins that the first screen always needs. Opening the
+         TLS connection while the HTML is still parsing takes a few hundred ms
+         off the analytics beacon and off the first API call, which on Render's
+         free tier is the slowest thing on the page. -->
+    <link rel="preconnect" href="https://www.googletagmanager.com" crossorigin />
+    <link rel="preconnect" href="https://gaonconnect-backend.onrender.com" crossorigin />
+    <link rel="dns-prefetch" href="https://www.google-analytics.com" />
+
+    <script>
+      // The hero banner is the homepage's LCP element, but the browser can
+      // only discover it after the React bundle has parsed and mounted.
+      // Preload it from the head instead - and only on "/", so /blog and the
+      // service landing pages don't pay for a 280 KB image they never show.
+      if (location.pathname === '/') {
+        var heroPreload = document.createElement('link');
+        heroPreload.rel = 'preload';
+        heroPreload.as = 'image';
+        heroPreload.href = '/gaonconnect_banner.webp';
+        heroPreload.type = 'image/webp';
+        heroPreload.fetchPriority = 'high';
+        document.head.appendChild(heroPreload);
+      }
+    </script>
+
     <title>GaonConnect - Gaon Connect | Rural Transport App | Tractor Auto Car Booking</title>
 
-    <meta name="description" content="GaonConnect - Madhya Pradesh ka rural transport app. Rewa, Mauganj, Satna, Maihar, Pithampur, Sidhi, Singrauli, Jabalpur, Katni, Shahdol, Sagar, Bhopal, Indore mein auto, bike, car, tractor, JCB, tempo, thresher, harvester booking. Jahan bhi zarurat ho, GaonConnect." />
-    <meta name="keywords" content="gaon connect, gaonconnect, rural transport app, rural ride booking, village transport india, gaon ki gaadi, kisan gadi booking, tractor booking india, JCB booking, auto booking village, bike taxi rural, car booking rural india, tempo booking, thresher booking, harvester booking, jutai ke liye tractor, shaadi ki gadi booking, dehat transport, rural cab booking, gaon mein gaadi, MP rural transport, Rewa transport, Rewa gaadi booking, Mauganj gaadi, Mauganj transport, Satna transport, Satna gaadi, Maihar gaadi booking, Pithampur transport, Pithampur gaadi, Sidhi transport, Singrauli gaadi, Jabalpur rural transport, Katni gaadi booking, Shahdol transport, Sagar MP transport, Bhopal rural gaadi, Indore rural transport, Dhar gaadi, Umaria transport, Panna gaadi, Damoh transport, Narsinghpur gaadi, Chhindwara transport, MP rural cab booking, village cab service, kisan vehicle booking, har jagah gaadi booking, Tractor Rental, JCB Rental, Farm Equipment Rental, Agriculture Machinery, Village Transport, Agriculture Logistics, Tractor on Rent, JCB on Rent, Farm Services, Agricultural Equipment, Tractor Near Me, JCB Near Me" />
+    <meta name="description" content="GaonConnect - Madhya Pradesh ka rural transport app. Rewa, Mauganj, Satna, Maihar, Pithampur, Sidhi, Singrauli, Jabalpur, Katni, Shahdol, Sagar, Bhopal, Indore mein auto, car, tractor, JCB, tempo, pickup, thresher, harvester booking. Jahan bhi zarurat ho, GaonConnect." />
+    <meta name="keywords" content="gaon connect, gaonconnect, rural transport app, rural ride booking, village transport india, gaon ki gaadi, kisan gadi booking, tractor booking india, JCB booking, auto booking village, car booking rural india, tempo booking, pickup booking, pickup gaadi booking, thresher booking, harvester booking, jutai ke liye tractor, shaadi ki gadi booking, dehat transport, rural cab booking, gaon mein gaadi, MP rural transport, Rewa transport, Rewa gaadi booking, Mauganj gaadi, Mauganj transport, Satna transport, Satna gaadi, Maihar gaadi booking, Pithampur transport, Pithampur gaadi, Sidhi transport, Singrauli gaadi, Jabalpur rural transport, Katni gaadi booking, Shahdol transport, Sagar MP transport, Bhopal rural gaadi, Indore rural transport, Dhar gaadi, Umaria transport, Panna gaadi, Damoh transport, Narsinghpur gaadi, Chhindwara transport, MP rural cab booking, village cab service, kisan vehicle booking, har jagah gaadi booking, Tractor Rental, JCB Rental, Farm Equipment Rental, Agriculture Machinery, Village Transport, Agriculture Logistics, Tractor on Rent, JCB on Rent, Farm Services, Agricultural Equipment, Tractor Near Me, JCB Near Me" />
     <meta name="author" content="GaonConnect" />
     <meta name="robots" content="index, follow" />
     <meta name="geo.region" content="IN-MP" />
@@ -26,7 +51,7 @@
       "url": "https://www.gaonconnect.in/",
       "logo": "https://www.gaonconnect.in/gaonconnect-icon.png",
       "image": "https://www.gaonconnect.in/gaonconnect.jpg",
-      "description": "GaonConnect - India ka pehla rural transport aur vehicle booking platform. Auto, bike, car, tractor, JCB, tempo, thresher, harvester book karo - gaon aur dehat ke liye.",
+      "description": "GaonConnect - India ka pehla rural transport aur vehicle booking platform. Auto, car, tractor, JCB, tempo, pickup, thresher, harvester book karo - gaon aur dehat ke liye.",
       "telephone": "+916260132613",
       "email": "gaonconnect.in@gmail.com",
       "priceRange": "₹30 - ₹5000",
@@ -68,10 +93,11 @@
         "name": "Vehicle Booking Services",
         "itemListElement": [
           {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Auto Rickshaw Booking", "description": "Rural areas mein auto rickshaw book karo"}},
-          {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Bike Taxi Booking", "description": "Village mein bike taxi book karo"}},
+          {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Car Booking", "description": "Gaon aur sheher ke safar ke liye car book karo"}},
           {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Tractor Booking", "description": "Jutai aur khet ke kaam ke liye tractor book karo"}},
           {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "JCB Excavator Booking", "description": "Khudai aur construction ke liye JCB book karo"}},
           {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Tempo Booking", "description": "Saman dhone ke liye tempo book karo"}},
+          {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Pickup Booking", "description": "Chhoti khep aur saman dhone ke liye pickup book karo"}},
           {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Thresher Booking", "description": "Fasal katai ke liye thresher book karo"}},
           {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Harvester Booking", "description": "Harvester machine book karo"}},
           {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Wedding Car Booking", "description": "Shaadi ke liye gadi book karo"}}
@@ -110,7 +136,7 @@
           "name": "GaonConnect",
           "operatingSystem": "Android",
           "applicationCategory": "TravelApplication",
-          "description": "Gaon aur dehat ke liye auto, bike, car, tractor, JCB, tempo, thresher aur harvester booking app.",
+          "description": "Gaon aur dehat ke liye auto, car, tractor, JCB, tempo, pickup, thresher aur harvester booking app.",
           "url": "https://www.gaonconnect.in/",
           "installUrl": "https://play.google.com/store/apps/details?id=com.gaonconnect.user",
           "downloadUrl": "https://play.google.com/store/apps/details?id=com.gaonconnect.user",
@@ -136,7 +162,7 @@
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="GaonConnect - Gaon Connect | Rural Transport App India" />
-    <meta property="og:description" content="Madhya Pradesh ka rural transport app. Rewa, Mauganj, Satna, Maihar, Pithampur, Jabalpur, Bhopal, Indore - jahan bhi zarurat ho. Auto, bike, car, tractor, JCB, tempo, thresher, harvester booking." />
+    <meta property="og:description" content="Madhya Pradesh ka rural transport app. Rewa, Mauganj, Satna, Maihar, Pithampur, Jabalpur, Bhopal, Indore - jahan bhi zarurat ho. Auto, car, tractor, JCB, tempo, pickup, thresher, harvester booking." />
     <meta property="og:url" content="https://www.gaonconnect.in/" />
     <meta property="og:image" content="https://www.gaonconnect.in/gaonconnect.jpg" />
     <meta property="og:image:width" content="1200" />
@@ -149,7 +175,7 @@
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="GaonConnect - Gaon Connect | Rural Transport App India" />
-    <meta name="twitter:description" content="India ka pehla rural transport app. Auto, bike, car, tractor, JCB, tempo, thresher, harvester book karo - gaon aur dehat ke liye." />
+    <meta name="twitter:description" content="India ka pehla rural transport app. Auto, car, tractor, JCB, tempo, pickup, thresher, harvester book karo - gaon aur dehat ke liye." />
     <meta name="twitter:image" content="https://www.gaonconnect.in/gaonconnect.jpg" />
 
     <meta name="theme-color" content="#FF6B35" />
@@ -172,13 +198,13 @@
       <div style="font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px;">
         <header>
           <h1>GaonConnect - Gaon Connect | Rural Transport App</h1>
-          <p>India ka pehla rural transport aur vehicle booking platform - gaon aur dehat ke liye. Auto, Bike, Car, Tractor, JCB, Tempo, Thresher, Harvester book karo.</p>
+          <p>India ka pehla rural transport aur vehicle booking platform - gaon aur dehat ke liye. Auto, Car, Tractor, JCB, Tempo, Pickup, Thresher, Harvester book karo.</p>
           <p><a href="https://www.gaonconnect.in/">gaonconnect.in</a> | Support: +91 6260132613 (WhatsApp)</p>
         </header>
 
         <section>
           <h2>GaonConnect kya hai?</h2>
-          <p>GaonConnect ek rural transport booking app hai jo India ke gaon aur dehat ke logon ke liye banaya gaya hai. Isme aap apne mobile se auto, bike taxi, car, tractor, JCB, tempo, thresher aur harvester book kar sakte ho - ghar baithke.</p>
+          <p>GaonConnect ek rural transport booking app hai jo India ke gaon aur dehat ke logon ke liye banaya gaya hai. Isme aap apne mobile se auto, car, tractor, JCB, tempo, pickup, thresher aur harvester book kar sakte ho - ghar baithke.</p>
           <p>Ye app abhi Madhya Pradesh ke gaon aur dehat mein available hai — jahan bhi zarurat ho, GaonConnect hai.</p>
         </section>
 
@@ -186,11 +212,11 @@
           <h2>Gaon Connect Services - Kya-Kya Book Kar Sakte Ho</h2>
           <ul>
             <li><strong>Auto Rickshaw Booking</strong> - Gaon mein auto book karo, fast aur sasta</li>
-            <li><strong>Bike Taxi Booking</strong> - Village mein bike taxi, ek dum sasta safar</li>
             <li><strong>Car Booking Rural</strong> - Gaon se sheher, comfort mein safar karo</li>
             <li><strong>Tractor Booking</strong> - Jutai ke liye tractor book karo, khet ke kaam ke liye</li>
             <li><strong>JCB Excavator Booking</strong> - Khudai aur construction ke liye JCB book karo</li>
             <li><strong>Tempo Booking</strong> - Saman dhone ke liye tempo book karo</li>
+            <li><strong>Pickup Booking</strong> - Chhoti khep aur saman ke liye pickup book karo</li>
             <li><strong>Thresher Booking</strong> - Fasal katai ke liye thresher machine book karo</li>
             <li><strong>Harvester Booking</strong> - Combine harvester book karo, fasal katai ke liye</li>
             <li><strong>Shaadi ki Gaadi Booking</strong> - Vivah aur functions ke liye decorated gaadi book karo</li>
@@ -217,7 +243,7 @@
         <section>
           <h2>Madhya Pradesh (MP) Mein GaonConnect Service Areas</h2>
           <ul>
-            <li>Rewa, Madhya Pradesh - Auto, Bike, Car, Tractor booking</li>
+            <li>Rewa, Madhya Pradesh - Auto, Car, Tractor booking</li>
             <li>Mauganj, Madhya Pradesh - Rural transport service</li>
             <li>Satna, Madhya Pradesh - Gaadi booking</li>
             <li>Maihar, Madhya Pradesh - Mata darshan ke liye bhi gaadi book karo</li>
@@ -243,7 +269,7 @@
 
         <section>
           <h2>Driver Registration - GaonConnect Driver Kaise Bane</h2>
-          <p>Agar aap apna vehicle chalate hain aur extra income kamana chahte hain to GaonConnect driver ban sakte hain. Auto, bike, car, tractor, JCB, tempo kisi bhi gaadi ke maalik driver ban sakte hain. Registration free hai.</p>
+          <p>Agar aap apna vehicle chalate hain aur extra income kamana chahte hain to GaonConnect driver ban sakte hain. Auto, car, tractor, JCB, tempo, pickup kisi bhi gaadi ke maalik driver ban sakte hain. Registration free hai.</p>
           <a href="https://www.gaonconnect.in/">Register on GaonConnect</a>
         </section>
 
@@ -252,8 +278,8 @@
           <p>WhatsApp Support: +91 62601 32613</p>
           <p>Email: <a href="mailto:gaonconnect.in@gmail.com">gaonconnect.in@gmail.com</a></p>
           <p>Website: <a href="https://www.gaonconnect.in/">gaonconnect.in</a></p>
-          <p>Instagram: <a href="https://www.instagram.com/gaonconnect/">@gaonconnect</a> — GaonConnect | Gaon Connect | Rural Transport App — Auto, Bike, Car, Tractor, JCB booking | Rewa, Mauganj, Satna, Maihar, MP</p>
-          <p>Facebook: <a href="https://facebook.com/profile.php?id=61591245161485">GaonConnect on Facebook</a> — GaonConnect (Gaon Connect) Madhya Pradesh ka rural transport app. Auto, Bike, Car, Tractor, JCB, Tempo, Thresher booking. Rewa, Mauganj, Satna, Maihar, Sidhi, Singrauli aur poore MP mein.</p>
+          <p>Instagram: <a href="https://www.instagram.com/gaonconnect/">@gaonconnect</a> — GaonConnect | Gaon Connect | Rural Transport App — Auto, Car, Tractor, JCB booking | Rewa, Mauganj, Satna, Maihar, MP</p>
+          <p>Facebook: <a href="https://facebook.com/profile.php?id=61591245161485">GaonConnect on Facebook</a> — GaonConnect (Gaon Connect) Madhya Pradesh ka rural transport app. Auto, Car, Tractor, JCB, Tempo, Pickup, Thresher booking. Rewa, Mauganj, Satna, Maihar, Sidhi, Singrauli aur poore MP mein.</p>
           <p>LinkedIn: <a href="https://www.linkedin.com/company/133394201/">GaonConnect on LinkedIn</a></p>
           <p>YouTube: <a href="https://www.youtube.com/@Gaonconnenct">GaonConnect on YouTube</a></p>
         </section>

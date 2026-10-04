@@ -1,9 +1,15 @@
 User-agent: *
 Allow: /
+
+# Signed-in app screens and auth forms. They are already noindex, but they are
+# infinite/duplicate from a crawler's point of view - keeping them out of the
+# crawl entirely leaves the budget for the marketing and service pages.
 Disallow: /customer
 Disallow: /driver
 Disallow: /admin
 Disallow: /book-ride
 Disallow: /ride/
+Disallow: /auth
+Disallow: /register
 
 Sitemap: https://www.gaonconnect.in/sitemap.xml

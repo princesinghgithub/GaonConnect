@@ -28,11 +28,27 @@ const buildServicePageMeta = (page) => ({
   keywords: page.keywords,
   image: `${SITE_URL}${page.image}`,
   breadcrumbItems: [{ name: page.heroTitle, path: `/${page.slug}` }],
+  // Jo service filhaal band hai uska page live rehta hai (purane links aur
+  // bookmarks 404 na ho jaayein) par search se hat jaata hai — warna Google
+  // aisi cheez bechta rehta jo hum abhi de nahi rahe. Sitemap se bhi nikala
+  // gaya hai. Wapas chaalu karne ke liye servicePages.js se paused hata dena.
+  noindex: Boolean(page.paused),
 });
 
 const NOT_FOUND_META = {
   title: 'Page Not Found - GaonConnect',
   description: 'Ye page maujood nahi hai ya move ho gaya hai.',
+  noindex: true,
+};
+
+// Signed-in app screens. They are noindex like the 404 fallback, but they are
+// real pages - without an entry here they fell through to NOT_FOUND_META and a
+// logged-in customer's browser tab read "Page Not Found" while they were
+// booking a ride.
+const RIDE_TRACKING_PATH = /^\/ride\/[^/]+$/;
+const RIDE_TRACKING_META = {
+  title: 'Ride Tracking - GaonConnect',
+  description: 'Apni ride live track karein.',
   noindex: true,
 };
 
@@ -43,9 +59,9 @@ const PAGE_META = {
   '/': {
     title: 'GaonConnect - Gaon Connect | Rural Transport App | Tractor Auto Car Booking',
     description:
-      'GaonConnect - Madhya Pradesh ka rural transport app. Rewa, Mauganj, Satna, Maihar, Pithampur, Sidhi, Singrauli, Jabalpur, Katni, Shahdol, Sagar, Bhopal, Indore mein auto, bike, car, tractor, JCB, tempo, thresher, harvester booking. Jahan bhi zarurat ho, GaonConnect.',
+      'GaonConnect - Madhya Pradesh ka rural transport app. Rewa, Mauganj, Satna, Maihar, Pithampur, Sidhi, Singrauli, Jabalpur, Katni, Shahdol, Sagar, Bhopal, Indore mein auto, car, tractor, JCB, tempo, pickup, thresher, harvester booking. Jahan bhi zarurat ho, GaonConnect.',
     keywords:
-      'gaon connect, gaonconnect, rural transport app, rural ride booking, village transport india, gaon ki gaadi, kisan gadi booking, tractor booking india, JCB booking, auto booking village, bike taxi rural, car booking rural india, tempo booking, thresher booking, harvester booking, jutai ke liye tractor, shaadi ki gadi booking, dehat transport, rural cab booking, gaon mein gaadi, MP rural transport, Rewa transport, Satna transport, Jabalpur rural transport, Bhopal rural gaadi, Indore rural transport, village cab service, kisan vehicle booking, har jagah gaadi booking, Tractor Rental, JCB Rental, Farm Equipment Rental, Agriculture Machinery, Village Transport, Agriculture Logistics, Tractor on Rent, JCB on Rent, Farm Services, Agricultural Equipment, Tractor Near Me, JCB Near Me',
+      'gaon connect, gaonconnect, rural transport app, rural ride booking, village transport india, gaon ki gaadi, kisan gadi booking, tractor booking india, JCB booking, auto booking village, car booking rural india, tempo booking, pickup booking, thresher booking, harvester booking, jutai ke liye tractor, shaadi ki gadi booking, dehat transport, rural cab booking, gaon mein gaadi, MP rural transport, Rewa transport, Satna transport, Jabalpur rural transport, Bhopal rural gaadi, Indore rural transport, village cab service, kisan vehicle booking, har jagah gaadi booking, Tractor Rental, JCB Rental, Farm Equipment Rental, Agriculture Machinery, Village Transport, Agriculture Logistics, Tractor on Rent, JCB on Rent, Farm Services, Agricultural Equipment, Tractor Near Me, JCB Near Me',
   },
   '/auth': {
     title: 'Login / Register - GaonConnect',
@@ -101,6 +117,21 @@ const PAGE_META = {
     keywords: 'contact gaonconnect, gaonconnect support, gaonconnect helpline number, gaon connect customer care, gaonconnect whatsapp support',
     breadcrumb: 'Contact Us',
   },
+  '/customer': {
+    title: 'Book a Ride - GaonConnect',
+    description: 'Apni gaadi book karein - pickup aur drop chunkar.',
+    noindex: true,
+  },
+  '/book-ride': {
+    title: 'Book a Ride - GaonConnect',
+    description: 'Apni gaadi book karein - pickup aur drop chunkar.',
+    noindex: true,
+  },
+  '/driver': {
+    title: 'Driver Dashboard - GaonConnect',
+    description: 'GaonConnect driver partner dashboard.',
+    noindex: true,
+  },
 };
 
 const BREADCRUMB_SCRIPT_ID = 'breadcrumb-jsonld';
@@ -128,6 +159,8 @@ const SeoCanonical = () => {
       meta = post ? buildBlogPostMeta(post) : NOT_FOUND_META;
     } else if (servicePage) {
       meta = buildServicePageMeta(servicePage);
+    } else if (RIDE_TRACKING_PATH.test(pathname)) {
+      meta = RIDE_TRACKING_META;
     } else {
       meta = PAGE_META[pathname] || NOT_FOUND_META;
     }

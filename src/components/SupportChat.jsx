@@ -98,9 +98,16 @@ export default function SupportChat() {
             className="flex items-center justify-between px-4 py-3 text-white"
             style={{ backgroundColor: "#F5A623" }}
           >
-            <div>
-              <div className="text-sm font-bold">GaonConnect सहायक</div>
-              <div className="text-[11px] opacity-90">आमतौर पर तुरंत जवाब</div>
+            <div className="flex items-center gap-2">
+              <img
+                src="/gaonconnect-icon.png"
+                alt="GaonConnect"
+                className="h-8 w-8 shrink-0 rounded-full bg-white/90 p-0.5"
+              />
+              <div>
+                <div className="text-sm font-bold">GaonConnect सहायक</div>
+                <div className="text-[11px] opacity-90">आमतौर पर तुरंत जवाब</div>
+              </div>
             </div>
             <button onClick={() => setOpen(false)} aria-label="Chat band karein" className="p-1">
               <X size={20} />

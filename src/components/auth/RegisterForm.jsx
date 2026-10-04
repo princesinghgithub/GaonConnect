@@ -385,7 +385,11 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
           )}
 
           <div className="text-center mb-8">
-            <div className="text-6xl mb-4">🚜</div>
+            <img
+              src="/gaonconnect-icon.png"
+              alt="GaonConnect"
+              className="mx-auto mb-4 h-20 w-20 rounded-2xl"
+            />
             <h2 className="text-2xl font-bold text-gray-800">Verify OTP</h2>
             <p className="text-sm text-gray-500 mt-1">OTP sent to +91 {formData.phone}</p>
           </div>
@@ -431,7 +435,11 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
 
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="text-6xl mb-4">🚜</div>
+          <img
+            src="/gaonconnect-icon.png"
+            alt="GaonConnect"
+            className="mx-auto mb-4 h-20 w-20 rounded-2xl"
+          />
           <h1 className="text-3xl font-bold text-gray-800">Create Account</h1>
           <p className="text-gray-600 mt-2">Join GaonConnect today!</p>
         </div>

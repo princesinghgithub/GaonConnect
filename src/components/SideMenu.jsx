@@ -47,6 +47,14 @@ const SideMenu = ({ showMenu, setShowMenu }) => {
         className="absolute right-0 top-16 bg-white rounded-l-2xl shadow-2xl p-6 w-72"
         onClick={e => e.stopPropagation()}
       >
+        <div className="flex items-center gap-3 pb-4 mb-2 border-b border-gray-100">
+          <img src="/gaonconnect-icon.png" alt="GaonConnect" className="h-10 w-10 shrink-0 rounded-lg" />
+          <div>
+            <p className="font-bold text-gray-800 leading-tight">GaonConnect</p>
+            <p className="text-[11px] text-gray-500">आपकी गाड़ी आपकी सेवा</p>
+          </div>
+        </div>
+
         <div className="space-y-4">
           {menuItems.map((item, idx) => (
             <button

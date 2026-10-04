@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Navbar from '../../GaonConnect/Navbar';
 import Footer from '../../GaonConnect/Footer';
 import NotFound from './NotFound';
-import { getServicePageBySlug } from '../../constants/servicePages';
+import servicePages, { getServicePageBySlug } from '../../constants/servicePages';
 import { trackEvent } from '../../utils/analytics';
 import { useAppDownload } from '../../context/AppDownloadContext';
 
@@ -18,12 +18,22 @@ const ServiceLanding = ({ slugKey }) => {
 
   if (!page) return <NotFound />;
 
+  const otherServices = servicePages.filter((p) => p.slug !== page.slug).slice(0, 6);
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
       <Navbar onDownloadApp={handleDownloadApp} />
 
       <section className="relative bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-700 dark:to-orange-800 text-white overflow-hidden">
         <div className="relative z-10 max-w-4xl mx-auto px-6 py-16 md:py-20 text-center">
+          {/* Google wants the BreadcrumbList schema on this route to have a
+              visible counterpart; without it these pages also had no link
+              back up to the homepage at all. */}
+          <nav className="text-sm opacity-90 mb-6 text-left" aria-label="Breadcrumb">
+            <Link to="/" className="hover:underline">Home</Link>
+            <span className="mx-2">/</span>
+            <span className="opacity-80">{page.heroTitle}</span>
+          </nav>
           <div className="text-6xl mb-4">{page.emoji}</div>
           <h1 className="text-3xl md:text-5xl font-bold mb-4">{page.heroTitle}</h1>
           <p className="text-base md:text-lg opacity-95 max-w-2xl mx-auto leading-relaxed mb-8">
@@ -107,20 +117,60 @@ const ServiceLanding = ({ slugKey }) => {
         </div>
       </section>
 
-      <section className="py-14 md:py-16 px-6 bg-orange-50 dark:bg-gray-900 text-center">
+      {/* Each service page used to link out only to WhatsApp and (sometimes)
+          one blog post, so the ten of them sat as near-orphans with no path
+          between each other. Cross-linking them spreads internal link equity
+          and gives a visitor on the wrong page somewhere to go. */}
+      {otherServices.length > 0 && (
+        <section className="py-14 md:py-16 px-6 bg-orange-50 dark:bg-gray-900">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-2xl md:text-3xl font-bold text-center mb-8 text-ink dark:text-white">
+              GaonConnect Ki Baaki Services
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {otherServices.map((other) => (
+                <Link
+                  key={other.slug}
+                  to={`/${other.slug}`}
+                  className="flex items-center gap-3 bg-white dark:bg-gray-800 px-4 py-4 rounded-xl shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <span className="text-2xl shrink-0" aria-hidden="true">{other.emoji}</span>
+                  <span className="text-sm font-semibold text-ink dark:text-white leading-snug">
+                    {other.heroTitle}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="py-14 md:py-16 px-6 bg-white dark:bg-gray-950 text-center">
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-xl md:text-2xl font-bold text-ink dark:text-white mb-4">
+          <h2 className="text-xl md:text-2xl font-bold text-ink dark:text-white mb-6">
             Abhi {page.heroTitle} Book Karein
           </h2>
-          <a
-            href="https://wa.me/916260132613"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => trackEvent('whatsapp_click', { source: 'service_page_footer_cta', service: page.slug })}
-            className="inline-flex bg-saffron hover:bg-cta text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
-          >
-            💬 WhatsApp Par Booking Karein
-          </a>
+          {/* Booking on the site itself is the primary action now - the
+              WhatsApp link sent every visitor off-site before they ever
+              reached the booking flow. */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              to="/"
+              onClick={() => trackEvent('service_page_book_click', { service: page.slug })}
+              className="inline-flex bg-saffron hover:bg-cta text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+            >
+              🚗 Online Booking Karein
+            </Link>
+            <a
+              href="https://wa.me/916260132613"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => trackEvent('whatsapp_click', { source: 'service_page_footer_cta', service: page.slug })}
+              className="inline-flex border-2 border-saffron text-saffron dark:text-orange-400 dark:border-orange-400 hover:bg-orange-50 dark:hover:bg-gray-900 px-8 py-4 rounded-full font-semibold text-lg transition-all duration-300"
+            >
+              💬 WhatsApp Par Poochein
+            </a>
+          </div>
         </div>
       </section>
 

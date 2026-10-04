@@ -157,6 +157,9 @@ const servicePages = [
   },
   {
     slug: 'bike-taxi-booking',
+    // Bike taxi filhaal band hai. Page live hai taaki purane search results aur
+    // links tootein nahi, par noindex hai aur sitemap mein nahi hai.
+    paused: true,
     emoji: '🏍️',
     title: 'Bike Taxi Booking for Village & Rural Travel | GaonConnect',
     metaDescription: 'Bike taxi booking gaon aur dehat ke liye — sabse sasta aur tez safar ka tarika, GaonConnect app se turant book karein.',

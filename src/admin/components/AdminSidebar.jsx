@@ -30,9 +30,12 @@ const menu = [
 const AdminSidebar = ({ active, setActive }) => {
   return (
     <div className="w-64 bg-gray-900 text-white flex flex-col min-h-screen">
-      <div className="p-5 border-b border-gray-700">
-        <h2 className="text-xl font-bold text-orange-400">GaonConnect</h2>
-        <p className="text-xs text-gray-400 mt-1">Admin Panel</p>
+      <div className="p-5 border-b border-gray-700 flex items-center gap-3">
+        <img src="/gaonconnect-icon.png" alt="GaonConnect" className="h-10 w-10 shrink-0 rounded-lg" />
+        <div>
+          <h2 className="text-xl font-bold text-orange-400">GaonConnect</h2>
+          <p className="text-xs text-gray-400 mt-1">Admin Panel</p>
+        </div>
       </div>
 
       <nav className="flex-1 py-4 space-y-1 px-3">

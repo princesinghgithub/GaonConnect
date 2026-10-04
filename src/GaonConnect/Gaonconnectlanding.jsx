@@ -7,6 +7,7 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 import LocationSearchInput from '../tabs/LocationSearchInput';
 import { locationAPI, rideAPI } from '../services/api';
+import { LANDING_SERVICES, SUB_SERVICE_IMAGES, WORK_VEHICLE_TYPES } from '../constants/serviceImages';
 import { HOURS_OPTIONS } from '../constants/tractorJcbServices';
 import { trackEvent } from '../utils/analytics';
 import { openDriverApp } from '../utils/appDownload';
@@ -20,17 +21,13 @@ const FARE_FORMULAS = {
   car: { base: 80, perKm: 15 },
 };
 
-// Matches services.items order (en.json/hi.json): Auto, Bike, Car, Tractor,
-// Wedding Car, Goods Transport, Tempo, JCB, Thresher, Harvester. Indexed
-// instead of name-matched so it works regardless of active language.
-const FARE_TYPE_BY_INDEX = ['auto', 'bike', 'car', null, null, null, null, null, null, null];
+// Har service ki fare/vehicle/base-price ki jaankari LANDING_SERVICES se aati
+// hai, id se — pehle ye teen alag index-based arrays the aur list badalte hi
+// sab khisak jaate the. i18n item ka "id" hi is map ki chaabi hai.
+const metaOf = (service) => LANDING_SERVICES[service?.id] ?? null;
 
-// Maps the same services list to the vehicle types BookRide.jsx actually
-// supports post-login, so the hero selection can be carried forward.
-const VEHICLE_TYPE_BY_INDEX = ['auto', 'bike', 'car', 'tractor', null, null, null, 'jcb', null, null];
-
-const estimateFare = (serviceIndex, distanceKm) => {
-  const type = FARE_TYPE_BY_INDEX[serviceIndex];
+const estimateFare = (service, distanceKm) => {
+  const type = metaOf(service)?.fareType;
   if (!type || distanceKm == null) return null;
   const { base, perKm } = FARE_FORMULAS[type];
   return Math.round(base + perKm * distanceKm);
@@ -64,8 +61,19 @@ const GaonConnectLanding = () => {
   const [heroSub, setHeroSub] = useState(null);
   const [heroHours, setHeroHours] = useState(2);
   const [heroServices, setHeroServices] = useState([]);
-  const heroVehicleType = heroServiceIndex === '' ? null : VEHICLE_TYPE_BY_INDEX[Number(heroServiceIndex)];
-  const heroIsTractorJcb = heroVehicleType === 'tractor' || heroVehicleType === 'jcb';
+  // Neeche (render ke paas) declare hota tha — upar heroService mein use hote
+  // hi "services before initialization" se page gir jaata. Isliye yahan.
+  const services = t('services.items', { returnObjects: true });
+  const heroService = heroServiceIndex === '' ? null : services[Number(heroServiceIndex)];
+  const heroVehicleType = metaOf(heroService)?.vehicleType ?? null;
+  const heroIsTractorJcb = WORK_VEHICLE_TYPES.includes(heroVehicleType);
+  // Kaam ka unit — ghanta, acre (harvester), km (saamaan dhona)
+  const heroUnit = heroSub
+    ? (heroSub.unit && heroSub.unit !== 'either' ? heroSub.unit
+      : heroCategory?.pricingType === 'per_km' ? 'km'
+      : heroCategory?.pricingType === 'per_acre' ? 'acre' : 'hour')
+    : 'hour';
+  const [heroQty, setHeroQty] = useState(1);
   const contactFormRef = useRef(null);
   const [contactStatus, setContactStatus] = useState('idle'); // idle | sending | success | error
 
@@ -117,9 +125,14 @@ const GaonConnectLanding = () => {
         if (cancelled) return;
         const svcs = res.data?.data || [];
         setHeroServices(svcs);
-        setHeroCategory(svcs[0] || null);
-        setHeroSub(svcs[0]?.sub?.[0] || null);
+        // Thresher card: tractor ka Farming › Thresher pehle se chuna
+        const preset = metaOf(heroService)?.preset;
+        const cat = (preset && svcs.find((c) => c.id === preset.categoryId)) || svcs[0] || null;
+        const sub = (preset && cat?.sub?.find((s) => s.id === preset.serviceId)) || cat?.sub?.[0] || null;
+        setHeroCategory(cat);
+        setHeroSub(sub);
         setHeroHours(2);
+        setHeroQty(1);
       })
       .catch(() => {
         if (!cancelled) {
@@ -134,21 +147,30 @@ const GaonConnectLanding = () => {
   // Service selection handler - already logged-in users go straight to
   // booking (Rapido-style, no redundant login screen); only signed-out
   // users get sent to /auth, and land on booking right after.
-  const handleServiceSelect = (serviceName, basePrice, serviceIndex) => {
-    const type = VEHICLE_TYPE_BY_INDEX[serviceIndex] ?? null;
-    const isTJ = type === 'tractor' || type === 'jcb';
-    trackEvent('service_selected', { service: serviceName, vehicle_type: type });
+  const handleServiceSelect = (service) => {
+    const meta = metaOf(service);
+    const type = meta?.vehicleType ?? null;
+    const isTJ = WORK_VEHICLE_TYPES.includes(type);
+    // Hero mein chuna kaam sirf usi service ka hai — neeche ke grid se koi
+    // doosri service chuni to hero ka kaam (jaise tractor ki jutai) JCB par
+    // nahi chipkana. Thresher card apna preset kaam le jaata hai.
+    const fromHero = !!heroService && service?.id === heroService.id;
+    trackEvent('service_selected', { service: service.name, vehicle_type: type });
     sessionStorage.setItem('selectedService', JSON.stringify({
-      service: serviceName,
-      price: basePrice,
+      service: service.name,
+      price: meta?.basePrice ?? null,
       vehicleType: type,
       pickup: heroPickup,
       drop: heroDrop,
-      ...(isTJ ? {
+      ...(isTJ ? (fromHero ? {
         serviceCategory: heroCategory?.id,
         serviceType: heroSub?.id,
-        estimatedHours: heroCategory?.pricingType === 'hourly' ? heroHours : 0,
-      } : {}),
+        estimatedHours: heroUnit === 'hour' ? heroHours : 0,
+        serviceQuantity: heroUnit === 'acre' || heroUnit === 'quintal' ? heroQty : 0,
+      } : meta?.preset ? {
+        serviceCategory: meta.preset.categoryId,
+        serviceType: meta.preset.serviceId,
+      } : {}) : {}),
     }));
     navigate(localStorage.getItem('token') ? '/customer' : '/auth');
   };
@@ -205,9 +227,6 @@ const GaonConnectLanding = () => {
       });
   };
 
-  // Base prices kept separate since they drive booking logic, not translation
-  const basePrices = [50, 30, 100, 400, 2000, 200, 150, 1000, 800, 1500];
-  const services = t('services.items', { returnObjects: true });
   const features = t('features.items', { returnObjects: true });
   const steps = t('howItWorks.steps', { returnObjects: true });
   const benefits = t('benefits.items', { returnObjects: true });
@@ -292,7 +311,7 @@ const GaonConnectLanding = () => {
                     </div>
                   ) : (
                     services.map((service, index) => {
-                      const fare = estimateFare(index, heroDistanceKm);
+                      const fare = estimateFare(service, heroDistanceKm);
                       const selected = heroServiceIndex === String(index);
                       return (
                         <button
@@ -306,7 +325,17 @@ const GaonConnectLanding = () => {
                           }`}
                         >
                           <span className="flex items-center gap-2 text-sm font-medium text-ink dark:text-white">
-                            <span className="text-xl">{service.icon}</span> {service.name}
+                            {LANDING_SERVICES[service.id]?.image ? (
+                              <img
+                                src={LANDING_SERVICES[service.id].image}
+                                alt=""
+                                loading="lazy"
+                                className="h-9 w-12 shrink-0 object-contain"
+                              />
+                            ) : (
+                              <span className="w-12 shrink-0 text-center text-xl">{service.icon}</span>
+                            )}
+                            {service.name}
                           </span>
                           <span className="text-sm font-semibold text-india-green dark:text-green-400 shrink-0">
                             {fare ? `₹${fare}` : t('hero.quoteOnRequest')}
@@ -363,9 +392,22 @@ const GaonConnectLanding = () => {
                                 : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
                             }`}
                           >
-                            <span className="block font-medium text-ink dark:text-white">{sub.label}</span>
-                            <span className="text-india-green dark:text-green-400 font-semibold">
-                              ₹{sub.rate}/{heroCategory.pricingType === 'hourly' ? 'hr' : 'km'}
+                            <span className="flex items-center gap-2">
+                              {SUB_SERVICE_IMAGES[sub.id] && (
+                                <img
+                                  src={SUB_SERVICE_IMAGES[sub.id]}
+                                  alt=""
+                                  loading="lazy"
+                                  className="h-10 w-12 shrink-0 object-contain"
+                                />
+                              )}
+                              <span className="min-w-0">
+                                <span className="block font-medium text-ink dark:text-white">{sub.label}</span>
+                                <span className="text-india-green dark:text-green-400 font-semibold">
+                                  ₹{sub.rate}/{sub.unit === 'acre' || heroCategory.pricingType === 'per_acre' ? 'acre'
+                                    : heroCategory.pricingType === 'per_km' ? 'km' : 'hr'}
+                                </span>
+                              </span>
                             </span>
                           </button>
                         ))}
@@ -373,7 +415,31 @@ const GaonConnectLanding = () => {
                     </div>
                   )}
 
-                  {heroCategory?.pricingType === 'hourly' && (
+                  {(heroUnit === 'acre' || heroUnit === 'quintal') && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                        Kitne {heroUnit === 'acre' ? 'Acre' : 'Quintal'}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {[1, 2, 3, 4, 5, 8, 10].map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setHeroQty(n)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                              heroQty === n
+                                ? 'bg-saffron border-saffron text-white'
+                                : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-gray-300'
+                            }`}
+                          >
+                            {n} {heroUnit === 'acre' ? 'Acre' : 'Quintal'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {heroCategory && heroUnit === 'hour' && (
                     <div>
                       <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                         Kitne Ghante
@@ -405,10 +471,7 @@ const GaonConnectLanding = () => {
                   !heroPickup || !heroDrop || heroServiceIndex === '' ||
                   (heroIsTractorJcb && (!heroCategory || !heroSub))
                 }
-                onClick={() => {
-                  const fare = estimateFare(Number(heroServiceIndex), heroDistanceKm) ?? basePrices[heroServiceIndex];
-                  handleServiceSelect(services[heroServiceIndex].name, fare, Number(heroServiceIndex));
-                }}
+                onClick={() => handleServiceSelect(heroService)}
                 className="w-full bg-cta hover:bg-saffron disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-xl font-bold text-lg shadow-md hover:shadow-lg transition-all duration-300"
               >
                 {t('hero.bookRideCta')}
@@ -523,21 +586,41 @@ const GaonConnectLanding = () => {
             {t('services.subheading')}
           </p>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 text-left">
+          {/* Card chaudai mein padha jaata hai: naam-daam baayen, gaadi daayen.
+              Gaadi ab background-hata cutout hai (scripts/normalize_service_images.py),
+              isliye wo card par baithti hai — pehle har photo apna gehra chaukor
+              le kar aati thi jo safed page par chubhta tha. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-left">
             {services.map((service, index) => (
-              <div
+              <button
                 key={index}
-                onClick={() => handleServiceSelect(service.name, basePrices[index], index)}
-                className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md hover:shadow-2xl transform hover:scale-105 transition-all duration-300 cursor-pointer group"
+                type="button"
+                onClick={() => handleServiceSelect(service)}
+                className="group flex items-center gap-4 rounded-2xl bg-white p-5 text-left ring-1 ring-gray-100 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-saffron dark:bg-gray-800 dark:ring-gray-700"
               >
-                <div className="text-5xl mb-4 transform group-hover:scale-110 transition-transform duration-300">
-                  {service.icon}
-                </div>
-                <h4 className="text-lg font-semibold mb-2 text-ink dark:text-white">{service.name}</h4>
-                <div className="text-sm text-saffron dark:text-orange-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                  {t('services.clickToSelect')}
-                </div>
-              </div>
+                {/* Sirf naam. Daam yahan jaan-boojh kar nahi dikhate — har
+                    gaadi ka asli kiraya doori, ghante aur kaam par badalta hai,
+                    aur backend se aata hai. Card par ek "shuru se" number
+                    dikhana customer se aisa waada karta hai jo booking ke waqt
+                    poora na ho. Anumaan upar hero widget mein milta hai, jahan
+                    pickup aur drop dono pata hote hain. */}
+                <span className="min-w-0 flex-1 text-lg font-bold leading-snug text-ink dark:text-white">
+                  {service.name}
+                </span>
+
+                {LANDING_SERVICES[service.id]?.image ? (
+                  <img
+                    src={LANDING_SERVICES[service.id].image}
+                    alt={service.name}
+                    loading="lazy"
+                    className="h-20 w-24 shrink-0 object-contain transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <span className="flex h-20 w-24 shrink-0 items-center justify-center text-4xl">
+                    {service.icon}
+                  </span>
+                )}
+              </button>
             ))}
           </div>
         </div>

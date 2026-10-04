@@ -253,7 +253,11 @@ const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
 
         <div className="text-center mb-8">
-          <div className="text-6xl mb-4">🚜</div>
+          <img
+            src="/gaonconnect-icon.png"
+            alt="GaonConnect"
+            className="mx-auto mb-4 h-20 w-20 rounded-2xl"
+          />
           <h1 className="text-3xl font-bold">GaonConnect</h1>
           <p className="text-gray-600">आपकी गाड़ी आपकी सेवा</p>
         </div>

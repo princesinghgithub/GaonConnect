@@ -78,6 +78,12 @@ const AppDownloadModal = ({ open, onClose }) => {
           <X size={20} />
         </button>
 
+        <img
+          src="/gaonconnect-icon.png"
+          alt="GaonConnect"
+          className="h-12 w-12 rounded-xl mb-4"
+        />
+
         <h2 id="app-download-title" className="text-xl md:text-2xl font-bold text-ink dark:text-white mb-1 pr-8">
           {t('appModal.heading')}
         </h2>

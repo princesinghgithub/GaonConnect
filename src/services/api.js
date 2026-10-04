@@ -226,6 +226,43 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Access token sirf 15 minute chalta hai, refresh token 60 din. Pehle 401 aate
+// hi session wipe ho jaata tha, yaani login ke 15 minute baad pehli hi protected
+// call (aam taur par pickup/drop ki location search) user ko bahar pheink deti
+// thi. Ab pehle refresh token se naya access token liya jaata hai aur original
+// request retry hoti hai; logout sirf tab jab refresh bhi fail ho jaye.
+const clearSession = () => {
+  localStorage.removeItem("token");
+  localStorage.removeItem("refreshToken");
+  // AuthContext user ko "currentUser" mein rakhta hai. Pehle yahan "user"
+  // remove hota tha, isliye token jaane ke baad bhi stale user pada rehta tha.
+  localStorage.removeItem("currentUser");
+};
+
+// Ek waqt mein sirf ek refresh chale. Warna ek saath aayi kai 401 responses
+// apna-apna refresh chala deti hain aur rotation har agli koshish ka token
+// invalid kar deta hai.
+let refreshPromise = null;
+
+const refreshAccessToken = async () => {
+  const refreshToken = localStorage.getItem("refreshToken");
+  if (!refreshToken) return null;
+
+  // Plain axios use kar rahe hain, `api` nahi — warna ye call khud isi
+  // interceptor mein phans kar loop bana degi.
+  const { data } = await axios.post(
+    `${config.apiUrl}/auth/refresh`,
+    { refreshToken },
+    { timeout: config.apiTimeout, headers: { "Content-Type": "application/json" } }
+  );
+
+  if (!data?.accessToken) return null;
+
+  localStorage.setItem("token", data.accessToken);
+  if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
+  return data.accessToken;
+};
+
 // ================= Response Interceptor =================
 api.interceptors.response.use(
   (response) => {
@@ -234,11 +271,35 @@ api.interceptors.response.use(
     }
     return response;
   },
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/login";
+  async (error) => {
+    const original = error.config;
+    const isAuthCall = String(original?.url || "").includes("/auth/");
+
+    if (error.response?.status === 401 && original && !original._retry && !isAuthCall) {
+      original._retry = true;
+
+      try {
+        if (!refreshPromise) {
+          refreshPromise = refreshAccessToken().finally(() => {
+            refreshPromise = null;
+          });
+        }
+
+        const newToken = await refreshPromise;
+        if (newToken) {
+          original.headers = { ...original.headers, Authorization: `Bearer ${newToken}` };
+          return api(original);
+        }
+      } catch {
+        // Refresh fail — neeche wale logout par gir jao.
+      }
+
+      clearSession();
+      // Login screen /auth par hai. Pehle yahan "/login" tha, jo kisi route se
+      // match nahi karta, isliye user catch-all NotFound page par pahunch jaata tha.
+      if (window.location.pathname !== "/auth") {
+        window.location.href = "/auth";
+      }
     }
 
     if (config.debug) {

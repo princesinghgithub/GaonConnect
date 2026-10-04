@@ -61,16 +61,13 @@
     "subheading": "The right vehicle for every need — pick a service and get started!",
     "clickToSelect": "Click to select →",
     "items": [
-      { "name": "Auto Rickshaw", "icon": "🛺", "price": "₹30+" },
-      { "name": "Bike Taxi", "icon": "🏍️", "price": "₹30+" },
-      { "name": "Car", "icon": "🚗", "price": "₹100+" },
-      { "name": "Tractor (Jutai)", "icon": "🚜", "price": "₹400+" },
-      { "name": "Wedding Car", "icon": "🏛️", "price": "₹500+" },
-      { "name": "Goods Transport", "icon": "🚚", "price": "₹200+" },
-      { "name": "Tempo", "icon": "🚐", "price": "₹150+" },
-      { "name": "JCB/Excavator", "icon": "🏗️", "price": "₹1000+" },
-      { "name": "Thresher", "icon": "🌾", "price": "₹800+" },
-      { "name": "Harvester", "icon": "🚛", "price": "₹1500+" }
+      { "id": "auto", "name": "Auto Rickshaw", "icon": "🛺", "price": "₹30+" },
+      { "id": "car", "name": "Car", "icon": "🚗", "price": "₹100+" },
+      { "id": "tractor", "name": "Tractor (Jutai)", "icon": "🚜", "price": "₹400+" },
+      { "id": "tempo", "name": "Tempo / Pickup", "icon": "🛻", "price": "₹150+" },
+      { "id": "jcb", "name": "JCB/Excavator", "icon": "🏗️", "price": "₹1000+" },
+      { "id": "thresher", "name": "Thresher (with Tractor)", "icon": "🌾", "price": "₹800+" },
+      { "id": "harvester", "name": "Harvester", "icon": "🚛", "price": "₹1500+" }
     ]
   },
   "benefits": {

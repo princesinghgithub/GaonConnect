@@ -12,7 +12,6 @@ const SERVICE_LINKS = [
   { to: '/car-booking', label: 'Car Booking' },
   { to: '/tractor-booking', label: 'Tractor Booking' },
   { to: '/jcb-rental', label: 'JCB Rental' },
-  { to: '/wedding-car-booking', label: 'Wedding Car Booking' },
   { to: '/goods-transport-booking', label: 'Goods Transport / Tempo' },
   { to: '/farm-equipment', label: 'Farm Equipment Rental' },
   { to: '/village-transport', label: 'Village Transport' },
