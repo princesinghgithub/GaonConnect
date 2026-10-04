@@ -443,5 +443,9 @@ RideSchema.index({ provider: 1, createdAt: -1 });
 RideSchema.index({ status: 1 });
 // Cron sweep — "status searching + nextDispatchAt due" ko fast dhoondne ke liye
 RideSchema.index({ status: 1, nextDispatchAt: 1 });
+// Driver ka demand heatmap (GET /provider/demand) — har online driver har
+// minute "pichhle 60 minute ki bookings" maangta hai; bina index poori table
+// padhni padti
+RideSchema.index({ createdAt: -1, vehicleType: 1 });
 
 module.exports = mongoose.model("Ride", RideSchema);
