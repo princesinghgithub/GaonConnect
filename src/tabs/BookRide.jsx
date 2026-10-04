@@ -123,6 +123,12 @@ const BookRide = () => {
   // customer ek hi screen par compare karke chun sake (Rapido jaisa).
   const [quotes, setQuotes] = useState({});
   const [quotesLoading, setQuotesLoading] = useState(false);
+  // Car ki categories (Mini / Sedan / SUV) — Uber/Rapido jaisa, har ek apne
+  // daam ke saath. Backend fare-estimate har category ka AC / Non-AC daam
+  // bhejta hai: [{ id, label, models, seats, options: [{ ac, totalFare }] }]
+  const [carVariants, setCarVariants] = useState([]);
+  const [carVariant, setCarVariant] = useState('');
+  const [carAc, setCarAc] = useState(false);
 
   // Tractor / JCB service selection — rates fetched from the backend
   // (admin-editable), same list the hero widget and the app use.
@@ -287,6 +293,9 @@ const BookRide = () => {
             dropLat:   destination.location.latitude,
             dropLng:   destination.location.longitude,
             vehicleType,
+            // Car: chuni category aur AC ka hi daam
+            ...(vehicleType === 'car' && selectedCarVariant
+              ? { variant: selectedCarVariant.id, ac: carAcChosen } : {}),
           });
 
           const d = est?.data?.data;
@@ -334,18 +343,40 @@ const BookRide = () => {
       dropLat:   destination.location.latitude,
       dropLng:   destination.location.longitude,
     };
-    const results = await Promise.all(
-      ROAD_VEHICLES.map((type) =>
-        rideAPI
-          .getFareEstimate({ ...params, vehicleType: type })
-          .then((res) => [type, res?.data?.data?.totalFare ?? null])
-          // Ek gaadi ka rate na aaye to baaki do to dikhne chahiye —
-          // isliye har call apni galti khud sambhalti hai.
-          .catch(() => [type, null])
-      )
-    );
-    setQuotes(Object.fromEntries(results));
-    setQuotesLoading(false);
+    // Ek hi call mein sab gaadiyon ka daam — car ki har category bhi (app
+    // ki fare screen yahi karti hai).
+    try {
+      const res = await rideAPI.getFareEstimate(params);
+      const fares = Array.isArray(res?.data?.data?.fares) ? res.data.data.fares : [];
+      const q = {};
+      ROAD_VEHICLES.forEach((type) => {
+        const f = fares.find((x) => x.vehicleType === type);
+        q[type] = typeof f?.totalFare === 'number' ? f.totalFare : null;
+      });
+      setQuotes(q);
+      const car = fares.find((x) => x.vehicleType === 'car');
+      const variants = (Array.isArray(car?.variants) ? car.variants : [])
+        .map((v) => ({ ...v, options: (v.options || []).filter((o) => typeof o.totalFare === 'number') }))
+        .filter((v) => v.options.length);
+      setCarVariants(variants);
+      // Pehle chuni category ab na ho to pehli par
+      setCarVariant((cur) => (variants.some((v) => v.id === cur) ? cur : variants[0]?.id || ''));
+    } catch {
+      setQuotes(Object.fromEntries(ROAD_VEHICLES.map((type) => [type, null])));
+      setCarVariants([]);
+    } finally {
+      setQuotesLoading(false);
+    }
+  };
+
+  // Chuni car category ka daam (AC ya Non-AC) — jo mode us category mein ho
+  const carOptionOf = (v, ac = carAc) => v?.options.find((o) => !!o.ac === ac) || v?.options[0];
+  const selectedCarVariant = carVariants.find((v) => v.id === carVariant);
+  const carAcChosen = selectedCarVariant ? !!carOptionOf(selectedCarVariant)?.ac : false;
+  const vehicleName = () => {
+    const base = VEHICLE_OPTIONS.find((o) => o.type === vehicleType)?.label || vehicleType;
+    if (vehicleType !== 'car' || !selectedCarVariant) return base;
+    return `${selectedCarVariant.label} · ${carAcChosen ? 'AC' : 'Non-AC'}`;
   };
 
   const goToVehicleStep = () => {
@@ -566,6 +597,9 @@ const BookRide = () => {
           estimatedDuration: Math.round(distance.duration.value / 60),
           estimatedFare:     fare,
           paymentMethod,
+          // Car ki category + AC — booking sirf mel khaati gaadi ko jaati hai
+          ...(vehicleType === 'car' && selectedCarVariant
+            ? { vehicleVariant: selectedCarVariant.id, ac: carAcChosen } : {}),
         };
       }
 
@@ -732,14 +766,23 @@ const BookRide = () => {
 
                 <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 space-y-2">
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">Choose Vehicle</h3>
-                  {VEHICLE_OPTIONS.map((opt) => {
-                    const selected = vehicleType === opt.type;
-                    const quote = quotes[opt.type];
+                  {VEHICLE_OPTIONS.flatMap((opt) =>
+                    // Car = Mini / Sedan / SUV, har ek apni line (Uber/Rapido jaisa)
+                    opt.type === 'car' && carVariants.length
+                      ? carVariants.map((v) => ({ ...opt, key: `car:${v.id}`, variant: v }))
+                      : [{ ...opt, key: opt.type, variant: null }]
+                  ).map((opt) => {
+                    const v = opt.variant;
+                    const selected = vehicleType === opt.type && (!v || carVariant === v.id);
+                    const quote = v ? carOptionOf(v)?.totalFare : quotes[opt.type];
                     const isRoad = ROAD_VEHICLES.includes(opt.type);
                     return (
+                      <div key={opt.key}>
                       <button
-                        key={opt.type}
-                        onClick={() => handleVehicleChange(opt.type)}
+                        onClick={() => {
+                          if (vehicleType !== opt.type) handleVehicleChange(opt.type);
+                          if (v) { setCarVariant(v.id); setFare(null); setFareBreakdown([]); }
+                        }}
                         aria-pressed={selected}
                         className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition ${
                           selected
@@ -761,9 +804,10 @@ const BookRide = () => {
                         )}
                         <span className="flex-1 min-w-0">
                           <span className={`block font-semibold text-sm ${selected ? 'text-orange-700' : 'text-gray-900'}`}>
-                            {opt.label}
+                            {v ? v.label : opt.label}
+                            {v?.seats ? <span className="ml-2 text-xs font-normal text-gray-500">👤 {v.seats}</span> : null}
                           </span>
-                          <span className="block text-xs text-gray-500 truncate">{opt.tagline}</span>
+                          <span className="block text-xs text-gray-500 truncate">{v ? (v.models || opt.tagline) : opt.tagline}</span>
                         </span>
                         <span className="shrink-0 text-right">
                           {isRoad && dropoff ? (
@@ -779,6 +823,28 @@ const BookRide = () => {
                           )}
                         </span>
                       </button>
+
+                      {/* AC / Non-AC — sirf chuni category par, aur jab dono milte hon */}
+                      {v && selected && v.options.length > 1 && (
+                        <div className="grid grid-cols-2 gap-2 mt-2 mb-1">
+                          {v.options.map((o) => {
+                            const on = carAcChosen === !!o.ac;
+                            return (
+                              <button
+                                key={String(!!o.ac)}
+                                onClick={() => { setCarAc(!!o.ac); setFare(null); setFareBreakdown([]); }}
+                                aria-pressed={on}
+                                className={`py-2 rounded-full border text-xs font-semibold transition ${
+                                  on ? 'bg-blue-900 border-blue-900 text-white' : 'border-gray-300 text-gray-600 hover:border-gray-400'
+                                }`}
+                              >
+                                {o.ac ? '❄️ AC' : '☀️ Non-AC'} · ₹{o.totalFare}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      </div>
                     );
                   })}
                   {!dropoff && (
@@ -955,7 +1021,7 @@ const BookRide = () => {
                   </div>
                   <div className="flex justify-between items-center py-2 border-t">
                     <span className="text-gray-600">Vehicle</span>
-                    <span className="font-semibold capitalize">{vehicleType}</span>
+                    <span className="font-semibold">{vehicleName()}</span>
                   </div>
                   {distance && (
                     <>
