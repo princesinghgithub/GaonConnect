@@ -42,6 +42,32 @@ const ROAD_VEHICLES = ['auto', 'car', 'tempo'];
 const WORK_VEHICLES = ['tractor', 'jcb', 'harvester'];
 const isTractorOrJcb = (type) => WORK_VEHICLES.includes(type);
 
+// ─── Admin dashboard ki nayi seva (Uber/Rapido jaisa) ────────────────────────
+// Upar ki suchi neev hai (icon, tagline ke saath). Admin Rate Card → "Nayi
+// Seva" se jo gaadi/machine jode, wo backend /ride/vehicle-types se yahan
+// apne aap jud jaati hai — website ka code badle bina. Band sevayein aur
+// bike (website par jaan-boojh kar band, upar dekho) nahi.
+const WEBSITE_HIDDEN = ['bike', 'truck', 'goods', 'ambulance', 'wedding', 'thresher'];
+const mergeBackendTypes = (list) => {
+  let changed = false;
+  (Array.isArray(list) ? list : []).forEach((v) => {
+    if (!v?.id || WEBSITE_HIDDEN.includes(v.id) || VEHICLE_OPTIONS.some((o) => o.type === v.id)) return;
+    if (v.pricingType === 'package') return;
+    const isRide = (v.pricingType || 'distance') === 'distance';
+    VEHICLE_OPTIONS.push({
+      type: v.id,
+      icon: <span>{v.icon || (isRide ? '🚗' : '🛠️')}</span>,
+      image: v.image || '',
+      label: v.label || v.id,
+      desc: isRide ? 'Per km' : 'Kaam ke hisaab se',
+      tagline: isRide ? 'Pickup se drop tak' : 'Khet ya site par kaam',
+    });
+    (isRide ? ROAD_VEHICLES : WORK_VEHICLES).push(v.id);
+    changed = true;
+  });
+  return changed;
+};
+
 // Service ka unit — backend har sub-service par unit bhejta hai (hour, km,
 // acre, quintal, job). Purane data mein unit na ho to category se andaaza.
 // "either" (ghanta ya acre) website par ghante se hi chalta hai.
@@ -93,6 +119,16 @@ const BookRide = () => {
     ? requested
     : 'auto';
   const initialIsTractorJcb = isTractorOrJcb(initialVehicleType);
+
+  // Admin ki nayi sevayein backend se — aate hi list dobara banti hai
+  const [, setTypesTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    rideAPI.getVehicleTypes()
+      .then((res) => { if (alive && mergeBackendTypes(res?.data?.data)) setTypesTick((n) => n + 1); })
+      .catch(() => { /* neev wali suchi chalti rahegi */ });
+    return () => { alive = false; };
+  }, []);
 
   // Location
   const [pickup,  setPickup]  = useState(initialBooking?.pickup ?? null);
@@ -790,9 +826,9 @@ const BookRide = () => {
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        {VEHICLE_IMAGES[opt.type] ? (
+                        {VEHICLE_IMAGES[opt.type] || opt.image ? (
                           <img
-                            src={VEHICLE_IMAGES[opt.type]}
+                            src={VEHICLE_IMAGES[opt.type] || opt.image}
                             alt=""
                             loading="lazy"
                             className="h-11 w-14 shrink-0 object-contain"
@@ -898,9 +934,9 @@ const BookRide = () => {
                                   : 'border-gray-200 hover:border-gray-300'
                               }`}
                             >
-                              {SUB_SERVICE_IMAGES[sub.id] && (
+                              {(sub.image || SUB_SERVICE_IMAGES[sub.id]) && (
                                 <img
-                                  src={SUB_SERVICE_IMAGES[sub.id]}
+                                  src={(sub.image || SUB_SERVICE_IMAGES[sub.id])}
                                   alt=""
                                   loading="lazy"
                                   className="mb-2 h-16 w-full object-contain"

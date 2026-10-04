@@ -393,9 +393,9 @@ const GaonConnectLanding = () => {
                             }`}
                           >
                             <span className="flex items-center gap-2">
-                              {SUB_SERVICE_IMAGES[sub.id] && (
+                              {(sub.image || SUB_SERVICE_IMAGES[sub.id]) && (
                                 <img
-                                  src={SUB_SERVICE_IMAGES[sub.id]}
+                                  src={(sub.image || SUB_SERVICE_IMAGES[sub.id])}
                                   alt=""
                                   loading="lazy"
                                   className="h-10 w-12 shrink-0 object-contain"

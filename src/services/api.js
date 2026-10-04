@@ -435,6 +435,9 @@ export const rideAPI = {
 
   // Tractor/JCB "Kaam ka Prakar" + rates — admin panel se editable, public route hai
   getServices: (vehicleType) => api.get(`/ride/services/${vehicleType}`),
+
+  // Customer ke liye bookable gaadiyan — admin dashboard ki nayi seva samet
+  getVehicleTypes: () => api.get('/ride/vehicle-types'),
 };
 
 
