@@ -1636,7 +1636,11 @@ exports.registerProvider = async (req, res) => {
         color:      clean(vehicleColor),
         photo:      vehiclePhoto,
         // Tractor/JCB: kaunse auzaar hain, model, HP — booking inhi se milti hai
+        // Car: Mini / Sedan / SUV + AC — "Sedan AC" ki booking sirf mel khaati
+        // gaadi ko (vehicleFitsRide). Multipart mein boolean string aata hai.
         variant:    sanitizeVariant(vehicleType, req.body.vehicleVariant),
+        ...(vehicleType === 'car' && ['true', 'false'].includes(String(req.body.hasAC))
+          ? { hasAC: String(req.body.hasAC) === 'true' } : {}),
         equipment:  sanitizeEquipment(vehicleType, req.body.equipment),
         horsepower: vehicleType === 'tractor' ? cleanHp(req.body.horsepower) : undefined,
         documents: {
