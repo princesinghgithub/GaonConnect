@@ -79,6 +79,88 @@ router.put('/location', protect, updateProviderLocation);
 // Stats & Earnings
 router.get('/stats/me',        protect, getProviderStats);
 
+// ─── Demand heatmap (Rapido Captain jaisa) ───────────────────────────────────
+// "Kahan zyada booking aa rahi hai" — pichhle 60 minute ki bookings driver ke
+// aas-paas (~30 km) ~1.5 km ke khaano mein gini jaati hain, sirf us gaadi ki
+// jo driver chalata hai. Jo booking bina driver ke cancel hui (customer ko
+// koi mila hi nahi) wo dugni ginti — wahi asli chhooti hui kamai hai. Aur
+// agle 24 ghante ki khuli pre-bookings alag. Customer ka naam/pata nahi
+// jaata — sirf khaane ka beech aur ginti.
+router.get('/demand', protect, async (req, res) => {
+  try {
+    const Provider = require('../models/Provider');
+    const Ride     = require('../models/Ride');
+    const { rideTypesFor } = require('../utils/vehicleMatch');
+    const provider = await Provider.findOne({ user: req.user.id }).select('currentLocation activeVehicle').populate('activeVehicle');
+    if (!provider) return res.status(403).json({ success: false, message: 'Driver nahi mila' });
+
+    const [pLng, pLat] = provider.currentLocation?.coordinates || [];
+    const lat = Number(req.query.lat) || pLat;
+    const lng = Number(req.query.lng) || pLng;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+      return res.json({ success: true, data: { cells: [], scheduled: [], total: 0, windowMinutes: 60, center: null } });
+    }
+
+    const types = provider.activeVehicle ? rideTypesFor(provider.activeVehicle) : [];
+    const BOX = 0.28;             // ~30 km
+    const CELL = 0.014;           // ~1.5 km
+    const box = {
+      'pickup.coordinates.latitude':  { $gte: lat - BOX, $lte: lat + BOX },
+      'pickup.coordinates.longitude': { $gte: lng - BOX, $lte: lng + BOX },
+      ...(types.length ? { vehicleType: { $in: types } } : {}),
+    };
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const [recent, scheduled] = await Promise.all([
+      Ride.find({ ...box, createdAt: { $gte: since }, bookingType: { $ne: 'scheduled' } })
+        .select('pickup.coordinates status provider').lean(),
+      Ride.find({ ...box, status: 'scheduled', provider: null, scheduledAt: { $gte: new Date(), $lte: new Date(Date.now() + 24 * 3600 * 1000) } })
+        .select('pickup.coordinates').lean(),
+    ]);
+
+    const bucket = (rows, weightOf) => {
+      const cells = new Map();
+      rows.forEach((r) => {
+        const la = Number(r.pickup?.coordinates?.latitude);
+        const lo = Number(r.pickup?.coordinates?.longitude);
+        if (!Number.isFinite(la) || !Number.isFinite(lo)) return;
+        const key = `${Math.floor(la / CELL)}:${Math.floor(lo / CELL)}`;
+        const c = cells.get(key) || { lat: 0, lng: 0, n: 0, missed: 0, score: 0 };
+        const w = weightOf(r);
+        c.lat += la; c.lng += lo; c.n += 1; c.missed += w.missed; c.score += w.score;
+        cells.set(key, c);
+      });
+      return [...cells.values()].map((c) => ({
+        lat: +(c.lat / c.n).toFixed(4), lng: +(c.lng / c.n).toFixed(4),
+        count: c.n, missed: c.missed, score: c.score,
+      }));
+    };
+    const toRad = (d) => (d * Math.PI) / 180;
+    const kmFrom = (c) => {
+      const dLa = toRad(c.lat - lat); const dLo = toRad(c.lng - lng);
+      const a = Math.sin(dLa / 2) ** 2 + Math.cos(toRad(lat)) * Math.cos(toRad(c.lat)) * Math.sin(dLo / 2) ** 2;
+      return +(6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1);
+    };
+
+    // Customer ko driver mila hi nahi — chhooti hui demand, dugni ginti
+    const missedOf = (r) => (r.status === 'cancelled' && !r.provider) || r.status === 'searching';
+    const cells = bucket(recent, (r) => (missedOf(r) ? { missed: 1, score: 2 } : { missed: 0, score: 1 }))
+      .map((c) => ({ ...c, km: kmFrom(c) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20);
+    const sched = bucket(scheduled, () => ({ missed: 0, score: 1 }))
+      .map((c) => ({ ...c, km: kmFrom(c) }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    return res.json({
+      success: true,
+      data: { cells, scheduled: sched, total: recent.length, windowMinutes: 60, center: { lat, lng } },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Aaj ka incentive target + progress (Rapido-style daily bonus).
 router.get('/incentive/today', protect, async (req, res) => {
   try {
