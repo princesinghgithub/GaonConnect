@@ -5348,11 +5348,46 @@ const assignDriverToRide = async (req, res) => {
       return res.json({ success: true, message: `${driverName} ko pre-booking (${when}) de di — dono ko bata diya`, data: { driverName, driverPhone: driver.user?.phone, scheduled: true } });
     }
 
-    ride.provider = driverId;
-    ride.status = 'accepted';
-    await ride.save();
+    // Turant wali ride — driver kisi aur ride par na ho
+    const onTrip = await Ride.exists({ provider: driver._id, status: { $in: ['accepted', 'arrived', 'started', 'working'] } });
+    if (onTrip) return res.status(400).json({ success: false, message: 'Ye driver abhi doosri ride par hai' });
 
-    res.json({ success: true, message: `${driver.user?.name || 'Driver'} ko ride assign kar diya!`, data: { driverName: driver.user?.name, driverPhone: driver.user?.phone } });
+    // Atomic — is beech kisi driver ne khud accept kar li ho to dobara nahi
+    const assigned = await Ride.findOneAndUpdate(
+      { _id: ride._id, status: 'searching' },
+      { provider: driver._id, vehicle: driver.activeVehicle?._id || null, status: 'accepted', acceptedAt: new Date(), nextDispatchAt: null },
+      { new: true },
+    );
+    if (!assigned) return res.status(409).json({ success: false, message: 'Is beech kisi driver ne ride le li' });
+
+    driver.status = 'busy';
+    await driver.save();
+
+    // Pehle sirf DB badalta tha — na driver ko pata chalta, na customer ko.
+    // Ab wahi sab jo driver ke khud accept karne par hota hai.
+    const { getIO } = require('../socket');
+    const io = getIO();
+    (assigned.notifiedDrivers || []).forEach((id) => {
+      if (String(id) !== String(driver._id)) io.to(`driver_${id}`).emit('rideNoLongerAvailable', { rideId: String(assigned._id) });
+    });
+    // Driver app is event par current ride khol deti hai (openCurrentRide)
+    io.to(`driver_${driver._id}`).emit('scheduledRideActivated', { rideId: String(assigned._id) });
+    if (driver.deviceInfo?.fcmToken) {
+      notify.custom(driver.deviceInfo.fcmToken, {
+        title: '🚗 Admin ne aapko ride di',
+        body:  `${ride.customer?.name || 'Customer'} — ${ride.pickup?.address || ''}`,
+        data:  { type: 'SCHEDULED_RIDE_ACTIVATED', rideId: String(assigned._id) },
+      }).catch(() => {});
+    }
+    io.to(`user_${assigned.customer}`).emit('rideAccepted', { rideId: assigned._id, driverId: driver._id, otp: assigned.otp });
+    const customer = await User.findById(assigned.customer).select('fcmToken');
+    if (customer?.fcmToken) {
+      notify.rideAccepted(customer.fcmToken, {
+        driverName: driver.user?.name || 'Driver', vehicleType: driver.activeVehicle?.type, otp: assigned.otp,
+      }).catch(() => {});
+    }
+
+    res.json({ success: true, message: `${driver.user?.name || 'Driver'} ko ride assign kar diya — dono ko bata diya`, data: { driverName: driver.user?.name, driverPhone: driver.user?.phone } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

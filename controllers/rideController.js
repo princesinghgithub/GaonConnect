@@ -336,6 +336,17 @@ exports.createRide = async (req, res) => {
     if (!pickup || !dropLocation || !vehicleType) {
       return res.status(400).json({ success: false, message: 'Pickup, drop aur vehicle type required hai' });
     }
+    // Pre-booking ka samay — bina samay ya beete samay ki booking cron kabhi
+    // chalu nahi karta (scheduledAt null/purana) aur wo hamesha atki rehti.
+    if (bookingType === 'scheduled') {
+      const at = scheduledAt ? new Date(scheduledAt).getTime() : NaN;
+      if (!Number.isFinite(at) || at - Date.now() < 25 * 60 * 1000) {
+        return res.status(400).json({ success: false, message: 'Pre-booking kam se kam 30 minute baad ki honi chahiye' });
+      }
+      if (at - Date.now() > 8 * 24 * 60 * 60 * 1000) {
+        return res.status(400).json({ success: false, message: 'Pre-booking 7 din se aage ki nahi ho sakti' });
+      }
+    }
     // Band ki gayi seva (truck, ambulance, wedding car) — purani app se bhi
     // nayi booking na bane.
     if (RETIRED_VEHICLE_TYPES.includes(String(vehicleType).toLowerCase())) {
