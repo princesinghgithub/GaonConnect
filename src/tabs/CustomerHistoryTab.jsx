@@ -9,6 +9,8 @@ const statusStyle = {
   accepted:  'bg-blue-100 text-blue-700',
   arrived:   'bg-blue-100 text-blue-700',
   started:   'bg-blue-100 text-blue-700',
+  working:   'bg-blue-100 text-blue-700',
+  scheduled: 'bg-orange-100 text-orange-700',
 };
 
 const CustomerHistoryTab = () => {
@@ -99,9 +101,15 @@ const RideRow = ({ ride }) => {
             {new Date(ride.createdAt).toLocaleString('en-IN')}
           </p>
           <span className={`px-3 py-1 rounded-full text-xs font-bold capitalize ${statusStyle[ride.status] || 'bg-gray-100 text-gray-700'}`}>
-            {ride.status}
+            {ride.status === 'scheduled' ? 'Pre-booking' : ride.status}
           </span>
         </div>
+        {ride.status === 'scheduled' && ride.scheduledAt && (
+          <p className="text-sm font-semibold text-orange-700">
+            📅 {new Date(ride.scheduledAt).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+            {' · '}{driverName ? `${driverName} aayenge` : 'Driver dhundh rahe hain'}
+          </p>
+        )}
 
         <div className="flex gap-2 items-start">
           <div className="w-1 bg-green-500 rounded-full self-stretch" />

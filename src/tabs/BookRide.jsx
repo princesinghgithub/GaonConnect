@@ -50,6 +50,12 @@ const unitOf = (sub, cat) => {
   return u === 'either' ? 'hour' : u;
 };
 const QUANTITY_OPTIONS = [1, 2, 3, 4, 5, 8, 10];
+
+// <input type="datetime-local"> ko apne ghadi ka samay chahiye, UTC nahi
+const localInputValue = (d) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 const UNIT_WORD = { hour: 'ghanta', km: 'km', acre: 'acre', quintal: 'quintal', job: 'poora kaam' };
 
 // Rapido jaisa teen-step flow: pehle kahan se kahan, phir gaadi (daam ke
@@ -172,6 +178,9 @@ const BookRide = () => {
   // Step 2 → 3 jaate waqt exact kiraya aur doori mangwane ka wait.
   const [pricing, setPricing] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  // Pre-booking (Uber Reserve jaisa) — driver abhi tay, aana tay samay par
+  const [when, setWhen] = useState('now');
+  const [laterAt, setLaterAt] = useState('');
   // True while a hero-widget booking (bike/auto/car with pickup+drop already
   // picked on the landing page) is being auto-confirmed — Rapido-style,
   // no second form to fill. Computed lazily from initialBooking so the
@@ -510,6 +519,17 @@ const BookRide = () => {
       toast.error('Fare calculate ho raha hai, thoda ruko');
       return;
     }
+    const scheduledDate = when === 'later' && laterAt ? new Date(laterAt) : null;
+    if (when === 'later') {
+      if (!scheduledDate || Number.isNaN(scheduledDate.getTime())) {
+        toast.error('Pre-booking ki taarikh aur samay chuniye');
+        return;
+      }
+      if (scheduledDate.getTime() - Date.now() < 29 * 60 * 1000) {
+        toast.error('Kam se kam 30 minute baad ka samay chuniye');
+        return;
+      }
+    }
 
     submittingRef.current = true;
     setLoading(true);
@@ -549,11 +569,19 @@ const BookRide = () => {
         };
       }
 
+      if (scheduledDate) {
+        rideData.bookingType = 'scheduled';
+        rideData.scheduledAt = scheduledDate.toISOString();
+        rideData.scheduledNote = workNote || '';
+      }
+
       const response = await rideAPI.createRide(rideData);
 
       if (response.data.success) {
-        trackEvent('booking_confirmed', { vehicle_type: vehicleType, booking_mode: rideData.bookingMode });
-        toast.success('Ride book ho gayi! Driver dhundha ja raha hai...');
+        trackEvent('booking_confirmed', { vehicle_type: vehicleType, booking_mode: rideData.bookingMode, scheduled: !!scheduledDate });
+        toast.success(scheduledDate
+          ? 'Pre-booking ho gayi! Driver tay hote hi aapko bata denge.'
+          : 'Ride book ho gayi! Driver dhundha ja raha hai...');
         navigate(`/ride/${response.data.data.ride._id}`);
       }
     } catch (error) {
@@ -1035,6 +1063,46 @@ const BookRide = () => {
                     </div>
                   </div>
                 )}
+
+                {/* Kab chahiye — abhi ya pre-booking */}
+                <div className="bg-white rounded-xl shadow-sm p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Kab chahiye?</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { id: 'now',   label: '⚡ Abhi' },
+                      { id: 'later', label: '📅 Baad mein' },
+                    ].map((w) => (
+                      <button
+                        key={w.id}
+                        onClick={() => setWhen(w.id)}
+                        aria-pressed={when === w.id}
+                        className={`py-3 px-3 rounded-lg border-2 font-semibold transition ${
+                          when === w.id
+                            ? 'border-orange-600 bg-orange-50 text-orange-600'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                        }`}
+                      >
+                        {w.label}
+                      </button>
+                    ))}
+                  </div>
+                  {when === 'later' && (
+                    <div className="mt-4 space-y-2">
+                      <input
+                        type="datetime-local"
+                        value={laterAt}
+                        onChange={(e) => setLaterAt(e.target.value)}
+                        min={localInputValue(new Date(Date.now() + 30 * 60 * 1000))}
+                        max={localInputValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))}
+                        className="w-full border-2 border-gray-200 rounded-lg p-3 text-sm text-gray-700 focus:outline-none focus:border-orange-400"
+                      />
+                      <p className="text-xs text-gray-500">
+                        Driver abhi tay ho jayega — uska naam aur number aapko dikhega, aap baat kar sakte hain.
+                        Samay se 1 ghanta pehle tak cancel muft.
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 {/* Payment Method */}
                 <div className="bg-white rounded-xl shadow-sm p-6">

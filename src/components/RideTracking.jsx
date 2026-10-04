@@ -123,7 +123,17 @@ const RideTracking = () => {
   };
 
   const handleCancelRide = async () => {
-    if (!window.confirm('Are you sure you want to cancel this ride?')) {
+    // Fee lagegi to pehle saaf batao — pre-booking 1 ghante ke andar cancel
+    // karne par driver ko fee jaati hai. Preview na mile to bhi cancel chale.
+    let fee = 0;
+    try {
+      const p = await rideAPI.getCancelPreview(rideId);
+      fee = Number(p.data?.data?.fee) || 0;
+    } catch { /* purana backend — bina fee ke sawaal */ }
+    const question = fee > 0
+      ? `Abhi cancel karne par ₹${fee} cancellation fee lagegi. Phir bhi cancel karein?`
+      : 'Kya aap sach mein ye booking cancel karna chahte hain?';
+    if (!window.confirm(question)) {
       return;
     }
 
@@ -133,7 +143,7 @@ const RideTracking = () => {
       navigate('/customer');
     } catch (error) {
       console.error('Cancel ride error:', error);
-      toast.error('Failed to cancel ride');
+      toast.error(error.response?.data?.message || 'Cancel nahi ho paya, dobara koshish karein');
     }
   };
 
@@ -242,7 +252,7 @@ const RideTracking = () => {
         
         {/* Status Header */}
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <StatusCard status={ride.status} driver={driver} otp={ride.otp} />
+          <StatusCard status={ride.status} driver={driver} otp={ride.otp} scheduledAt={ride.scheduledAt} />
         </div>
 
         {/* Map */}
@@ -334,7 +344,7 @@ const RideTracking = () => {
         )}
 
         {/* Cancel Button */}
-        {['searching', 'accepted', 'arrived'].includes(ride.status) && (
+        {['scheduled', 'searching', 'accepted', 'arrived'].includes(ride.status) && (
           <button
             onClick={handleCancelRide}
             className="w-full bg-red-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-red-700 transition"
@@ -408,8 +418,29 @@ const RideTracking = () => {
 };
 
 // Helper Components
-const StatusCard = ({ status, driver, otp }) => {
+const StatusCard = ({ status, driver, otp, scheduledAt }) => {
+  const whenText = scheduledAt
+    ? new Date(scheduledAt).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+    : '';
   const statusConfig = {
+    // Pre-booking — driver tay hua ya abhi dhundh rahe hain
+    scheduled: driver ? {
+      color: 'green',
+      icon: '📅',
+      title: 'Pre-Booking Pakki!',
+      description: `${driver.user?.name || 'Driver'} ${whenText} ko aayenge. Samay se 1 ghanta pehle tak cancel muft.`
+    } : {
+      color: 'yellow',
+      icon: '📅',
+      title: 'Pre-Booking Ho Gayi',
+      description: `${whenText} ke liye driver dhundh rahe hain — tay hote hi yahan dikhega.`
+    },
+    working: {
+      color: 'blue',
+      icon: <FaCar />,
+      title: 'Kaam Chal Raha Hai',
+      description: 'Jitna samay kaam hoga, utna hi paisa lagega'
+    },
     searching: {
       color: 'yellow',
       icon: <FaSpinner className="animate-spin" />,

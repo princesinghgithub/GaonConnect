@@ -409,6 +409,9 @@ export const rideAPI = {
 
   getRideById: (id) => api.get(`/ride/${id}`),
 
+  // Cancel karne par kitni fee lagegi — confirm se pehle customer ko dikhane ke liye
+  getCancelPreview: (id) => api.get(`/ride/${id}/cancel-preview`),
+
   getRideHistoryCustomer: (page = 1, limit = 20, status) =>
     api.get("/ride/history/customer", { params: { page, limit, status } }),
 
