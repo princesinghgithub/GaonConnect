@@ -4004,7 +4004,10 @@ const getHourlyRates = async (req, res) => {
       settings = await Setting.create({});
       settings = settings.toObject();
     }
-    res.json({ success: true, data: settings.hourlyRates });
+    // Band sevaon ke kaam (alag "thresher" gaadi) Rate Card mein nahi
+    const RETIRED = require('../config/retiredVehicleTypes');
+    const data = Object.fromEntries(Object.entries(settings.hourlyRates || {}).filter(([id]) => !RETIRED.includes(id)));
+    res.json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Hourly rates fetch error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
@@ -4291,7 +4294,8 @@ const getEquipmentAdmin = async (req, res) => {
     const settings = (await Setting.findOne().lean()) || {};
     // Jin gaadiyon ka kaam ghante/acre se hota hai unke liye bhi — admin
     // nayi machine (drone) ke auzaar shuru se jod sake
-    const hourlyTypes = Object.keys(settings.hourlyRates || {});
+    const RETIRED = require('../config/retiredVehicleTypes');
+    const hourlyTypes = Object.keys(settings.hourlyRates || {}).filter((t) => !RETIRED.includes(t));
     const types = [...new Set([...(await getEquipmentVehicleTypes()), ...hourlyTypes])].filter((t) => t !== 'car');
     const data = {};
     for (const t of types) data[t] = await getEquipmentCatalog(t);
@@ -4394,7 +4398,11 @@ const getVehicleTypes = async (req, res) => {
     // Poora rate card bhejo — dashboard ka rate-card tab isi par bana hai.
     // Pehle sirf baseFare/perKmRate/minimumFare jaate the, isliye waiting,
     // night charge waghera admin ko dikhte hi nahi the.
-    const types = Object.entries(vehicleRates).map(([id, r]) => ({
+    // Band sevayein (truck, ambulance, wedding, thresher) Rate Card mein nahi —
+    // admin unhe "chalu" karta to bhi booking server rok deta, bas bhram hota.
+    // Thresher ab Tractor › Farming ka kaam hai.
+    const RETIRED = require('../config/retiredVehicleTypes');
+    const types = Object.entries(vehicleRates).filter(([id]) => !RETIRED.includes(id)).map(([id, r]) => ({
       id,
       label:        r.label || id,
       icon:         r.icon  || '',
@@ -4585,6 +4593,9 @@ const createVehicleType = async (req, res) => {
 
     if (settings.vehicleRates.has(id)) {
       return res.status(409).json({ success: false, message: `"${id}" vehicle type pehle se maujood hai` });
+    }
+    if (require('../config/retiredVehicleTypes').includes(id)) {
+      return res.status(400).json({ success: false, message: `"${id}" band ki gayi seva hai — doosra naam chuno (thresher Tractor › Farming mein hai)` });
     }
 
     // Naya vehicle bhi poore rate card ke saath bane — warna waiting/night charge
