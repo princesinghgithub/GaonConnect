@@ -5,6 +5,7 @@
 //   node scripts/adminAuth.js set-password <admin-email>   Pehli baar password set karo / bhoola password reset karo
 //   node scripts/adminAuth.js reset-2fa    <admin-email>   Phone kho gaya — Authenticator hatao, agle login pe naya QR aayega
 //   node scripts/adminAuth.js status       <admin-email>   Dekho kya set hai
+//   node scripts/adminAuth.js create       <email> <phone> Naya admin (jaise khaali test database mein)
 //
 // set-password aur reset-2fa sabhi devices se logout bhi karte hain.
 
@@ -13,6 +14,8 @@ const mongoose  = require('mongoose');
 const bcrypt    = require('bcryptjs');
 const dotenv    = require('dotenv');
 
+// Server jaisa: .env.local (apna computer) pehle — wahan test database
+dotenv.config({ path: require('path').join(__dirname, '..', '.env.local') });
 dotenv.config();
 
 const User      = require('../models/User');
@@ -100,7 +103,7 @@ const showStatus = async (user) => {
   if (auth?.lockUntil && auth.lockUntil > new Date()) console.log(`Locked till:     ${auth.lockUntil.toLocaleString()}`);
 };
 
-const COMMANDS = { 'set-password': setPassword, 'reset-2fa': reset2fa, status: showStatus };
+const COMMANDS = { 'set-password': setPassword, 'reset-2fa': reset2fa, status: showStatus, create: setPassword };
 
 const main = async () => {
   const [command, rawEmail] = process.argv.slice(2);
@@ -111,8 +114,23 @@ const main = async () => {
   }
 
   await mongoose.connect(process.env.MONGO_URI);
+  // Kis database par chal raha hai — galti se live par na chale
+  console.log(`📦 Database: ${mongoose.connection.name}`);
 
   const email = rawEmail.trim().toLowerCase();
+
+  // Naya admin (jaise khaali test database mein) — phir password poochhta hai
+  if (command === 'create') {
+    const phone = String(process.argv[4] || '').replace(/[^0-9]/g, '').slice(-10);
+    if (phone.length !== 10) throw new Error('Usage: node scripts/adminAuth.js create <email> <10-digit-phone>');
+    if (await User.findOne({ email })) throw new Error(`${email} pehle se hai — set-password chalao`);
+    const created = await User.create({ name: 'Admin', email, phone, role: 'admin' });
+    console.log(`✅ Admin bana: ${email}`);
+    await setPassword(created);
+    await mongoose.disconnect();
+    process.exit(0);
+  }
+
   const user  = await User.findOne({ email, role: 'admin' });
   if (!user) throw new Error(`${email} naam ka koi admin nahi mila`);
 

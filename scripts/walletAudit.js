@@ -20,6 +20,8 @@
 
 const mongoose = require('mongoose');
 const dotenv   = require('dotenv');
+// Server jaisa: .env.local (apna computer) pehle — wahan test database
+dotenv.config({ path: require('path').join(__dirname, '..', '.env.local') });
 dotenv.config();
 
 const Provider    = require('../models/Provider');
@@ -34,6 +36,8 @@ require('../models/User');
     process.exit(1);
   }
   await mongoose.connect(uri);
+  // Kis database par chal raha hai — galti se live par na chale
+  console.log(`📦 Database: ${mongoose.connection.name}`);
 
   const providers = await Provider.find({ 'wallet.balance': { $ne: 0 } })
     .select('wallet user')

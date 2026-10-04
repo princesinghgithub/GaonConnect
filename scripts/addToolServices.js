@@ -25,6 +25,8 @@ const dotenv   = require('dotenv');
 const Setting  = require('../models/Setting');
 const HOURLY_DEFAULTS = require('../config/hourlyRatesDefaults');
 
+// Server jaisa: .env.local (apna computer) pehle — wahan test database
+dotenv.config({ path: require('path').join(__dirname, '..', '.env.local') });
 dotenv.config();
 
 const DRY = process.argv.includes('--dry-run');
@@ -38,6 +40,8 @@ const plain = (x) => (x && typeof x.toObject === 'function' ? x.toObject() : x);
   }
 
   await mongoose.connect(uri);
+  // Kis database par chal raha hai — galti se live par na chale
+  console.log(`📦 Database: ${mongoose.connection.name}`);
   console.log('DB se jud gaye');
 
   const settings = await Setting.findOne();

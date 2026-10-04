@@ -12,8 +12,13 @@ const retryStrategy = (times) => {
 
 // REDIS_URL set hai (Upstash/cloud) — URL se connect karo
 // Warna local host/port/password use karo
+//
+// REDIS_KEY_PREFIX — local test backend wahi Upstash use kare to apni har
+// key ke aage "dev:" — live server ki settings cache / OTP keys se takraav nahi
+const keyPrefix = process.env.REDIS_KEY_PREFIX || '';
 const redis = process.env.REDIS_URL
   ? new Redis(process.env.REDIS_URL, {
+      keyPrefix,
       lazyConnect:          true,
       maxRetriesPerRequest: 3,
       retryStrategy,
@@ -24,6 +29,7 @@ const redis = process.env.REDIS_URL
       port:                 parseInt(process.env.REDIS_PORT || '6379'),
       password:             process.env.REDIS_PASSWORD || undefined,
       db:                   parseInt(process.env.REDIS_DB   || '0'),
+      keyPrefix,
       lazyConnect:          true,
       maxRetriesPerRequest: 3,
       retryStrategy,
