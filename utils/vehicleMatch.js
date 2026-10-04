@@ -93,12 +93,36 @@ const rideTypesFor = (vehicle) => {
 };
 
 /** Vehicle.find() ke liye filter. */
-const vehicleFilterForRide = (ride) => {
+/**
+ * Upar wali category (Uber/Rapido jaisa): Mini ki booking par paas mein Mini
+ * na mile to Sedan/SUV wala driver bhi le sakta hai — customer ko Mini ke hi
+ * daam mein badi gaadi. Sirf tab jab driver ne mana na kiya ho
+ * (vehicle.servesLowerCategory !== false).
+ *
+ * `variantOrder` — us type ki categories chhoti se badi (admin ka kram,
+ * jaise ['hatchback','sedan','suv']). Na diya to upgrade band — sirf wahi
+ * category.
+ */
+const higherVariants = (ride, variantOrder) => {
+  const order = Array.isArray(variantOrder) ? variantOrder : [];
+  const i = order.indexOf(ride?.vehicleVariant);
+  return i === -1 ? [] : order.slice(i + 1);
+};
+
+const vehicleFilterForRide = (ride, { variantOrder } = {}) => {
   const and = [];
   and.push({
     $or: servers(ride.vehicleType).map((s) => (s.equipment ? { type: s.type, equipment: s.equipment } : { type: s.type })),
   });
-  if (ride.vehicleVariant) and.push({ variant: { $in: [ride.vehicleVariant, '', null] } });
+  if (ride.vehicleVariant) {
+    const higher = higherVariants(ride, variantOrder);
+    and.push({
+      $or: [
+        { variant: { $in: [ride.vehicleVariant, '', null] } },
+        ...(higher.length ? [{ variant: { $in: higher }, servesLowerCategory: { $ne: false } }] : []),
+      ],
+    });
+  }
   if (ride.ac)             and.push({ hasAC: { $ne: false } });
   const need = requiredEquipment(ride);
   if (need.length) {
@@ -143,9 +167,13 @@ const vehicleFilterForRide = (ride) => {
 const chosenEquipment = (ride) => (Array.isArray(ride?.equipment) ? ride.equipment.filter(Boolean) : []);
 
 /** Ek gaadi (document ya plain object) is ride ke liye theek hai ya nahi. */
-const vehicleFitsRide = (vehicle, ride) => {
+const vehicleFitsRide = (vehicle, ride, { variantOrder } = {}) => {
   if (!vehicle || !rideTypesFor(vehicle).includes(ride.vehicleType)) return false;
-  if (ride.vehicleVariant && vehicle.variant && vehicle.variant !== ride.vehicleVariant) return false;
+  if (ride.vehicleVariant && vehicle.variant && vehicle.variant !== ride.vehicleVariant) {
+    const upgrade = higherVariants(ride, variantOrder).includes(vehicle.variant)
+      && vehicle.servesLowerCategory !== false;
+    if (!upgrade) return false;
+  }
   if (ride.ac && vehicle.hasAC === false) return false;
   const need = requiredEquipment(ride);
   const has = Array.isArray(vehicle.equipment) ? vehicle.equipment : [];
@@ -196,6 +224,6 @@ const sanitizeVariant = (vehicleType, raw) => {
 const isRegistrableType = (type) => !SERVED_BY[type] || SERVED_BY[type].some((s) => s.type === type);
 
 module.exports = {
-  vehicleFilterForRide, vehicleFitsRide, requiredEquipment, rideTypesFor, isRegistrableType,
+  vehicleFilterForRide, vehicleFitsRide, requiredEquipment, rideTypesFor, isRegistrableType, higherVariants,
   SERVICE_EQUIPMENT, SERVED_BY, sanitizeEquipment, sanitizeVariant,
 };

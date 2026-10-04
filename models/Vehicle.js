@@ -72,6 +72,13 @@ const VehicleSchema = new mongoose.Schema({
   hasAC: {
     type: Boolean,
   },
+  // Choti category ki booking bhi lunga (Uber/Rapido jaisa) — Sedan/SUV
+  // wale ko Mini ki booking tab jaati hai jab paas mein Mini wala na mile.
+  // Daam customer ki chuni category ka. false = driver ne mana kiya.
+  servesLowerCategory: {
+    type: Boolean,
+    default: true,
+  },
 
   number: {
     type: String,

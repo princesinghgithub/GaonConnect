@@ -5292,8 +5292,12 @@ const assignDriverToRide = async (req, res) => {
 
     // Galat gaadi na jaaye — thresher ka kaam bina thresher wale tractor ko,
     // ya tractor ki booking auto wale ko. Wahi niyam jo dispatch mein lagta hai.
+    // Admin upar wali category de sakta hai (Mini ki booking Sedan ko) —
+    // jab tak driver ne "choti category" band na ki ho
     const { vehicleFitsRide } = require('../utils/vehicleMatch');
-    if (driver.activeVehicle && !vehicleFitsRide(driver.activeVehicle, ride)) {
+    const { getVariantOrder } = require('../utils/dynamicFare');
+    const variantOrder = ride.vehicleVariant ? await getVariantOrder(ride.vehicleType) : [];
+    if (driver.activeVehicle && !vehicleFitsRide(driver.activeVehicle, ride, { variantOrder })) {
       return res.status(400).json({ success: false, message: `Is driver ki gaadi (${driver.activeVehicle.type}) is booking (${ride.vehicleType}${ride.equipment?.length ? ' + ' + ride.equipment.join(', ') : ''}) se match nahi karti` });
     }
 

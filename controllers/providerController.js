@@ -2164,9 +2164,13 @@ exports.updateVehicleEquipment = async (req, res) => {
     if (req.body.horsepower !== undefined && vehicle.type === 'tractor') {
       vehicle.horsepower = cleanHp(req.body.horsepower);
     }
+    // "Choti category ki booking bhi lunga" — driver ki pasand, kaagaz nahi
+    if (typeof req.body.servesLowerCategory === 'boolean') {
+      vehicle.servesLowerCategory = req.body.servesLowerCategory;
+    }
     await vehicle.save();
 
-    res.json({ success: true, message: 'Auzaar update ho gaye', data: vehicle });
+    res.json({ success: true, message: 'Gaadi ki setting update ho gayi', data: vehicle });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

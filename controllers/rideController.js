@@ -7,7 +7,7 @@ const User         = require('../models/User');
 const Notification = require('../models/Notification');
 const Transaction  = require('../models/Transaction');
 const Message      = require('../models/Message');
-const { getDynamicFare, getDynamicHourlyFare, getDynamicWeddingFare, getSettings } = require('../utils/dynamicFare');
+const { getDynamicFare, getDynamicHourlyFare, getDynamicWeddingFare, getSettings, getVariantOrder } = require('../utils/dynamicFare');
 const { vehicleFilterForRide, vehicleFitsRide, rideTypesFor, sanitizeEquipment, sanitizeVariant } = require('../utils/vehicleMatch');
 const EQUIPMENT_DEFAULTS = require('../config/equipmentDefaults');
 const RETIRED_VEHICLE_TYPES = require('../config/retiredVehicleTypes');
@@ -110,8 +110,13 @@ const dispatchRideStage = async (rideId, stageIndex) => {
 
   // Category chuni ho (car → sedan) to sirf usi category ki gaadiyan, aur AC
   // maanga ho to bina-AC wali nahi — niyam utils/vehicleMatch.js mein hain.
+  // Pehla wave sirf usi category ko; usme koi na mile to agle wave se upar
+  // wali category (Mini ki booking Sedan/SUV ko) — Uber/Rapido jaisa. Pehle
+  // hi wave mein bhejte to Sedan wale Mini ki sasti booking le jaate aur
+  // Mini wale khaali baithe rehte.
+  const variantOrder = stageIndex >= 1 && ride.vehicleVariant ? await getVariantOrder(ride.vehicleType) : [];
   const matchingVehicles = await Vehicle.find({
-    ...vehicleFilterForRide(ride), isVerified: true, isActive: true,
+    ...vehicleFilterForRide(ride, { variantOrder }), isVerified: true, isActive: true,
   }).select('_id');
   const matchingVehicleIds = matchingVehicles.map((v) => v._id);
 
@@ -753,10 +758,15 @@ exports.acceptRide = async (req, res) => {
     // provider.activeVehicle null hone wala edge case yahan check nahi karte
     // (data-integrity issue, alag hi baat hai) — sirf tab reject karo jab
     // activeVehicle genuinely set hai par uska type ride se mismatch karta hai.
-    const requestedRide = await Ride.findById(rideId).select('vehicleType vehicleVariant vehicleVariantLabel ac serviceType equipment minHorsepower status pickup provider scheduledAt estimatedHours customer');
+    const requestedRide = await Ride.findById(rideId).select('vehicleType vehicleVariant vehicleVariantLabel ac serviceType equipment minHorsepower status pickup provider scheduledAt estimatedHours customer notifiedDrivers');
     // Pre-booking jiska driver abhi tay nahi
     const isAdvance = requestedRide?.status === 'scheduled' && !requestedRide.provider;
     const openForAccept = requestedRide && (requestedRide.status === 'searching' || isAdvance);
+    // Upar wali category (Sedan wala Mini ki booking) — jab booking use bheji
+    // gayi ho (dispatch ka agla wave), ya khuli pre-booking ho
+    const wasSentToMe = (requestedRide?.notifiedDrivers || []).some((id) => String(id) === String(provider._id));
+    const variantOrder = requestedRide?.vehicleVariant && (wasSentToMe || isAdvance)
+      ? await getVariantOrder(requestedRide.vehicleType) : [];
     if (openForAccept && provider.activeVehicle
         && !rideTypesFor(provider.activeVehicle).includes(requestedRide.vehicleType)) {
       return res.status(400).json({
@@ -769,7 +779,7 @@ exports.acceptRide = async (req, res) => {
     // maangi aur driver ki active gaadi Mini hai. Dispatch aisi request bhejta
     // hi nahi; yeh us haal ke liye hai jab request aane ke baad gaadi badli ho.
     if (openForAccept && provider.activeVehicle
-        && !vehicleFitsRide(provider.activeVehicle, requestedRide)) {
+        && !vehicleFitsRide(provider.activeVehicle, requestedRide, { variantOrder })) {
       return res.status(400).json({
         success: false,
         message: `Yeh request ${requestedRide.vehicleVariantLabel || requestedRide.vehicleVariant || 'doosri category'}${requestedRide.ac ? ' (AC)' : ''} ke liye hai — aapki active gaadi isse match nahi karti`,
@@ -2295,8 +2305,11 @@ exports.getScheduledRidesDriver = async (req, res) => {
       const stages = getRadiusStages(r.vehicleType);
       return calculateDistance(dLat, dLng, pLat, pLng) * 1000 <= stages[stages.length - 1];
     };
+    // Khuli pre-booking mein upar wali category bhi (Sedan wala Mini ki) —
+    // samay hai, aur driver ne "choti category bhi lunga" band na kiya ho
+    const variantOrder = provider.activeVehicle.type === 'car' ? await getVariantOrder('car') : [];
     const fitting = open
-      .filter((r) => vehicleFitsRide(provider.activeVehicle, r))
+      .filter((r) => vehicleFitsRide(provider.activeVehicle, r, { variantOrder }))
       .filter(near)
       .map((r) => ({ ...r.toObject(), mine: false }));
     const mineOut = mine.map((r) => ({ ...r.toObject(), mine: true, scheduledLabel: scheduleLabel(r.scheduledAt) }));

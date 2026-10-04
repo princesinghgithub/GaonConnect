@@ -209,8 +209,21 @@ const getCurrentSurgeInfo = async () => {
   return { active, multiplier, reason };
 };
 
+// ─── Categories ka kram — chhoti se badi (Mini → Sedan → SUV) ────────────────
+// Rate Card mein admin jis kram mein rakhta hai wahi. "Upar wali category"
+// (utils/vehicleMatch.js higherVariants) isi se tay hoti hai.
+const getVariantOrder = async (vehicleType) => {
+  try {
+    const settings = await getSettings();
+    return getVariantsFor(vehicleType, settings?.vehicleRates?.[vehicleType]).map((v) => v.id);
+  } catch {
+    return [];
+  }
+};
+
 module.exports = {
   getSettings,
+  getVariantOrder,
   invalidateSettingsCache,
   getDynamicFare,
   getAllDynamicFares,
