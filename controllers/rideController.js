@@ -360,6 +360,15 @@ exports.createRide = async (req, res) => {
     if (RETIRED_VEHICLE_TYPES.includes(String(vehicleType).toLowerCase())) {
       return res.status(400).json({ success: false, message: 'Yeh seva abhi uplabdh nahi hai. Doosri gaadi chunein.' });
     }
+    // Admin ne dashboard se gaadi band/hata di — purani app ya khula tab ab
+    // bhi wo gaadi bhej sakta hai; booking yahin rukni chahiye
+    {
+      const rates = (await getSettings())?.vehicleRates || {};
+      const r = rates[String(vehicleType).toLowerCase()];
+      if (Object.keys(rates).length && (!r || r.isActive === false)) {
+        return res.status(400).json({ success: false, message: 'Yeh seva abhi band hai. Doosri gaadi chunein.' });
+      }
+    }
 
     const otp          = crypto.randomInt(1000, 9999).toString();
     let   finalDist    = typeof distance === 'object' ? distance.value : (distance || 0);

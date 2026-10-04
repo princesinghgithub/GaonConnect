@@ -4232,6 +4232,58 @@ const addHourlyService = async (req, res) => {
   }
 };
 
+// Kaam/category hatana — sirf tab jab koi chalti ya aane wali booking us par
+// na ho (driver ki screen aur bill usi kaam ke rate se chalte hain). Purani
+// poori hui bookings par asar nahi — unme naam/rate likha hua hai.
+const OPEN_RIDE_STATUSES = ['searching', 'scheduled', 'accepted', 'arrived', 'started', 'working'];
+
+// DELETE /admin/hourly-rates/service  { vehicleType, categoryId, serviceId }
+const deleteHourlyService = async (req, res) => {
+  try {
+    const { vehicleType, categoryId, serviceId } = req.body;
+    const settings = await Setting.findOne();
+    const cats = settings?.hourlyRates?.get(vehicleType);
+    const cat = cats?.find((c) => c.id === categoryId);
+    if (!cat || !(cat.sub || []).some((s) => s.id === serviceId)) {
+      return res.status(404).json({ success: false, message: 'Kaam nahi mila' });
+    }
+    const open = await Ride.countDocuments({ vehicleType, serviceType: serviceId, status: { $in: OPEN_RIDE_STATUSES } });
+    if (open) {
+      return res.status(400).json({ success: false, message: `Is kaam ki ${open} booking abhi chal rahi/aane wali hai — abhi "Customer ko dikhao" band karo, baad mein hatao` });
+    }
+    cat.sub = cat.sub.filter((s) => s.id !== serviceId);
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({ success: true, message: 'Kaam hata diya', data: settings.hourlyRates.get(vehicleType) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// DELETE /admin/hourly-rates/category  { vehicleType, categoryId }
+const deleteServiceCategory = async (req, res) => {
+  try {
+    const { vehicleType, categoryId } = req.body;
+    const settings = await Setting.findOne();
+    const cats = settings?.hourlyRates?.get(vehicleType);
+    if (!cats?.some((c) => c.id === categoryId)) {
+      return res.status(404).json({ success: false, message: 'Category nahi mili' });
+    }
+    const open = await Ride.countDocuments({ vehicleType, serviceCategory: categoryId, status: { $in: OPEN_RIDE_STATUSES } });
+    if (open) {
+      return res.status(400).json({ success: false, message: `Is category ki ${open} booking abhi chal rahi/aane wali hai — pehle uske kaam band karo` });
+    }
+    settings.hourlyRates.set(vehicleType, cats.filter((c) => c.id !== categoryId));
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({ success: true, message: 'Category hata di', data: settings.hourlyRates.get(vehicleType) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // GET /admin/equipment — har gaadi ke auzaar (band wale bhi)
 const getEquipmentAdmin = async (req, res) => {
   try {
@@ -4813,9 +4865,13 @@ const deleteVehicleType = async (req, res) => {
     // Registered vehicles use this type raw (no FK to Setting) — deleting the
     // catalog entry out from under them would silently fall back to 'auto'
     // pricing for their rides. Block until they're reassigned.
-    const inUse = await Vehicle.exists({ type: id });
+    const inUse = await Vehicle.countDocuments({ type: id });
     if (inUse) {
-      return res.status(400).json({ success: false, message: 'Is type ki vehicles registered hain, pehle unhe reassign karo' });
+      return res.status(400).json({ success: false, message: `Is seva ki ${inUse} gaadi registered hai — hatane ki jagah "Band" karo (customer ko nahi dikhegi, driver ka data bacha rahega)` });
+    }
+    const open = await Ride.countDocuments({ vehicleType: id, status: { $in: ['searching', 'scheduled', 'accepted', 'arrived', 'started', 'working'] } });
+    if (open) {
+      return res.status(400).json({ success: false, message: `Is seva ki ${open} booking chal rahi/aane wali hai — pehle Band karo` });
     }
 
     settings.vehicleRates.delete(id);
@@ -5846,6 +5902,8 @@ module.exports = {
   updateHourlyRate,
   addServiceCategory,
   addHourlyService,
+  deleteHourlyService,
+  deleteServiceCategory,
   getEquipmentAdmin,
   saveEquipmentAdmin,
   getVehicleTypes,
