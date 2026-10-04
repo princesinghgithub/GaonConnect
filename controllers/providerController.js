@@ -1232,6 +1232,10 @@ const multer = require('multer');
 const path = require('path');
 const { applyReferralCode } = require('../utils/referral');
 const { sanitizeEquipment, sanitizeVariant } = require('../utils/vehicleMatch');
+const { getEquipmentCatalog } = require('../utils/dynamicFare');
+// Admin ke jode auzaar samet maanya id (band wale nahi)
+const equipmentIdsFor = async (vehicleType) =>
+  (await getEquipmentCatalog(vehicleType, { activeOnly: true })).map((e) => e.id);
 const RETIRED_VEHICLE_TYPES = require('../config/retiredVehicleTypes');
 
 /** HP — sirf samajh mein aane wala number, warna undefined. */
@@ -1641,7 +1645,7 @@ exports.registerProvider = async (req, res) => {
         variant:    sanitizeVariant(vehicleType, req.body.vehicleVariant),
         ...(vehicleType === 'car' && ['true', 'false'].includes(String(req.body.hasAC))
           ? { hasAC: String(req.body.hasAC) === 'true' } : {}),
-        equipment:  sanitizeEquipment(vehicleType, req.body.equipment),
+        equipment:  sanitizeEquipment(vehicleType, req.body.equipment, await equipmentIdsFor(vehicleType)),
         horsepower: vehicleType === 'tractor' ? cleanHp(req.body.horsepower) : undefined,
         documents: {
           rc:      { number: normalizedVehicleNumber, photo: rcPhoto, backPhoto: rcBackPhoto },
@@ -2112,7 +2116,7 @@ exports.addVehicle = async (req, res) => {
       variant: sanitizeVariant(vehicleType, vehicleVariant),
       ...(typeof hasAC === 'boolean' ? { hasAC } : {}),
       // Tractor/JCB ke auzaar aur HP
-      equipment:  sanitizeEquipment(vehicleType, req.body.equipment),
+      equipment:  sanitizeEquipment(vehicleType, req.body.equipment, await equipmentIdsFor(vehicleType)),
       horsepower: vehicleType === 'tractor' ? cleanHp(req.body.horsepower) : undefined,
       isVerified: false,
       isActive:   true,
@@ -2151,7 +2155,7 @@ exports.updateVehicleEquipment = async (req, res) => {
     if (vehicle.providerId.toString() !== provider._id.toString())
       return res.status(403).json({ success: false, message: 'Yeh vehicle aapki nahi hai' });
 
-    const equipment = sanitizeEquipment(vehicle.type, req.body.equipment);
+    const equipment = sanitizeEquipment(vehicle.type, req.body.equipment, await equipmentIdsFor(vehicle.type));
     if (equipment !== undefined) {
       if (vehicle.type === 'tractor' && equipment.length === 0) {
         return res.status(400).json({ success: false, message: 'Kam se kam ek auzaar chunein' });

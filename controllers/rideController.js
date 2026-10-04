@@ -7,7 +7,10 @@ const User         = require('../models/User');
 const Notification = require('../models/Notification');
 const Transaction  = require('../models/Transaction');
 const Message      = require('../models/Message');
-const { getDynamicFare, getDynamicHourlyFare, getDynamicWeddingFare, getSettings, getVariantOrder } = require('../utils/dynamicFare');
+const {
+  getDynamicFare, getDynamicHourlyFare, getDynamicWeddingFare, getSettings, getVariantOrder,
+  getEquipmentCatalog, getServiceEquipment,
+} = require('../utils/dynamicFare');
 const { vehicleFilterForRide, vehicleFitsRide, rideTypesFor, sanitizeEquipment, sanitizeVariant } = require('../utils/vehicleMatch');
 const EQUIPMENT_DEFAULTS = require('../config/equipmentDefaults');
 const RETIRED_VEHICLE_TYPES = require('../config/retiredVehicleTypes');
@@ -549,6 +552,16 @@ exports.createRide = async (req, res) => {
       }
     }
 
+    // Admin ke niyam (Rate Card): is kaam ke liye kaunsa auzaar zaroori, aur
+    // admin ke jode naye auzaar bhi maanya. Ride par likh dete hain — dispatch
+    // inhi se chalta hai.
+    let allowedEquipmentIds;
+    let serviceEquipment = [];
+    if (isServiceBooking) {
+      allowedEquipmentIds = (await getEquipmentCatalog(vehicleType, { activeOnly: true })).map((e) => e.id);
+      serviceEquipment = (await getServiceEquipment(vehicleType))[serviceType] || [];
+    }
+
     const ride = await Ride.create({
       customer: req.user.id,
       pickup: {
@@ -613,12 +626,13 @@ exports.createRide = async (req, res) => {
       // Tractor/JCB — customer ki maang. Anjaan auzaar id hata dete hain,
       // warna aisi booking kisi bhi driver se kabhi match nahi hoti.
       ...(isServiceBooking ? (() => {
-        const eq = sanitizeEquipment(vehicleType, req.body.equipment) || [];
+        const eq = sanitizeEquipment(vehicleType, req.body.equipment, allowedEquipmentIds) || [];
         const hp = Math.round(Number(req.body.minHorsepower) || 0);
         const jcbType = vehicleType === 'jcb' ? sanitizeVariant('jcb', req.body.vehicleVariant) : '';
         const jcbLabel = jcbType ? (EQUIPMENT_DEFAULTS.jcb.variants.find((v) => v.id === jcbType)?.label || '') : '';
         return {
           ...(eq.length ? { equipment: eq } : {}),
+          ...(serviceEquipment.length ? { serviceEquipment } : {}),
           minHorsepower: vehicleType === 'tractor' && hp >= 10 && hp <= 150 ? hp : 0,
           trolleyType: String(req.body.trolleyType || '').slice(0, 40),
           ...(jcbType ? { vehicleVariant: jcbType, vehicleVariantLabel: jcbLabel } : {}),

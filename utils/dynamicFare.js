@@ -26,7 +26,9 @@ const getSettings = async () => {
     // Pehli baar — default document create karo
     if (!settings) {
       settings = await Setting.create({});
-      settings = settings.toObject();
+      // flattenMaps — lean() aur Redis wale rasto jaisa plain object; Map
+      // rehne par settings.hourlyRates[type] jaisi padhai khaali milti
+      settings = settings.toObject({ flattenMaps: true });
     }
 
     // Cache karo 5 minutes ke liye
@@ -221,9 +223,66 @@ const getVariantOrder = async (vehicleType) => {
   }
 };
 
+// ─── Auzaar ki suchi — code ke defaults + admin ke badlav/naye ───────────────
+// Code ki list (config/equipmentDefaults.js) neev hai. Admin dashboard se:
+// naam/photo badle, band kare (isActive:false), ya bilkul naya auzaar jode.
+// Lautata: [{ id, label, labelHi, icon, image, isActive }] — band wale bhi
+// (admin screen ko chahiye); app/booking ke liye `activeOnly`.
+const EQUIPMENT_DEFAULTS = require('../config/equipmentDefaults');
+
+const getEquipmentCatalog = async (vehicleType, { activeOnly = false } = {}) => {
+  const settings = await getSettings();
+  const base = (EQUIPMENT_DEFAULTS[vehicleType]?.equipment || [])
+    .filter((e) => e.id !== 'other')
+    .map((e) => ({ id: e.id, label: e.label, labelHi: '', icon: e.icon || '', image: '', isActive: true }));
+  const custom = settings?.equipmentCatalog?.[vehicleType] || [];
+  const byId = new Map(base.map((e) => [e.id, e]));
+  custom.forEach((c) => {
+    if (!c?.id) return;
+    const prev = byId.get(c.id) || { icon: '' };
+    byId.set(c.id, {
+      id: c.id,
+      label:   c.label || prev.label || c.id,
+      labelHi: c.labelHi || prev.labelHi || '',
+      icon:    prev.icon || '',
+      image:   c.image || '',
+      isActive: c.isActive !== false,
+    });
+  });
+  const list = [...byId.values()];
+  return activeOnly ? list.filter((e) => e.isActive) : list;
+};
+
+/** Kin gaadiyon ke auzaar hote hain — code wale + jinke liye admin ne auzaar jode */
+const getEquipmentVehicleTypes = async () => {
+  const settings = await getSettings();
+  return [...new Set([
+    ...Object.keys(EQUIPMENT_DEFAULTS).filter((t) => (EQUIPMENT_DEFAULTS[t]?.equipment || []).length),
+    ...Object.entries(settings?.equipmentCatalog || {}).filter(([, l]) => Array.isArray(l) && l.length).map(([t]) => t),
+  ])].filter((t) => !RETIRED_VEHICLE_TYPES.includes(t));
+};
+
+// ─── Kaam → zaroori auzaar ───────────────────────────────────────────────────
+// Admin har kaam par "kaunsa auzaar chahiye" chunta hai (sub.requiredEquipment).
+// Na chuna ho to code ka purana niyam (vehicleMatch SERVICE_EQUIPMENT).
+const getServiceEquipment = async (vehicleType) => {
+  const { SERVICE_EQUIPMENT } = require('./vehicleMatch');
+  const settings = await getSettings();
+  const out = { ...(SERVICE_EQUIPMENT[vehicleType] || {}) };
+  (settings?.hourlyRates?.[vehicleType] || []).forEach((cat) => {
+    (cat?.sub || []).forEach((s) => {
+      if (Array.isArray(s?.requiredEquipment) && s.requiredEquipment.length) out[s.id] = s.requiredEquipment;
+    });
+  });
+  return out;
+};
+
 module.exports = {
   getSettings,
   getVariantOrder,
+  getEquipmentCatalog,
+  getEquipmentVehicleTypes,
+  getServiceEquipment,
   invalidateSettingsCache,
   getDynamicFare,
   getAllDynamicFares,

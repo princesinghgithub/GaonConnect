@@ -3073,7 +3073,9 @@ const updateVehicleAdmin = async (req, res) => {
     // Auzaar (tractor/JCB), wedding (car), HP — driver phone par khud na kar
     // paaye to admin uski taraf se. Booking inhi se milti hai.
     const { sanitizeEquipment } = require('../utils/vehicleMatch');
-    const eq = sanitizeEquipment(vehicle.type, req.body.equipment);
+    const { getEquipmentCatalog } = require('../utils/dynamicFare');
+    const eqIds = (await getEquipmentCatalog(vehicle.type)).map((e) => e.id);
+    const eq = sanitizeEquipment(vehicle.type, req.body.equipment, eqIds);
     if (eq !== undefined) vehicle.equipment = eq;
     if (req.body.horsepower !== undefined) {
       const hp = Math.round(Number(req.body.horsepower));
@@ -4072,6 +4074,11 @@ const updateHourlyRate = async (req, res) => {
     }
     if (perAcreRate     !== undefined) service.perAcreRate     = Number(perAcreRate);
     if (isActive        !== undefined) service.isActive        = Boolean(isActive);
+    // Kaam ki photo (URL) aur zaroori auzaar — admin dashboard se
+    if (req.body.image !== undefined) service.image = String(req.body.image || '').slice(0, 500);
+    if (req.body.requiredEquipment !== undefined) {
+      service.requiredEquipment = await cleanEquipmentIds(vehicleType, req.body.requiredEquipment);
+    }
 
     // Category-level: gaadi ko site tak laane ka charge.
     if (travelCharge && typeof travelCharge === 'object') {
@@ -4124,6 +4131,164 @@ const updateHourlyRate = async (req, res) => {
     res.json({ success: true, message: 'Rate update ho gaya! ðŸŽ‰', data: settings.hourlyRates.get(vehicleType) });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Hourly rate update error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+  }
+};
+
+// ─── Dynamic services (Uber/Rapido jaisa — admin khud nayi seva jode) ────────
+// Pehle naya kaam (Mulcher, Paddy Transplanter) ya naya auzaar jodne ke liye
+// code badalna padta tha aur dono app ka naya build. Ab admin dashboard se.
+
+// "Paddy Transplanter" → "paddy_transplanter"
+const slugId = (s) => String(s || '').trim().toLowerCase()
+  .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+
+// Sirf us gaadi ke maujooda auzaar id (admin ke jode samet)
+const cleanEquipmentIds = async (vehicleType, raw) => {
+  const { getEquipmentCatalog } = require('../utils/dynamicFare');
+  const ids = new Set((await getEquipmentCatalog(vehicleType)).map((e) => e.id));
+  const list = Array.isArray(raw) ? raw : [];
+  return [...new Set(list.map((x) => String(x).trim().toLowerCase()).filter((x) => ids.has(x)))];
+};
+
+const SERVICE_UNITS = ['hour', 'acre', 'quintal', 'km', 'job', 'either'];
+const CATEGORY_PRICING = ['hourly', 'per_km', 'per_acre', 'per_quintal', 'fixed'];
+
+// POST /admin/hourly-rates/category  { vehicleType, label, pricingType, id? }
+const addServiceCategory = async (req, res) => {
+  try {
+    const { vehicleType, label, pricingType = 'hourly' } = req.body;
+    const id = slugId(req.body.id || label);
+    if (!vehicleType || !label || !id) {
+      return res.status(400).json({ success: false, message: 'Gaadi aur category ka naam dena zaroori hai' });
+    }
+    if (!CATEGORY_PRICING.includes(pricingType)) {
+      return res.status(400).json({ success: false, message: `pricingType inme se: ${CATEGORY_PRICING.join(', ')}` });
+    }
+    const settings = (await Setting.findOne()) || (await Setting.create({}));
+    if (!settings.vehicleRates.has(vehicleType)) {
+      return res.status(404).json({ success: false, message: 'Ye gaadi Rate Card mein nahi hai — pehle gaadi jodein' });
+    }
+    const cats = settings.hourlyRates.get(vehicleType) || [];
+    if (cats.some((c) => c.id === id)) {
+      return res.status(409).json({ success: false, message: `"${label}" category pehle se hai` });
+    }
+    cats.push({ id, label: String(label).trim(), emoji: '', pricingType, sub: [] });
+    settings.hourlyRates.set(vehicleType, cats);
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({ success: true, message: `Category "${label}" jud gayi — ab isme kaam jodein`, data: settings.hourlyRates.get(vehicleType) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /admin/hourly-rates/service
+// { vehicleType, categoryId, label, unit, rate, minimumHours, minimumQuantity, image, requiredEquipment, isActive }
+const addHourlyService = async (req, res) => {
+  try {
+    if (rejectNegatives(req.body, res)) return;
+    const { vehicleType, categoryId, label, unit = 'hour' } = req.body;
+    const id = slugId(req.body.id || label);
+    if (!vehicleType || !categoryId || !label || !id) {
+      return res.status(400).json({ success: false, message: 'Gaadi, category aur kaam ka naam dena zaroori hai' });
+    }
+    if (!SERVICE_UNITS.includes(unit)) {
+      return res.status(400).json({ success: false, message: `unit inme se: ${SERVICE_UNITS.join(', ')}` });
+    }
+    const settings = (await Setting.findOne()) || (await Setting.create({}));
+    const cats = settings.hourlyRates.get(vehicleType);
+    const cat = cats?.find((c) => c.id === categoryId);
+    if (!cat) return res.status(404).json({ success: false, message: 'Category nahi mili' });
+    // Ek gaadi mein kaam ka id har category mein alag hona chahiye — booking
+    // serviceType se hi pehchaani jaati hai
+    if (cats.some((c) => (c.sub || []).some((s) => s.id === id))) {
+      return res.status(409).json({ success: false, message: `"${label}" naam ka kaam pehle se hai` });
+    }
+    const rate = Number(req.body.rate) || 0;
+    cat.sub.push({
+      id,
+      label: String(label).trim(),
+      rate,
+      unit,
+      minimumHours:    Number(req.body.minimumHours) > 0 ? Number(req.body.minimumHours) : 1,
+      minimumQuantity: Number(req.body.minimumQuantity) > 0 ? Number(req.body.minimumQuantity) : 1,
+      perAcreRate:     Number(req.body.perAcreRate) || 0,
+      image:           String(req.body.image || '').slice(0, 500),
+      requiredEquipment: await cleanEquipmentIds(vehicleType, req.body.requiredEquipment),
+      // Rate 0 par chalu karne ka matlab muft booking — tab tak band
+      isActive:        rate > 0 && req.body.isActive !== false,
+    });
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({
+      success: true,
+      message: rate > 0 ? `"${label}" jud gaya — customer ko dikhne laga` : `"${label}" jud gaya — rate bharkar chalu karein`,
+      data: settings.hourlyRates.get(vehicleType),
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /admin/equipment — har gaadi ke auzaar (band wale bhi)
+const getEquipmentAdmin = async (req, res) => {
+  try {
+    const { getEquipmentCatalog, getEquipmentVehicleTypes } = require('../utils/dynamicFare');
+    const settings = (await Setting.findOne().lean()) || {};
+    // Jin gaadiyon ka kaam ghante/acre se hota hai unke liye bhi — admin
+    // nayi machine (drone) ke auzaar shuru se jod sake
+    const hourlyTypes = Object.keys(settings.hourlyRates || {});
+    const types = [...new Set([...(await getEquipmentVehicleTypes()), ...hourlyTypes])].filter((t) => t !== 'car');
+    const data = {};
+    for (const t of types) data[t] = await getEquipmentCatalog(t);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// PUT /admin/equipment/:vehicleType  { items: [{ id?, label, labelHi, image, isActive }] }
+// Poori suchi save hoti hai. Auzaar hatate nahi, band karte hain — purani
+// gaadiyon aur bookings mein wo id likha hai.
+const saveEquipmentAdmin = async (req, res) => {
+  try {
+    const vehicleType = String(req.params.vehicleType || '').toLowerCase();
+    const items = Array.isArray(req.body.items) ? req.body.items : null;
+    if (!vehicleType || !items) return res.status(400).json({ success: false, message: 'items ki suchi chahiye' });
+
+    const seen = new Set();
+    const clean = [];
+    for (const it of items) {
+      const id = slugId(it.id || it.label);
+      if (!id || id === 'other' || seen.has(id)) continue;
+      if (!String(it.label || '').trim()) {
+        return res.status(400).json({ success: false, message: 'Har auzaar ka naam chahiye' });
+      }
+      seen.add(id);
+      clean.push({
+        id,
+        label:   String(it.label).trim().slice(0, 60),
+        labelHi: String(it.labelHi || '').trim().slice(0, 60),
+        image:   String(it.image || '').slice(0, 500),
+        isActive: it.isActive !== false,
+      });
+    }
+    // Code wala auzaar suchi se gayab ho to bhi "band" maano, mitao nahi
+    const { getEquipmentCatalog } = require('../utils/dynamicFare');
+    (await getEquipmentCatalog(vehicleType)).forEach((e) => {
+      if (!seen.has(e.id)) clean.push({ id: e.id, label: e.label, labelHi: e.labelHi || '', image: e.image || '', isActive: false });
+    });
+
+    const settings = (await Setting.findOne()) || (await Setting.create({}));
+    settings.equipmentCatalog.set(vehicleType, clean);
+    settings.markModified('equipmentCatalog');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({ success: true, message: 'Auzaar save ho gaye', data: await getEquipmentCatalog(vehicleType) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -4407,6 +4572,15 @@ const createVehicleType = async (req, res) => {
 
     if (Array.isArray(hourlyCategories) && hourlyCategories.length > 0) {
       settings.hourlyRates.set(id, hourlyCategories);
+    } else if (['hourly', 'per_acre', 'per_quintal'].includes(pricingType)) {
+      // Kaam wali nayi machine (drone, mulcher…) — ek khaali category taaki
+      // admin turant "+ Naya Kaam" se kaam jod sake. Kaam na ho to customer
+      // ko machine dikhti hi nahi (dynamicFare bookable).
+      settings.hourlyRates.set(id, [{
+        id: 'work', label: 'Kaam', emoji: '',
+        pricingType: pricingType === 'hourly' ? 'hourly' : pricingType,
+        sub: [],
+      }]);
     }
 
     settings.markModified('vehicleRates');
@@ -5670,6 +5844,10 @@ module.exports = {
   updatePricing,
   getHourlyRates,
   updateHourlyRate,
+  addServiceCategory,
+  addHourlyService,
+  getEquipmentAdmin,
+  saveEquipmentAdmin,
   getVehicleTypes,
   createVehicleType,
   updateVehicleType,

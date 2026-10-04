@@ -346,6 +346,12 @@ equipment: {
   type: [String],
   default: undefined
 },
+// Kaam ke liye zaroori auzaar (koi ek) — booking bante waqt admin ke Rate
+// Card niyam se likha jaata hai (utils/vehicleMatch.js requiredEquipment).
+serviceEquipment: {
+  type: [String],
+  default: undefined
+},
 minHorsepower: {
   type: Number,
   default: 0

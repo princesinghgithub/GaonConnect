@@ -71,8 +71,14 @@ const SERVICE_EQUIPMENT = {
 const STRICT_EQUIPMENT = ['thresher'];
 
 /** Is ride ke kaam ke liye kaunse auzaar chalenge — [] matlab koi shart nahi. */
+// Booking bante waqt admin ke niyam (Rate Card → kaam → zaroori auzaar) ride
+// par `serviceEquipment` mein likh diye jaate hain — dispatch sync rehta hai
+// aur baad mein admin niyam badle to chalti booking nahi badalti. Purani
+// ride par field na ho to code ka niyam.
 const requiredEquipment = (ride) =>
-  SERVICE_EQUIPMENT[ride?.vehicleType]?.[ride?.serviceType] || [];
+  (Array.isArray(ride?.serviceEquipment) && ride.serviceEquipment.length
+    ? ride.serviceEquipment
+    : SERVICE_EQUIPMENT[ride?.vehicleType]?.[ride?.serviceType]) || [];
 
 /** Ride ke type ke liye kaun-kaun si gaadi chalti hai: [{type, equipment?}] */
 const servers = (rideType) => SERVED_BY[rideType] || [{ type: rideType }];
@@ -195,7 +201,9 @@ const vehicleFitsRide = (vehicle, ride, { variantOrder } = {}) => {
  * `undefined` lautata hai jab kuch bheja hi nahi gaya — taaki purana app
  * field ko khaali array se overwrite na kare.
  */
-const sanitizeEquipment = (vehicleType, raw) => {
+// `allowedIds` — admin ke jode auzaar samet poori suchi (dynamicFare
+// getEquipmentCatalog). Na di ho to sirf code wali suchi.
+const sanitizeEquipment = (vehicleType, raw, allowedIds) => {
   if (raw === undefined || raw === null || raw === '') return undefined;
   let list = raw;
   if (typeof raw === 'string') {
@@ -203,7 +211,8 @@ const sanitizeEquipment = (vehicleType, raw) => {
   }
   if (!Array.isArray(list)) return undefined;
   const allowed = new Set(
-    (EQUIPMENT_DEFAULTS[vehicleType]?.equipment || []).map((e) => e.id).filter((id) => id !== 'other'),
+    (Array.isArray(allowedIds) ? allowedIds : (EQUIPMENT_DEFAULTS[vehicleType]?.equipment || []).map((e) => e.id))
+      .filter((id) => id !== 'other'),
   );
   return [...new Set(list.map((x) => String(x).trim().toLowerCase()).filter((id) => allowed.has(id)))];
 };

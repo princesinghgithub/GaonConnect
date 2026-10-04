@@ -114,6 +114,11 @@ router.put('/settings', adminController.updateSettings);
 router.put('/pricing', adminController.updatePricing);
 router.get('/hourly-rates', adminController.getHourlyRates);
 router.put('/hourly-rates', adminController.updateHourlyRate);
+// Dynamic seva — naya kaam / nayi category / auzaar, bina app update ke
+router.post('/hourly-rates/category', adminController.addServiceCategory);
+router.post('/hourly-rates/service', adminController.addHourlyService);
+router.get('/equipment', adminController.getEquipmentAdmin);
+router.put('/equipment/:vehicleType', adminController.saveEquipmentAdmin);
 router.get('/vehicle-types', adminController.getVehicleTypes);
 router.post('/vehicle-types', adminController.createVehicleType);
 router.put('/vehicle-types/:id', adminController.updateVehicleType);

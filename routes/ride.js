@@ -104,21 +104,49 @@ router.get('/vehicle-types', async (req, res) => {
 // `serviceEquipment` — kaunse kaam ke saath kaunsa upkaran apne aap chuna
 // jaaye (hal chalana → hal), taaki customer ko ek tap kam karna pade.
 // Public — website bhi dikha sakti hai.
-router.get('/equipment/:vehicleType', (req, res) => {
+// Auzaar admin dashboard se bhi aate hain (naam, Hindi naam, photo URL) —
+// code ki list unki neev hai. `icon` = app ki bundled photo ka id, `image` =
+// admin ki photo (URL); app pehle image, phir icon dikhati hai.
+const equipmentPayload = async (type) => {
   const EQUIPMENT_DEFAULTS = require('../config/equipmentDefaults');
-  const { SERVICE_EQUIPMENT } = require('../utils/vehicleMatch');
-  const type = String(req.params.vehicleType || '').toLowerCase();
-  const conf = EQUIPMENT_DEFAULTS[type];
-  if (!conf || type === 'car') return res.json({ success: true, data: null });
-  return res.json({
-    success: true,
-    data: {
-      equipment:        (conf.equipment || []).filter((e) => e.id !== 'other'),
-      variants:         conf.variants || [],
-      followUps:        conf.followUps || {},
-      serviceEquipment: SERVICE_EQUIPMENT[type] || {},
-    },
-  });
+  const { getEquipmentCatalog, getServiceEquipment } = require('../utils/dynamicFare');
+  const conf = EQUIPMENT_DEFAULTS[type] || {};
+  const equipment = await getEquipmentCatalog(type, { activeOnly: true });
+  if (!equipment.length && !(conf.variants || []).length) return null;
+  return {
+    equipment,
+    variants:         conf.variants || [],
+    followUps:        conf.followUps || {},
+    serviceEquipment: await getServiceEquipment(type),
+  };
+};
+
+// Sab gaadiyon ke auzaar ek saath — driver app registration/"औज़ार बदलें"
+// isi se banti hai (naya auzaar admin jode to app update nahi chahiye).
+router.get('/equipment', async (req, res) => {
+  try {
+    const { getEquipmentVehicleTypes } = require('../utils/dynamicFare');
+    const types = await getEquipmentVehicleTypes();
+    const data = {};
+    for (const t of types) {
+      if (t === 'car') continue;
+      const p = await equipmentPayload(t);
+      if (p) data[t] = p;
+    }
+    return res.json({ success: true, data });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get('/equipment/:vehicleType', async (req, res) => {
+  try {
+    const type = String(req.params.vehicleType || '').toLowerCase();
+    if (type === 'car') return res.json({ success: true, data: null });
+    return res.json({ success: true, data: await equipmentPayload(type) });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // ─── Wedding Car Packages ────────────────────────────────────────────────────

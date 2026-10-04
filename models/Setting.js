@@ -239,6 +239,26 @@ const hourlySubServiceSchema = new mongoose.Schema({
   perAcreRate:     { type: Number, default: 0 },
 
   isActive:        { type: Boolean, default: true },
+
+  // Admin dashboard se jode naye kaam ke liye — app mein photo bundled nahi
+  // hoti, isliye URL (Cloudinary). Khaali = app apni bundled photo / icon.
+  image:           { type: String, default: '' },
+  // Is kaam ke liye kaunsa auzaar chahiye (koi bhi ek) — booking sirf usi
+  // gaadi ko jaati hai jiske paas ho. Khaali = code ka purana niyam
+  // (utils/vehicleMatch.js SERVICE_EQUIPMENT), wo bhi na ho to koi shart nahi.
+  requiredEquipment: { type: [String], default: undefined },
+}, { _id: false });
+
+// ─── Auzaar / attachment (admin-managed) ──────────────────────────────────────
+// Code ki list (config/equipmentDefaults.js) neev hai; yahan admin naam/photo
+// badalta, band karta, ya naya auzaar jodta hai. Driver registration aur
+// customer booking dono isi se bante hain — naye auzaar ke liye app update nahi.
+const equipmentItemSchema = new mongoose.Schema({
+  id:       { type: String, required: true },
+  label:    { type: String, required: true },   // English / Hinglish
+  labelHi:  { type: String, default: '' },      // Hindi — khaali ho to label
+  image:    { type: String, default: '' },      // URL; khaali = app ki bundled photo
+  isActive: { type: Boolean, default: true },
 }, { _id: false });
 
 const hourlyCategorySchema = new mongoose.Schema({
@@ -322,6 +342,13 @@ const SettingSchema = new mongoose.Schema({
     type: Map,
     of: [hourlyCategorySchema],
     default: () => new Map(Object.entries(HOURLY_RATE_DEFAULTS)),
+  },
+
+  // ─── Auzaar (vehicleType → list) — admin ke badlav, defaults ke upar ────────
+  equipmentCatalog: {
+    type: Map,
+    of: [equipmentItemSchema],
+    default: () => new Map(),
   },
 
   // ─── Surge Pricing ───────────────────────────────────────────────────────────
