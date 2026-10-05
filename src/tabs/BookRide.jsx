@@ -84,6 +84,33 @@ const localInputValue = (d) => {
 };
 const UNIT_WORD = { hour: 'ghanta', km: 'km', acre: 'acre', quintal: 'quintal', job: 'poora kaam' };
 
+// ─── Backend ki shakal mein booking ──────────────────────────────────────────
+// Search box jagah ko {addressLine1, addressLine2, location: {latitude,
+// longitude}} deta hai, par backend (apps jaisa) seedha {address, latitude,
+// longitude} maangta hai — aur doori km ka number, {text, value} nahi. Is
+// farak se website ki har booking 400 se gir rahi thi ("pickup.address is
+// required ... distance must be a number"). Bhejne se theek pehle yahin badlo.
+const toRidePoint = (loc) => {
+  if (!loc) return loc;
+  const lat = loc.location?.latitude ?? loc.latitude;
+  const lng = loc.location?.longitude ?? loc.longitude;
+  const address = loc.address
+    || [loc.addressLine1, loc.addressLine2].filter((s) => s && s !== 'Current Location').join(', ')
+    || loc.addressLine2 || loc.addressLine1 || 'Chuni hui jagah';
+  return { address, latitude: Number(lat), longitude: Number(lng) };
+};
+const toKm = (d) => {
+  if (d && typeof d === 'object') return Math.round(((Number(d.value) || 0) / 1000) * 10) / 10;
+  return Math.round((Number(d) || 0) * 10) / 10;
+};
+const toRideBody = (data) => ({
+  ...data,
+  pickup:  toRidePoint(data.pickup),
+  dropoff: toRidePoint(data.dropoff),
+  distance: toKm(data.distance),
+  estimatedDuration: Math.max(0, Math.round(Number(data.estimatedDuration) || 0)),
+});
+
 // Rapido jaisa teen-step flow: pehle kahan se kahan, phir gaadi (daam ke
 // saath), phir confirm. Pehle sab kuch ek hi lambe form mein tha — customer
 // ko pata hi nahi chalta tha ki abhi kya karna hai aur kitna baaki hai.
@@ -159,6 +186,8 @@ const BookRide = () => {
   // customer ek hi screen par compare karke chun sake (Rapido jaisa).
   const [quotes, setQuotes] = useState({});
   const [quotesLoading, setQuotesLoading] = useState(false);
+  // { auto: { tooFar: true, maxTripKm: 40 } } — lambi trip par wo gaadi band
+  const [tripLimits, setTripLimits] = useState({});
   // Car ki categories (Mini / Sedan / SUV) — Uber/Rapido jaisa, har ek apne
   // daam ke saath. Backend fare-estimate har category ka AC / Non-AC daam
   // bhejta hai: [{ id, label, models, seats, options: [{ ac, totalFare }] }]
@@ -390,6 +419,8 @@ const BookRide = () => {
         q[type] = typeof f?.totalFare === 'number' ? f.totalFare : null;
       });
       setQuotes(q);
+      // Is doori ke liye kaun si gaadi nahi chal sakti (auto 40 km tak...)
+      setTripLimits(Object.fromEntries(fares.map((f) => [f.vehicleType, { tooFar: !!f.tooFar, maxTripKm: f.maxTripKm }])));
       const car = fares.find((x) => x.vehicleType === 'car');
       const variants = (Array.isArray(car?.variants) ? car.variants : [])
         .map((v) => ({ ...v, options: (v.options || []).filter((o) => typeof o.totalFare === 'number') }))
@@ -415,6 +446,15 @@ const BookRide = () => {
     return `${selectedCarVariant.label} · ${carAcChosen ? 'AC' : 'Non-AC'}`;
   };
 
+  // Chuni gaadi is doori ke liye nahi (46 km par auto) — pehli chalne wali
+  // sadak ki gaadi par khud aa jao, jaise Rapido list mein sabse upar wali.
+  useEffect(() => {
+    if (!tripLimits[vehicleType]?.tooFar) return;
+    const next = ROAD_VEHICLES.find((t) => tripLimits[t] && !tripLimits[t].tooFar);
+    if (next) handleVehicleChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripLimits]);
+
   const goToVehicleStep = () => {
     if (!pickup) { toast.error('Pickup location select karo'); return; }
     trackEvent('booking_step_view', { step: 'vehicle' });
@@ -429,6 +469,10 @@ const BookRide = () => {
     }
     if (needsDropoff && !dropoff) {
       toast.error('Drop location select karo');
+      return;
+    }
+    if (tripLimits[vehicleType]?.tooFar) {
+      toast.error(`${tripLimits[vehicleType].maxTripKm} km se lambi trip ke liye doosri gaadi chuniye`);
       return;
     }
 
@@ -543,7 +587,7 @@ const BookRide = () => {
           };
         }
 
-        const response = await rideAPI.createRide(rideData);
+        const response = await rideAPI.createRide(toRideBody(rideData));
         if (cancelled) return;
 
         if (response.data.success) {
@@ -645,7 +689,7 @@ const BookRide = () => {
         rideData.scheduledNote = workNote || '';
       }
 
-      const response = await rideAPI.createRide(rideData);
+      const response = await rideAPI.createRide(toRideBody(rideData));
 
       if (response.data.success) {
         trackEvent('booking_confirmed', { vehicle_type: vehicleType, booking_mode: rideData.bookingMode, scheduled: !!scheduledDate });
@@ -812,16 +856,22 @@ const BookRide = () => {
                     const selected = vehicleType === opt.type && (!v || carVariant === v.id);
                     const quote = v ? carOptionOf(v)?.totalFare : quotes[opt.type];
                     const isRoad = ROAD_VEHICLES.includes(opt.type);
+                    const limit = dropoff ? tripLimits[opt.type] : null;
+                    const tooFar = !!limit?.tooFar;
                     return (
                       <div key={opt.key}>
                       <button
                         onClick={() => {
+                          if (tooFar) return;
                           if (vehicleType !== opt.type) handleVehicleChange(opt.type);
                           if (v) { setCarVariant(v.id); setFare(null); setFareBreakdown([]); }
                         }}
                         aria-pressed={selected}
+                        aria-disabled={tooFar}
                         className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition ${
-                          selected
+                          tooFar
+                            ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                            : selected
                             ? 'border-orange-600 bg-orange-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
@@ -846,7 +896,9 @@ const BookRide = () => {
                           <span className="block text-xs text-gray-500 truncate">{v ? (v.models || opt.tagline) : opt.tagline}</span>
                         </span>
                         <span className="shrink-0 text-right">
-                          {isRoad && dropoff ? (
+                          {tooFar ? (
+                            <span className="block text-xs font-semibold text-gray-500">{limit.maxTripKm} km tak hi</span>
+                          ) : isRoad && dropoff ? (
                             quotesLoading && quote === undefined ? (
                               <span className="block h-4 w-12 rounded bg-gray-200 animate-pulse" />
                             ) : typeof quote === 'number' ? (

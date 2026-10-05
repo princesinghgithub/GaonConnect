@@ -1,12 +1,26 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { rideAPI, ratingAPI } from '../services/api';
-import Map from '../tabs/Map';
-import { FaSpinner, FaCar, FaPhone, FaStar, FaMapMarkerAlt } from 'react-icons/fa';
-import { toast } from 'react-hot-toast';
+// components/RideTracking.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// Booking ke baad ki screen — Rapido/Uber web jaisi: upar bada naksha (pickup,
+// drop, driver alag pehchaan ke saath), neeche ek card jo abhi ki haalat batata
+// hai — driver dhundh rahe, driver aa raha (OTP, gaadi ka number, call), safar
+// chal raha, poora (kiraya, bhugtaan, rating).
+//
+// Live: socket se driver ki jagah aur status (backend ke wahi event jo app
+// sunti hai — user_join + join-ride, location_update, rideStatusUpdate), aur
+// 6 second ka poll fallback. Ride khatam hote hi poll band.
+// ─────────────────────────────────────────────────────────────────────────────
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { toast } from 'react-hot-toast';
+import { ArrowLeft, Car, CheckCircle2, Loader2, MapPin, Phone, ShieldCheck, Star, XCircle, CalendarClock } from 'lucide-react';
+import { rideAPI, ratingAPI } from '../services/api';
+import config from '../config/config';
+import Map from '../tabs/Map';
 
-const SOCKET_URL = (import.meta.env.VITE_API_URL || 'https://gaonconnect-backend.onrender.com/api').replace('/api', '');
+const SOCKET_URL = config.apiUrl.replace(/\/api\/?$/, '');
+const ACTIVE = ['searching', 'scheduled', 'accepted', 'arrived', 'started', 'working'];
+const CANCELLABLE = ['scheduled', 'searching', 'accepted', 'arrived'];
 
 const loadRazorpayScript = () =>
   new Promise((resolve) => {
@@ -18,159 +32,131 @@ const loadRazorpayScript = () =>
     document.body.appendChild(script);
   });
 
+const currentUser = () => {
+  try { return JSON.parse(localStorage.getItem('currentUser') || '{}'); } catch { return {}; }
+};
+
+// Driver ki aakhri jagah — GeoJSON [lng, lat]
+const driverPoint = (ride) => {
+  const c = ride?.provider?.currentLocation?.coordinates;
+  if (Array.isArray(c) && c.length === 2 && (c[0] || c[1])) return { lat: c[1], lng: c[0] };
+  return null;
+};
+
+const fmtWhen = (d) => (d ? new Date(d).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '');
+
 const RideTracking = () => {
   const { rideId } = useParams();
   const navigate = useNavigate();
   const [ride, setRide] = useState(null);
-  const [driver, setDriver] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [mapMarkers, setMapMarkers] = useState([]);
-  const [driverMarker, setDriverMarker] = useState(null);
+  const [liveDriver, setLiveDriver] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
   const [paying, setPaying] = useState(false);
   const [stars, setStars] = useState(0);
   const [review, setReview] = useState('');
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [submittingRating, setSubmittingRating] = useState(false);
-  const socketRef = useRef(null);
+  const statusRef = useRef(null);
 
+  const fetchRide = useCallback(async () => {
+    try {
+      const res = await rideAPI.getRideById(rideId);
+      if (res.data?.success) {
+        const r = res.data.data;
+        // Status badla to customer ko batao (driver mila, pahunch gaya...)
+        const prev = statusRef.current;
+        if (prev && prev !== r.status) {
+          if (r.status === 'accepted') toast.success('Driver mil gaya! Aapki taraf aa raha hai');
+          if (r.status === 'arrived') toast.success('Driver pahunch gaya — OTP batayein');
+          if (r.status === 'started') toast('Safar shuru ho gaya', { icon: '🚗' });
+        }
+        statusRef.current = r.status;
+        setRide(r);
+      }
+    } catch (error) {
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        toast.error('Ye ride nahi mili');
+        navigate('/customer', { replace: true });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [rideId, navigate]);
+
+  // Pehli baar + poll (sirf jab tak ride chal rahi hai)
+  const isActive = !ride || ACTIVE.includes(ride.status);
   useEffect(() => {
-    fetchRideDetails();
-    const interval = setInterval(fetchRideDetails, 6000);
+    fetchRide();
+  }, [fetchRide]);
+  useEffect(() => {
+    if (!isActive) return undefined;
+    const t = setInterval(fetchRide, 6000);
+    return () => clearInterval(t);
+  }, [isActive, fetchRide]);
 
-    // Socket.io — real-time driver location
+  // Socket — driver ki live jagah aur turant status
+  useEffect(() => {
+    if (!isActive) return undefined;
     const token = localStorage.getItem('token');
-    const sock = io(SOCKET_URL, {
-      auth: token ? { token } : undefined,
-      transports: ['websocket'],
-    });
+    if (!token) return undefined;
+    // websocket par zabardasti mat karo — Render par upgrade kabhi atak jaata hai
+    const sock = io(SOCKET_URL, { auth: { token } });
     sock.on('connect', () => {
+      sock.emit('user_join');
       sock.emit('join-ride', { rideId });
     });
-    sock.on('location_update', ({ lat, lng }) => {
-      if (lat && lng) {
-        setDriverMarker({ lat, lng, label: '🚗 Driver' });
-      }
+    sock.on('location_update', ({ lat, lng } = {}) => {
+      if (Number.isFinite(lat) && Number.isFinite(lng)) setLiveDriver({ lat, lng });
     });
-    sock.on('ride_status_update', ({ status }) => {
-      if (status) setRide(prev => prev ? { ...prev, status } : prev);
-    });
-    socketRef.current = sock;
+    const refresh = (data) => { if (!data?.rideId || String(data.rideId) === String(rideId)) fetchRide(); };
+    ['rideStatusUpdate', 'rideAccepted', 'rideCancelled', 'scheduledDriverAssigned', 'scheduledRideActivated'].forEach((ev) => sock.on(ev, refresh));
+    return () => sock.disconnect();
+  }, [rideId, isActive, fetchRide]);
 
-    return () => {
-      clearInterval(interval);
-      sock.disconnect();
-    };
-  }, [rideId]);
-
-  useEffect(() => {
-    if (ride) {
-      updateMapMarkers();
-    }
-  }, [ride]);
-
-  const fetchRideDetails = async () => {
-    try {
-      const response = await rideAPI.getRideById(rideId);
-      
-      if (response.data.success) {
-        setRide(response.data.data);
-        
-        if (response.data.data.provider) {
-          setDriver(response.data.data.provider);
-        }
-      }
-      
-      setLoading(false);
-    } catch (error) {
-      console.error('Fetch ride error:', error);
-      setLoading(false);
-      
-      if (error.response?.status === 404) {
-        toast.error('Ride not found');
-        navigate('/customer');
-      }
-    }
-  };
-
-
-
-  const updateMapMarkers = () => {
-    const markers = [];
-
-    if (ride?.pickup?.coordinates) {
-      markers.push({
-        lat: ride.pickup.coordinates.latitude,
-        lng: ride.pickup.coordinates.longitude,
-        label: '🟢 Pickup',
-      });
-    }
-
-    if (ride?.drop?.coordinates) {
-      markers.push({
-        lat: ride.drop.coordinates.latitude,
-        lng: ride.drop.coordinates.longitude,
-        label: '🔴 Drop',
-      });
-    }
-
-    // Driver's last known location from polling
-    const driverLoc = ride?.provider?.currentLocation;
-    if (driverLoc?.latitude && driverLoc?.longitude) {
-      markers.push({ lat: driverLoc.latitude, lng: driverLoc.longitude, label: '🚗 Driver' });
-    }
-
-    setMapMarkers(markers);
-  };
-
-  const handleCancelRide = async () => {
-    // Fee lagegi to pehle saaf batao — pre-booking 1 ghante ke andar cancel
-    // karne par driver ko fee jaati hai. Preview na mile to bhi cancel chale.
+  const handleCancel = async () => {
     let fee = 0;
     try {
       const p = await rideAPI.getCancelPreview(rideId);
       fee = Number(p.data?.data?.fee) || 0;
-    } catch { /* purana backend — bina fee ke sawaal */ }
-    const question = fee > 0
+    } catch { /* fee na mile to bhi cancel ho sake */ }
+    const q = fee > 0
       ? `Abhi cancel karne par ₹${fee} cancellation fee lagegi. Phir bhi cancel karein?`
-      : 'Kya aap sach mein ye booking cancel karna chahte hain?';
-    if (!window.confirm(question)) {
-      return;
-    }
-
+      : 'Kya aap ye booking cancel karna chahte hain?';
+    if (!window.confirm(q)) return;
+    setCancelling(true);
     try {
-      await rideAPI.cancelRide(rideId, 'Cancelled by user');
-      toast.success('Ride cancelled successfully');
-      navigate('/customer');
+      await rideAPI.cancelRide(rideId, 'Customer ne website se cancel kiya');
+      toast.success('Booking cancel ho gayi');
+      fetchRide();
     } catch (error) {
-      console.error('Cancel ride error:', error);
       toast.error(error.response?.data?.message || 'Cancel nahi ho paya, dobara koshish karein');
+    } finally {
+      setCancelling(false);
     }
   };
 
   const handlePayNow = async () => {
     setPaying(true);
     try {
-      const scriptLoaded = await loadRazorpayScript();
-      if (!scriptLoaded) {
-        toast.error('Razorpay load failed. Check your internet connection.');
+      if (!(await loadRazorpayScript())) {
+        toast.error('Payment khul nahi paya — internet check karein');
         return;
       }
-
       const orderRes = await rideAPI.createRazorpayOrder(rideId);
       if (!orderRes.data.success) {
-        toast.error(orderRes.data.message || 'Could not start payment');
+        toast.error(orderRes.data.message || 'Payment shuru nahi ho paya');
         return;
       }
       const { order, key } = orderRes.data;
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-
+      const user = currentUser();
       const rzp = new window.Razorpay({
         key,
         amount: order.amount,
         currency: order.currency,
         order_id: order.id,
         name: 'GaonConnect',
-        description: 'Ride Fare Payment',
+        description: 'Ride ka kiraya',
         prefill: { name: user.name, contact: user.phone, email: user.email },
         theme: { color: '#ea580c' },
         handler: async (response) => {
@@ -181,39 +167,36 @@ const RideTracking = () => {
               razorpaySignature: response.razorpay_signature,
             });
             if (verifyRes.data.success) {
-              toast.success('Payment successful!');
-              fetchRideDetails();
+              toast.success('Bhugtaan ho gaya!');
+              fetchRide();
             } else {
-              toast.error('Payment verification failed');
+              toast.error('Bhugtaan jaanch fail hui');
             }
-          } catch (err) {
-            console.error('Verify payment error:', err);
-            toast.error('Payment verification failed');
+          } catch {
+            toast.error('Bhugtaan jaanch fail hui');
           }
         },
-        modal: {
-          ondismiss: () => toast.error('Payment cancelled'),
-        },
+        modal: { ondismiss: () => toast('Bhugtaan beech mein band kiya') },
       });
       rzp.open();
     } catch (error) {
-      console.error('Razorpay order error:', error);
-      toast.error(error.response?.data?.message || 'Payment failed to start');
+      toast.error(error.response?.data?.message || 'Payment shuru nahi ho paya');
     } finally {
       setPaying(false);
     }
   };
 
   const handleSubmitRating = async () => {
-    if (stars === 0) return;
+    if (!stars) return;
     setSubmittingRating(true);
     try {
       await ratingAPI.submitRating(rideId, stars, review.trim() || undefined);
       setRatingSubmitted(true);
-      toast.success('Thanks for your feedback!');
+      toast.success('Shukriya!');
     } catch (error) {
-      console.error('Submit rating error:', error);
-      toast.error('Failed to submit rating');
+      // Pehle hi de chuke ho to bhi "ho gaya" maano
+      if (error.response?.status === 400) setRatingSubmitted(true);
+      else toast.error('Rating nahi bhej paaye');
     } finally {
       setSubmittingRating(false);
     }
@@ -221,310 +204,210 @@ const RideTracking = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
-          <FaSpinner className="text-6xl text-orange-600 animate-spin mx-auto mb-4" />
-          <p className="text-xl text-gray-600">Loading ride details...</p>
-        </div>
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <Loader2 className="h-10 w-10 animate-spin text-orange-600" />
       </div>
     );
   }
 
   if (!ride) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
-          <p className="text-2xl text-gray-600 mb-4">Ride not found</p>
-          <button
-            onClick={() => navigate('/customer')}
-            className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-          >
-            Go to Dashboard
-          </button>
-        </div>
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-gray-50 px-6 text-center">
+        <p className="text-xl font-bold text-gray-800">Ride nahi mili</p>
+        <button onClick={() => navigate('/customer')} className="rounded-xl bg-gray-900 px-6 py-3 font-bold text-white">Nayi booking</button>
       </div>
     );
   }
 
+  const status = ride.status;
+  const drv = ride.provider;
+  const drvUser = drv?.user || {};
+  const vehicle = ride.vehicle || {};
+  const driverAt = liveDriver || driverPoint(ride);
+  const pickup = ride.pickup?.coordinates || {};
+  const drop = ride.drop?.coordinates || {};
+  const atSite = ride.workAtPickup || (pickup.latitude === drop.latitude && pickup.longitude === drop.longitude);
+  const showDriver = drv && ['scheduled', 'accepted', 'arrived', 'started', 'working'].includes(status);
+
+  const markers = [
+    { lat: pickup.latitude, lng: pickup.longitude, kind: 'pickup', label: 'Pickup' },
+    ...(!atSite ? [{ lat: drop.latitude, lng: drop.longitude, kind: 'drop', label: 'Drop' }] : []),
+    ...(driverAt && ['accepted', 'arrived', 'started', 'working'].includes(status) ? [{ ...driverAt, kind: 'driver', label: drvUser.name || 'Driver' }] : []),
+  ];
+
+  const head = {
+    searching: { icon: <Loader2 className="animate-spin" />, tone: 'amber', title: 'Aapke liye driver dhundh rahe hain', sub: 'Paas ke drivers ko request bheji gayi hai — aam taur par 1-2 minute' },
+    scheduled: drv
+      ? { icon: <CalendarClock />, tone: 'green', title: 'Pre-booking pakki', sub: `${drvUser.name || 'Driver'} ${fmtWhen(ride.scheduledAt)} ko aayenge` }
+      : { icon: <CalendarClock />, tone: 'amber', title: 'Pre-booking ho gayi', sub: `${fmtWhen(ride.scheduledAt)} ke liye driver tay ho rahe hain` },
+    accepted: { icon: <Car />, tone: 'green', title: 'Driver aa raha hai', sub: 'Pickup par pahunchne par OTP batayein' },
+    arrived:  { icon: <MapPin />, tone: 'blue', title: 'Driver pahunch gaya', sub: 'Gaadi ka number milaayein aur OTP batayein' },
+    started:  { icon: <Car />, tone: 'blue', title: atSite ? 'Kaam chal raha hai' : 'Safar chal raha hai', sub: atSite ? '' : `Manzil: ${ride.drop?.address || ''}` },
+    working:  { icon: <Car />, tone: 'blue', title: 'Kaam chal raha hai', sub: 'Jitna kaam hoga utna hi paisa lagega' },
+    completed:{ icon: <CheckCircle2 />, tone: 'green', title: atSite ? 'Kaam poora hua' : 'Aap pahunch gaye', sub: 'GaonConnect chunne ke liye shukriya' },
+    cancelled:{ icon: <XCircle />, tone: 'red', title: 'Booking cancel ho gayi', sub: ride.cancellationReason || '' },
+  }[status] || { icon: <Loader2 className="animate-spin" />, tone: 'amber', title: status, sub: '' };
+  const toneCls = { amber: 'bg-amber-100 text-amber-700', green: 'bg-green-100 text-green-700', blue: 'bg-blue-100 text-blue-700', red: 'bg-red-100 text-red-700' }[head.tone];
+
+  const vehicleLabel = [ride.vehicleVariantLabel || ride.vehicleType, ride.vehicleType === 'car' && ride.ac !== undefined ? (ride.ac ? 'AC' : 'Non-AC') : null].filter(Boolean).join(' · ');
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 space-y-6">
-        
-        {/* Status Header */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <StatusCard status={ride.status} driver={driver} otp={ride.otp} scheduledAt={ride.scheduledAt} />
-        </div>
+    <div className="min-h-screen bg-gray-100 lg:grid lg:h-screen lg:grid-cols-[1fr_440px]">
+      {/* ── Naksha ── */}
+      <div className="relative h-[42vh] lg:h-full">
+        <Map markers={markers} fit height="100%" zoomPosition="topright" center={[pickup.latitude || 20.59, pickup.longitude || 78.96]} zoom={14} />
+        <button
+          onClick={() => navigate('/customer')}
+          className="absolute left-4 top-4 z-[500] flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-lg"
+          aria-label="Wapas"
+        >
+          <ArrowLeft size={20} />
+        </button>
+      </div>
 
-        {/* Map */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="h-96">
-            <Map
-              center={[
-                ride.pickup.coordinates.latitude,
-                ride.pickup.coordinates.longitude
-              ]}
-              zoom={13}
-              markers={[
-                ...mapMarkers.filter(m => !m.label?.includes('Driver')),
-                ...(driverMarker ? [driverMarker] : mapMarkers.filter(m => m.label?.includes('Driver'))),
-              ]}
-            />
+      {/* ── Card ── */}
+      <div className="relative -mt-6 rounded-t-3xl bg-white px-5 pb-10 pt-6 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] lg:mt-0 lg:overflow-y-auto lg:rounded-none lg:shadow-none">
+        <div className="flex items-start gap-4">
+          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${toneCls}`}>{head.icon}</div>
+          <div className="min-w-0">
+            <h1 className="text-xl font-black text-gray-900">{head.title}</h1>
+            {head.sub && <p className="mt-1 text-sm text-gray-500">{head.sub}</p>}
           </div>
         </div>
 
-        {/* Driver Info (if assigned) */}
-        {driver && (
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Your Driver</h3>
-            <DriverCard driver={driver} />
+        {status === 'searching' && (
+          <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-amber-100">
+            <div className="h-full w-1/3 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-amber-500" />
           </div>
         )}
 
-        {/* Ride Details */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Trip Details</h3>
-          <div className="space-y-4">
-            <div className="flex items-start space-x-3">
-              <FaMapMarkerAlt className="text-green-600 mt-1" />
-              <div className="flex-1">
-                <p className="text-sm text-gray-600">Pickup</p>
-                <p className="font-semibold text-gray-900">{ride.pickup.address}</p>
-              </div>
+        {/* OTP — driver mile tabhi se dikhe (Rapido jaisa) */}
+        {['accepted', 'arrived'].includes(status) && ride.otp && (
+          <div className="mt-5 flex items-center justify-between rounded-2xl bg-gray-900 px-5 py-4 text-white">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/60">Safar ka OTP</p>
+              <p className="text-xs text-white/60">Driver ko batayein, kisi aur ko nahi</p>
             </div>
-            
-            <div className="flex items-start space-x-3">
-              <FaMapMarkerAlt className="text-red-600 mt-1" />
-              <div className="flex-1">
-                <p className="text-sm text-gray-600">Drop</p>
-                <p className="font-semibold text-gray-900">{ride.drop.address}</p>
-              </div>
-            </div>
+            <p className="text-3xl font-black tracking-[0.3em]">{ride.otp}</p>
+          </div>
+        )}
 
-            <div className="pt-4 border-t flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">Distance</p>
-                <p className="font-semibold text-gray-900">
-                  {(ride.distance / 1000).toFixed(1)} km
+        {/* Driver + gaadi */}
+        {showDriver && (
+          <div className="mt-5 rounded-2xl border border-gray-100 p-4">
+            <div className="flex items-center gap-4">
+              {drvUser.profilePhoto ? (
+                <img src={drvUser.profilePhoto} alt="" className="h-14 w-14 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-orange-100 text-xl font-black text-orange-700">
+                  {(drvUser.name || 'D').charAt(0)}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-lg font-bold text-gray-900">{drvUser.name || 'Driver'}</p>
+                <p className="flex items-center gap-1 text-sm text-gray-500">
+                  <Star size={14} className="fill-amber-400 text-amber-400" />
+                  {drv.rating?.count ? `${Number(drv.rating.average).toFixed(1)} (${drv.rating.count})` : 'Naya driver'}
                 </p>
               </div>
-              
-              <div>
-                <p className="text-sm text-gray-600">Vehicle Type</p>
-                <p className="font-semibold text-gray-900 capitalize">
-                  {ride.vehicleType}
-                </p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-600">Fare</p>
-                <p className="text-2xl font-bold text-orange-600">₹{ride.fare}</p>
-              </div>
+              {drvUser.phone && (
+                <a href={`tel:+91${String(drvUser.phone).slice(-10)}`} className="flex h-12 w-12 items-center justify-center rounded-full bg-green-600 text-white shadow" aria-label="Driver ko call karein">
+                  <Phone size={20} />
+                </a>
+              )}
             </div>
+            {(vehicle.number || vehicle.model) && (
+              <div className="mt-4 flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+                <span className="text-sm text-gray-600">{[vehicle.color, vehicle.model].filter(Boolean).join(' ') || vehicleLabel}</span>
+                {vehicle.number && <span className="rounded-md border-2 border-gray-900 bg-yellow-300 px-2 py-0.5 font-mono text-sm font-black tracking-wider text-gray-900">{vehicle.number}</span>}
+              </div>
+            )}
+          </div>
+        )}
 
-            <div className="pt-2 flex justify-between items-center text-sm">
-              <span className="text-gray-600">Payment</span>
-              <span className="font-semibold text-gray-900">
-                {ride.paymentMethod === 'online'
-                  ? (ride.paymentStatus === 'paid' ? '✅ Paid Online' : '⏳ Online — Pending')
-                  : '💵 Cash'}
-              </span>
+        {/* Safar ki jaankari */}
+        <div className="mt-5 space-y-3 rounded-2xl border border-gray-100 p-4">
+          <div className="flex gap-3">
+            <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-green-600" />
+            <div className="min-w-0"><p className="text-xs text-gray-400">{atSite ? 'Kaam ki jagah' : 'Pickup'}</p><p className="text-sm font-semibold text-gray-800">{ride.pickup?.address}</p></div>
+          </div>
+          {!atSite && (
+            <div className="flex gap-3">
+              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" />
+              <div className="min-w-0"><p className="text-xs text-gray-400">Drop</p><p className="text-sm font-semibold text-gray-800">{ride.drop?.address}</p></div>
             </div>
+          )}
+          <div className="flex items-center justify-between border-t border-gray-100 pt-3 text-sm">
+            <span className="text-gray-500"><span className="capitalize">{vehicleLabel}</span>{ride.distance ? ` · ${Number(ride.distance).toFixed(1)} km` : ''}</span>
+            <span className="text-lg font-black text-gray-900">₹{ride.fare}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-500">Bhugtaan</span>
+            <span className="font-semibold text-gray-800">
+              {ride.paymentMethod === 'online' ? (ride.paymentStatus === 'paid' ? '✅ Online — ho gaya' : 'Online') : '💵 Cash'}
+            </span>
           </div>
         </div>
 
-        {/* Pay Now (online payment due after trip) */}
-        {ride.status === 'completed' && ride.paymentMethod === 'online' && ride.paymentStatus !== 'paid' && (
-          <button
-            onClick={handlePayNow}
-            disabled={paying}
-            className="w-full bg-orange-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-orange-700 transition disabled:opacity-50"
-          >
-            {paying ? 'Opening Payment...' : `Pay ₹${ride.fare} Now`}
+        {/* Online bhugtaan baaki */}
+        {status === 'completed' && ride.paymentMethod === 'online' && ride.paymentStatus !== 'paid' && (
+          <button onClick={handlePayNow} disabled={paying} className="mt-5 w-full rounded-xl bg-gray-900 py-4 text-lg font-bold text-white disabled:opacity-50">
+            {paying ? 'Khul raha hai...' : `₹${ride.fare} abhi bharein`}
           </button>
         )}
 
-        {/* Cancel Button */}
-        {['scheduled', 'searching', 'accepted', 'arrived'].includes(ride.status) && (
-          <button
-            onClick={handleCancelRide}
-            className="w-full bg-red-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-red-700 transition"
-          >
-            Cancel Ride
-          </button>
-        )}
-
-        {/* Completed/Cancelled Message */}
-        {ride.status === 'completed' && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
-            <p className="text-2xl font-bold text-green-700 mb-2">Trip Completed! ✅</p>
-            <p className="text-gray-700">Thank you for riding with us</p>
-
-            {!ratingSubmitted ? (
-              <div className="mt-6 bg-white rounded-xl p-5 text-left">
-                <p className="font-semibold text-gray-900 mb-3 text-center">Rate your driver</p>
-                <div className="flex justify-center gap-2 mb-3">
+        {/* Rating */}
+        {status === 'completed' && drv && (
+          <div className="mt-5 rounded-2xl bg-amber-50 p-5 text-center">
+            {!ratingSubmitted && !ride.rating?.customerRating ? (
+              <>
+                <p className="font-bold text-gray-900">{drvUser.name || 'Driver'} ko kaisa raha?</p>
+                <div className="mt-3 flex justify-center gap-2">
                   {[1, 2, 3, 4, 5].map((s) => (
-                    <button key={s} onClick={() => setStars(s)} className="text-3xl leading-none">
-                      <span style={{ color: s <= stars ? '#F5A623' : '#ddd' }}>★</span>
+                    <button key={s} onClick={() => setStars(s)} aria-label={`${s} star`}>
+                      <Star size={34} className={s <= stars ? 'fill-amber-400 text-amber-400' : 'text-gray-300'} />
                     </button>
                   ))}
                 </div>
                 {stars > 0 && (
-                  <textarea
-                    value={review}
-                    onChange={(e) => setReview(e.target.value)}
-                    placeholder="Share feedback (optional)"
-                    maxLength={200}
-                    className="w-full border border-gray-200 rounded-lg p-3 text-sm mb-3"
-                    rows={2}
-                  />
+                  <>
+                    <textarea
+                      value={review}
+                      onChange={(e) => setReview(e.target.value)}
+                      placeholder="Kuch kehna chahenge? (zaroori nahi)"
+                      maxLength={200}
+                      rows={2}
+                      className="mt-3 w-full rounded-xl border border-gray-200 bg-white p-3 text-sm"
+                    />
+                    <button onClick={handleSubmitRating} disabled={submittingRating} className="mt-3 w-full rounded-xl bg-gray-900 py-3 font-bold text-white disabled:opacity-50">
+                      {submittingRating ? 'Bhej rahe hain...' : 'Rating bhejein'}
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={handleSubmitRating}
-                  disabled={stars === 0 || submittingRating}
-                  className="w-full bg-orange-600 text-white py-3 rounded-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
-                >
-                  {submittingRating ? 'Submitting...' : 'Submit Rating'}
-                </button>
-              </div>
+              </>
             ) : (
-              <p className="mt-4 text-green-700 font-semibold">🙏 Thanks for your feedback!</p>
+              <p className="font-semibold text-green-700">🙏 Rating ke liye shukriya!</p>
             )}
-
-            <button
-              onClick={() => navigate('/customer')}
-              className="mt-4 px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              Back to Dashboard
-            </button>
           </div>
         )}
 
-        {ride.status === 'cancelled' && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-            <p className="text-2xl font-bold text-red-700 mb-2">Ride Cancelled</p>
-            <p className="text-gray-700">Reason: {ride.cancellationReason || 'No reason provided'}</p>
-            <button
-              onClick={() => navigate('/customer')}
-              className="mt-4 px-8 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700"
-            >
-              Back to Dashboard
-            </button>
-          </div>
+        {/* Cancel */}
+        {CANCELLABLE.includes(status) && (
+          <button onClick={handleCancel} disabled={cancelling} className="mt-5 w-full rounded-xl border-2 border-gray-200 py-3.5 font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
+            {cancelling ? 'Cancel ho raha hai...' : 'Booking cancel karein'}
+          </button>
         )}
-      </div>
-    </div>
-  );
-};
 
-// Helper Components
-const StatusCard = ({ status, driver, otp, scheduledAt }) => {
-  const whenText = scheduledAt
-    ? new Date(scheduledAt).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-    : '';
-  const statusConfig = {
-    // Pre-booking — driver tay hua ya abhi dhundh rahe hain
-    scheduled: driver ? {
-      color: 'green',
-      icon: '📅',
-      title: 'Pre-Booking Pakki!',
-      description: `${driver.user?.name || 'Driver'} ${whenText} ko aayenge. Samay se 1 ghanta pehle tak cancel muft.`
-    } : {
-      color: 'yellow',
-      icon: '📅',
-      title: 'Pre-Booking Ho Gayi',
-      description: `${whenText} ke liye driver dhundh rahe hain — tay hote hi yahan dikhega.`
-    },
-    working: {
-      color: 'blue',
-      icon: <FaCar />,
-      title: 'Kaam Chal Raha Hai',
-      description: 'Jitna samay kaam hoga, utna hi paisa lagega'
-    },
-    searching: {
-      color: 'yellow',
-      icon: <FaSpinner className="animate-spin" />,
-      title: 'Finding Driver...',
-      description: 'We are searching for nearby drivers'
-    },
-    accepted: {
-      color: 'green',
-      icon: <FaCar />,
-      title: 'Driver Accepted!',
-      description: 'Your driver is on the way to pickup location'
-    },
-    arrived: {
-      color: 'blue',
-      icon: <FaMapMarkerAlt />,
-      title: 'Driver Arrived!',
-      description: 'Your driver is waiting at pickup location'
-    },
-    started: {
-      color: 'blue',
-      icon: <FaCar />,
-      title: 'Trip Started',
-      description: 'Enjoy your ride!'
-    },
-    completed: {
-      color: 'green',
-      icon: '✅',
-      title: 'Trip Completed',
-      description: 'Thank you for riding with us'
-    },
-    cancelled: {
-      color: 'red',
-      icon: '❌',
-      title: 'Ride Cancelled',
-      description: 'This ride has been cancelled'
-    }
-  };
+        {['completed', 'cancelled'].includes(status) && (
+          <button onClick={() => navigate('/customer')} className="mt-4 w-full rounded-xl bg-orange-600 py-4 text-lg font-bold text-white hover:bg-orange-700">
+            Nayi booking karein
+          </button>
+        )}
 
-  const config = statusConfig[status] || statusConfig.searching;
-
-  return (
-    <div className="text-center">
-      <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full bg-${config.color}-100 text-${config.color}-600 text-3xl mb-4`}>
-        {config.icon}
-      </div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">{config.title}</h2>
-      <p className="text-gray-600 mb-4">{config.description}</p>
-      
-      {status === 'arrived' && otp && (
-        <div className="mt-6 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl">
-          <p className="text-sm text-gray-600 mb-2">Share this OTP with driver</p>
-          <p className="text-5xl font-bold text-blue-600 tracking-widest">{otp}</p>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const DriverCard = ({ driver }) => {
-  return (
-    <div className="flex items-center space-x-4 p-4 bg-gradient-to-r from-orange-50 to-yellow-50 rounded-xl">
-      <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-orange-600 rounded-full flex items-center justify-center text-white font-bold text-2xl">
-        {driver.user?.name?.charAt(0) || 'D'}
-      </div>
-      <div className="flex-1">
-        <h3 className="font-bold text-lg text-gray-900">
-          {driver.user?.name || 'Driver'}
-        </h3>
-        <p className="text-sm text-gray-600">
-          {driver.vehicle?.type} • {driver.vehicle?.number}
+        <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-gray-400">
+          <ShieldCheck size={14} /> Safar ke dauran madad: <a href="tel:112" className="font-semibold">112</a>
         </p>
-        <div className="flex items-center mt-1">
-          <FaStar className="text-yellow-500 mr-1 text-sm" />
-          <span className="text-sm font-semibold text-gray-700">
-            {driver.rating?.average?.toFixed(1) || 'New'}
-          </span>
-          <span className="text-xs text-gray-500 ml-1">
-            ({driver.rating?.count || 0} trips)
-          </span>
-        </div>
       </div>
-      <button className="bg-green-600 text-white p-4 rounded-full hover:bg-green-700 transition shadow-lg">
-        <FaPhone />
-      </button>
     </div>
   );
 };

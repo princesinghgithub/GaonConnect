@@ -1,329 +1,310 @@
-// import React, { useState } from 'react';
-// import { Phone, ArrowRight, Lock } from 'lucide-react';
-
-// const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
-//   const [phone, setPhone] = useState('');
-//   const [showOTP, setShowOTP] = useState(false);
-//   const [otp, setOtp] = useState('');
-//   const [loading, setLoading] = useState(false);
-
-//   const handleSendOTP = (e) => {
-//     e.preventDefault();
-    
-//     // Validation
-//     if (phone.length !== 10) {
-//       alert('Please enter valid 10-digit phone number');
-//       return;
-//     }
-
-//     setLoading(true);
-    
-//     // Simulate API call
-//     setTimeout(() => {
-//       setShowOTP(true);
-//       setLoading(false);
-//       alert('OTP sent to your phone: 123456 (Demo)');
-//     }, 1000);
-//   };
-
-//   const handleVerifyOTP = (e) => {
-//     e.preventDefault();
-    
-//     if (otp.length !== 6) {
-//       alert('Please enter 6-digit OTP');
-//       return;
-//     }
-
-//     setLoading(true);
-    
-//     // Simulate API call
-//     setTimeout(() => {
-//       // Demo verification
-//       if (otp === '123456') {
-//         const userData = {
-//           phone: phone,
-//           name: 'Demo User',
-//           role: 'customer'
-//         };
-//         localStorage.setItem('user', JSON.stringify(userData));
-//         onLoginSuccess(userData);
-//         alert('Login Successful! 🎉');
-//       } else {
-//         alert('Invalid OTP. Try: 123456');
-//       }
-//       setLoading(false);
-//     }, 1000);
-//   };
-
-//   return (
-//     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center p-4">
-//       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-//         {/* Logo */}
-//         <div className="text-center mb-8">
-//           <div className="text-6xl mb-4">🚜</div>
-//           <h1 className="text-3xl font-bold text-gray-800">GaonConnect</h1>
-//           <p className="text-gray-600 mt-2">आपकी गाड़ी आपकी सेवा</p>
-//         </div>
-
-//         {!showOTP ? (
-//           // Phone Number Form
-//           <form onSubmit={handleSendOTP}>
-//             <div className="mb-6">
-//               <label className="block text-sm font-semibold text-gray-700 mb-2">
-//                 Mobile Number
-//               </label>
-//               <div className="relative">
-//                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-//                   <Phone className="h-5 w-5 text-gray-400" />
-//                 </div>
-//                 <input
-//                   type="tel"
-//                   value={phone}
-//                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-//                   placeholder="Enter 10-digit number"
-//                   className="pl-10 w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
-//                   maxLength="10"
-//                   required
-//                 />
-//               </div>
-//               <p className="text-xs text-gray-500 mt-2">
-//                 We'll send you an OTP to verify your number
-//               </p>
-//             </div>
-
-//             <button
-//               type="submit"
-//               disabled={loading || phone.length !== 10}
-//               className="w-full bg-gradient-to-r from-orange-600 to-yellow-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-//             >
-//               {loading ? 'Sending OTP...' : 'Send OTP'}
-//               <ArrowRight size={20} />
-//             </button>
-//           </form>
-//         ) : (
-//           // OTP Verification Form
-//           <form onSubmit={handleVerifyOTP}>
-//             <div className="mb-6">
-//               <label className="block text-sm font-semibold text-gray-700 mb-2">
-//                 Enter OTP
-//               </label>
-//               <div className="relative">
-//                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-//                   <Lock className="h-5 w-5 text-gray-400" />
-//                 </div>
-//                 <input
-//                   type="text"
-//                   value={otp}
-//                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-//                   placeholder="Enter 6-digit OTP"
-//                   className="pl-10 w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none text-center text-2xl tracking-widest font-bold"
-//                   maxLength="6"
-//                   required
-//                 />
-//               </div>
-//               <p className="text-xs text-gray-500 mt-2">
-//                 OTP sent to +91 {phone}
-//               </p>
-//               <button
-//                 type="button"
-//                 onClick={() => setShowOTP(false)}
-//                 className="text-sm text-orange-600 hover:underline mt-2"
-//               >
-//                 Change number
-//               </button>
-//             </div>
-
-//             <button
-//               type="submit"
-//               disabled={loading || otp.length !== 6}
-//               className="w-full bg-gradient-to-r from-orange-600 to-yellow-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-//             >
-//               {loading ? 'Verifying...' : 'Verify & Login'}
-//             </button>
-
-//             <button
-//               type="button"
-//               onClick={handleSendOTP}
-//               className="w-full mt-3 text-orange-600 font-semibold hover:underline"
-//             >
-//               Resend OTP
-//             </button>
-//           </form>
-//         )}
-
-//         {/* Register Link */}
-//         <div className="mt-6 text-center">
-//           <p className="text-gray-600">
-//             Don't have an account?{' '}
-//             <button
-//               onClick={onSwitchToRegister}
-//               className="text-orange-600 font-bold hover:underline"
-//             >
-//               Register Now
-//             </button>
-//           </p>
-//         </div>
-
-//         {/* Demo Info */}
-//         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-//           <p className="text-sm text-blue-800 font-semibold mb-2">🎯 Demo Mode:</p>
-//           <p className="text-xs text-blue-700">
-//             • Enter any 10-digit number<br/>
-//             • Use OTP: <span className="font-bold">123456</span>
-//           </p>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default LoginForm;
-import React, { useState } from 'react';
+// components/auth/LoginForm.jsx
+// ─────────────────────────────────────────────────────────────────────────────
+// Website login — Rapido/Uber web jaisa: mobile number → OTP → (naya ho to)
+// naam → wahin wapas jahan booking chhodi thi.
+//
+// Pehle naye number par "Is number se koi account nahi mila. Pehle Register
+// karein" aata tha aur 1000 line ka register form khulta tha — jo customer
+// sirf ek auto book karne aaya tha wo wahin chala jaata. Backend OTP verify par
+// naya customer khud bana deta hai, isliye alag register ki zaroorat hi nahi.
+// ─────────────────────────────────────────────────────────────────────────────
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
 import { authAPI } from '../../services/api';
+import { openDriverApp } from '../../utils/appDownload';
+import { trackEvent } from '../../utils/analytics';
 
-const LoginForm = ({ onSwitchToRegister, onLoginSuccess }) => {
+const RESEND_SECONDS = 30;
+const FALLBACK_NAME = /^User\d{4}$/; // backend naye customer ko yahi naam deta hai
+
+// Login ke baad kahan jaana hai — booking adhoori ho to wahi, warna dashboard
+const afterLoginPath = () => {
+  const saved = sessionStorage.getItem('afterLogin');
+  sessionStorage.removeItem('afterLogin');
+  if (saved && saved.startsWith('/') && !saved.startsWith('/auth')) return saved;
+  return '/customer';
+};
+
+const LoginForm = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
+  const [step, setStep] = useState('phone'); // phone → otp → name
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const [showOTP, setShowOTP] = useState(false);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resendIn, setResendIn] = useState(0);
+  const [devOtp, setDevOtp] = useState('');
+  const otpRefs = useRef([]);
+  const session = useRef(null); // { user, accessToken, refreshToken }
 
-  const handleSendOTP = async (e) => {
-    e.preventDefault();
+  // Resend ka ulta ginti
+  useEffect(() => {
+    if (resendIn <= 0) return undefined;
+    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  const otpValue = otp.join('');
+  const validPhone = /^[6-9]\d{9}$/.test(phone);
+
+  const sendOtp = async () => {
     setError('');
-
-    if (phone.length !== 10) {
-      setError('Enter valid 10-digit mobile number');
-      return;
+    if (!validPhone) {
+      setError('Sahi 10 ankon ka mobile number daaliye');
+      return false;
     }
-
+    setLoading(true);
     try {
-      setLoading(true);
-
-      const checkRes = await authAPI.checkUser(phone);
-      if (!checkRes.data?.exists) {
-        setError('Is number se koi account nahi mila. Pehle Register karein.');
-        return;
-      }
-
       const res = await authAPI.sendOTP(phone);
-      const receivedOTP = res.data.otp;
-      if (receivedOTP) alert(`Your OTP is: ${receivedOTP}`);
-      setShowOTP(true);
+      // Sirf test server OTP lautata hai — live par SMS hi aata hai
+      setDevOtp(res.data?.otp ? String(res.data.otp) : '');
+      setResendIn(RESEND_SECONDS);
+      trackEvent('login_otp_sent');
+      return true;
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send OTP');
+      setError(err.response?.data?.message || 'OTP nahi bhej paaye. Thodi der baad koshish karein.');
+      return false;
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyOTP = async (e) => {
+  const onPhoneSubmit = async (e) => {
     e.preventDefault();
+    if (await sendOtp()) {
+      setOtp(['', '', '', '', '', '']);
+      setStep('otp');
+      setTimeout(() => otpRefs.current[0]?.focus(), 50);
+    }
+  };
+
+  const finish = (user, accessToken, refreshToken) => {
+    onLoginSuccess(user, accessToken, refreshToken);
+    trackEvent('login_success');
+    navigate(afterLoginPath(), { replace: true });
+  };
+
+  const verify = async (code) => {
+    if (code.length !== 6 || loading) return;
     setError('');
-
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await authAPI.verifyOTP(phone, otp);
+      const res = await authAPI.verifyOTP(phone, code);
       const data = res?.data;
-
       if (!data?.success) {
-        setError(data?.message || 'Invalid OTP');
+        setError(data?.message || 'OTP galat hai');
         return;
       }
-
-      onLoginSuccess(data.user, data.accessToken, data.refreshToken);
-
-      const role = data.user.role;
-      if (role === 'customer') navigate('/customer');
-      else if (role === 'provider') navigate('/driver');
-      else if (role === 'admin') navigate('/'); // admin dashboard moved to gaonConnect_adminDashbord
-      else navigate('/');
+      if (!data.user?.name || FALLBACK_NAME.test(data.user.name)) {
+        // Naya customer — pehle naam, phir andar
+        session.current = data;
+        localStorage.setItem('token', data.accessToken); // naam save karne ke liye
+        if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+        setStep('name');
+        return;
+      }
+      finish(data.user, data.accessToken, data.refreshToken);
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid OTP');
+      setError(err.response?.data?.message || 'OTP galat hai, dobara daaliye');
+      setOtp(['', '', '', '', '', '']);
+      setTimeout(() => otpRefs.current[0]?.focus(), 50);
     } finally {
       setLoading(false);
     }
+  };
+
+  const onOtpChange = (i, raw) => {
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) {
+      setOtp((o) => o.map((d, idx) => (idx === i ? '' : d)));
+      return;
+    }
+    // Paste ya SMS autofill — poora code ek saath
+    const next = [...otp];
+    for (let k = 0; k < digits.length && i + k < 6; k++) next[i + k] = digits[k];
+    setOtp(next);
+    const focusAt = Math.min(i + digits.length, 5);
+    otpRefs.current[focusAt]?.focus();
+    const code = next.join('');
+    if (code.length === 6) verify(code);
+  };
+
+  const onOtpKey = (i, e) => {
+    if (e.key === 'Backspace' && !otp[i] && i > 0) otpRefs.current[i - 1]?.focus();
+  };
+
+  const onNameSubmit = async (e) => {
+    e.preventDefault();
+    const clean = name.trim();
+    if (clean.length < 2) {
+      setError('Apna naam likhiye');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    const { user, accessToken, refreshToken } = session.current || {};
+    try {
+      await authAPI.updateProfile({ name: clean });
+    } catch {
+      // Naam baad mein profile se bhi badal sakte hain — booking mat roko
+    } finally {
+      setLoading(false);
+    }
+    finish({ ...user, name: clean }, accessToken, refreshToken);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-
-        <div className="text-center mb-8">
-          <img
-            src="/gaonconnect-icon.png"
-            alt="GaonConnect"
-            className="mx-auto mb-4 h-20 w-20 rounded-2xl"
-          />
-          <h1 className="text-3xl font-bold">GaonConnect</h1>
-          <p className="text-gray-600">आपकी गाड़ी आपकी सेवा</p>
+    <div className="min-h-screen bg-white lg:grid lg:grid-cols-2">
+      {/* ── Bayan: brand (sirf bade screen par) ── */}
+      <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-orange-500 to-amber-500 p-12 text-white">
+        <button onClick={() => navigate('/')} className="flex items-center gap-3 w-fit">
+          <img src="/gaonconnect-icon.png" alt="" className="h-11 w-11 rounded-xl bg-white" />
+          <span className="text-2xl font-black tracking-tight">GaonConnect</span>
+        </button>
+        <div>
+          <h2 className="text-5xl font-black leading-tight">Gaon ki har sawari,<br />ek click mein.</h2>
+          <p className="mt-4 text-lg text-white/90 max-w-md">Auto, car, tractor, JCB — paas ki gaadi, pehle se tay kiraya, aur cash ya online bhugtaan.</p>
         </div>
+        <div className="grid grid-cols-3 gap-3 max-w-md">
+          {['/vehicles/tractor.webp', '/vehicles/auto.webp', '/vehicles/car.webp'].map((src) => (
+            <img key={src} src={src} alt="" className="h-24 w-full object-contain rounded-2xl bg-white/95 p-2" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          ))}
+        </div>
+      </div>
 
-        {error && (
-          <div className="mb-4 text-sm text-red-600 bg-red-50 p-2 rounded">
-            {error}
+      {/* ── Dayan: form ── */}
+      <div className="flex min-h-screen flex-col px-5 py-6 sm:px-10 lg:justify-center">
+        <div className="mx-auto w-full max-w-sm">
+          <div className="mb-10 flex items-center justify-between lg:hidden">
+            <button onClick={() => navigate('/')} className="flex items-center gap-2">
+              <img src="/gaonconnect-icon.png" alt="" className="h-9 w-9 rounded-lg" />
+              <span className="text-xl font-black text-gray-900">GaonConnect</span>
+            </button>
           </div>
-        )}
 
-        {!showOTP ? (
-          <form onSubmit={handleSendOTP}>
-            <label className="text-sm font-semibold">Mobile Number</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              className="w-full mt-2 px-4 py-3 border rounded-lg"
-              placeholder="10-digit mobile"
-              maxLength="10"
-              required
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-6 w-full bg-orange-600 text-white py-3 rounded-lg flex justify-center gap-2"
-            >
-              {loading ? 'Sending...' : 'Send OTP'}
-              <ArrowRight />
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyOTP}>
-            <p className="text-sm text-gray-500 mb-3">OTP sent to +91 {phone}</p>
-            <label className="text-sm font-semibold">Enter OTP</label>
-            <input
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              className="w-full mt-2 px-4 py-3 border rounded-lg text-center text-xl tracking-widest"
-              placeholder="******"
-              maxLength="6"
-              required
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-6 w-full bg-orange-600 text-white py-3 rounded-lg"
-            >
-              {loading ? 'Verifying...' : 'Verify & Login'}
-            </button>
+          {step !== 'phone' && (
             <button
               type="button"
-              onClick={() => setShowOTP(false)}
-              className="mt-3 w-full text-orange-600 text-sm font-semibold hover:underline"
+              onClick={() => { setStep('phone'); setError(''); }}
+              className="mb-6 flex items-center gap-1 text-sm font-semibold text-gray-500 hover:text-gray-800"
             >
-              Change Number
+              <ArrowLeft size={16} /> Number badlein
             </button>
-          </form>
-        )}
+          )}
 
-        <p className="text-center mt-6">
-          No account?{' '}
-          <button onClick={onSwitchToRegister} className="text-orange-600 font-bold">
-            Register
-          </button>
-        </p>
+          {step === 'phone' && (
+            <form onSubmit={onPhoneSubmit}>
+              <h1 className="text-3xl font-black text-gray-900">Apna mobile number daaliye</h1>
+              <p className="mt-2 text-gray-500">Is number par OTP aayega. Naya hai to account apne aap ban jaayega.</p>
+
+              <label htmlFor="phone" className="sr-only">Mobile number</label>
+              <div className={`mt-8 flex items-center rounded-xl border-2 bg-white px-4 transition ${error ? 'border-red-400' : 'border-gray-200 focus-within:border-orange-500'}`}>
+                <span className="pr-3 text-lg font-semibold text-gray-500 border-r border-gray-200">+91</span>
+                <input
+                  id="phone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  autoFocus
+                  value={phone}
+                  onChange={(e) => { setPhone(e.target.value.replace(/\D/g, '').slice(-10)); setError(''); }}
+                  placeholder="98765 43210"
+                  className="w-full bg-transparent py-4 pl-3 text-lg font-semibold tracking-wide text-gray-900 outline-none"
+                />
+              </div>
+              {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+
+              <button
+                type="submit"
+                disabled={loading || !validPhone}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-4 text-lg font-bold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {loading ? <Loader2 className="animate-spin" size={20} /> : <>Aage badhein <ArrowRight size={20} /></>}
+              </button>
+
+              <p className="mt-6 text-center text-xs leading-relaxed text-gray-400">
+                Aage badhkar aap hamari <a href="/privacy-policy" className="underline">Privacy Policy</a> se sahmat hain.
+              </p>
+
+              <div className="mt-10 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-600">
+                Gaadi chalate hain?{' '}
+                <button type="button" onClick={openDriverApp} className="font-bold text-orange-600 hover:underline">
+                  GaonConnect Driver app se judiye →
+                </button>
+              </div>
+            </form>
+          )}
+
+          {step === 'otp' && (
+            <div>
+              <h1 className="text-3xl font-black text-gray-900">OTP daaliye</h1>
+              <p className="mt-2 text-gray-500">+91 {phone} par 6 ankon ka code bheja gaya hai</p>
+
+              <div className="mt-8 flex justify-between gap-2" onPaste={(e) => { e.preventDefault(); onOtpChange(0, e.clipboardData.getData('text')); }}>
+                {otp.map((d, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => { otpRefs.current[i] = el; }}
+                    value={d}
+                    onChange={(e) => onOtpChange(i, e.target.value)}
+                    onKeyDown={(e) => onOtpKey(i, e)}
+                    inputMode="numeric"
+                    autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                    maxLength={6}
+                    aria-label={`OTP ank ${i + 1}`}
+                    className={`h-14 w-12 rounded-xl border-2 text-center text-2xl font-bold text-gray-900 outline-none transition sm:w-14 ${error ? 'border-red-400' : d ? 'border-gray-900' : 'border-gray-200 focus:border-orange-500'}`}
+                  />
+                ))}
+              </div>
+              {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+              {devOtp && <p className="mt-3 text-xs text-gray-400">Test server OTP: {devOtp}</p>}
+
+              <button
+                type="button"
+                onClick={() => verify(otpValue)}
+                disabled={loading || otpValue.length !== 6}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-4 text-lg font-bold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {loading ? <Loader2 className="animate-spin" size={20} /> : <>Verify karein <ShieldCheck size={20} /></>}
+              </button>
+
+              <div className="mt-5 text-center text-sm">
+                {resendIn > 0 ? (
+                  <span className="text-gray-400">OTP dobara {resendIn}s mein</span>
+                ) : (
+                  <button type="button" onClick={sendOtp} disabled={loading} className="font-bold text-orange-600 hover:underline">
+                    OTP dobara bhejein
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {step === 'name' && (
+            <form onSubmit={onNameSubmit}>
+              <h1 className="text-3xl font-black text-gray-900">Aapka naam?</h1>
+              <p className="mt-2 text-gray-500">Driver aapko isi naam se pehchanega</p>
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => { setName(e.target.value.slice(0, 50)); setError(''); }}
+                placeholder="Jaise: Ramesh Patel"
+                autoComplete="name"
+                className={`mt-8 w-full rounded-xl border-2 px-4 py-4 text-lg font-semibold text-gray-900 outline-none transition ${error ? 'border-red-400' : 'border-gray-200 focus:border-orange-500'}`}
+              />
+              {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+              <button
+                type="submit"
+                disabled={loading || name.trim().length < 2}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 py-4 text-lg font-bold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {loading ? <Loader2 className="animate-spin" size={20} /> : <>Shuru karein <ArrowRight size={20} /></>}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

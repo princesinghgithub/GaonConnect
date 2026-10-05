@@ -178,10 +178,10 @@ const GaonConnectLanding = () => {
   const { openAppDownload } = useAppDownload();
   const handleDownloadApp = openAppDownload;
 
+  // Driver ki registration Driver app mein hoti hai (kaagaz, gaadi ki photo)
   const handleBecomeDriver = () => {
     trackEvent('become_driver_click', { source: 'landing_page' });
-    sessionStorage.setItem('registerAsDriver', 'true');
-    navigate('/auth');
+    openDriverApp();
   };
 
   const scrollToSection = (sectionId) => {

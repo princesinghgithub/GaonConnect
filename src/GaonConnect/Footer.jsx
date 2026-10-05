@@ -59,10 +59,11 @@ const Footer = () => {
     alert(`🎉 ${t('download.comingSoon')}\n\n${t('download.promo')}`);
   };
 
+  // Driver ki registration (kaagaz, gaadi ki photo) Driver app mein hoti hai —
+  // pehle yahan customer ka login khulta tha, driver wahin atak jaata tha.
   const handleBecomeDriver = () => {
     trackEvent('become_driver_click', { source: 'footer' });
-    sessionStorage.setItem('registerAsDriver', 'true');
-    navigate('/auth');
+    openDriverApp();
   };
 
   const goToSection = (id) => {

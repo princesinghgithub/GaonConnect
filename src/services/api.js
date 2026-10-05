@@ -321,6 +321,8 @@ export const authAPI = {
     api.post("/auth/verify-phone-otp", { phone, otp, role: "customer", ...extra }),
   register: (data) => api.post("/auth/register", data),
   getProfile: () => api.get("/auth/profile"),
+  // Naya customer — OTP ke baad naam (backend pehle "User1234" rakhta hai)
+  updateProfile: (data) => api.put("/auth/profile", data),
   logout: (refreshToken) => api.post("/auth/logout", { refreshToken }),
 };
 

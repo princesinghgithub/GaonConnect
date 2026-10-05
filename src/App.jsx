@@ -166,7 +166,6 @@ import SupportChat from "./components/SupportChat";
 // only ever reached by direct navigation - none of it needs to sit in the
 // initial homepage chunk.
 const LoginForm = lazy(() => import('./components/auth/LoginForm'));
-const RegisterForm = lazy(() => import('./components/auth/RegisterForm'));
 
 const CustomerDashboard = lazy(() => import('./dashboards/CustomerDashboard'));
 const ProviderDashboard = lazy(() => import('./dashboards/ProviderDashboard'));
@@ -193,21 +192,12 @@ const PageLoader = () => (
   </div>
 );
 
+// Customer ka login hi register hai (Rapido/Uber web jaisa) — naya number OTP
+// par khud account ban jaata hai. Driver registration Driver app mein hoti hai
+// (kaagaz, gaadi ki photo), website se wahin bheja jaata hai.
 const AuthScreens = () => {
   const { login } = useAuth();
-  const [screen, setScreen] = React.useState('login');
-
-  return screen === 'login' ? (
-    <LoginForm
-      onSwitchToRegister={() => setScreen('register')}
-      onLoginSuccess={login}
-    />
-  ) : (
-    <RegisterForm
-      onSwitchToLogin={() => setScreen('login')}
-      onRegisterSuccess={login}
-    />
-  );
+  return <LoginForm onLoginSuccess={login} />;
 };
 
 function App() {

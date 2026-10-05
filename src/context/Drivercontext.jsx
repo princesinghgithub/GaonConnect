@@ -203,6 +203,16 @@ import { providerAPI, rideAPI, walletAPI, sosAPI } from "../services/api";
 
 const DriverContext = createContext();
 
+// Login wala driver hai? (customer ke liye driver ki API 404 deti hai)
+const isDriverSession = () => {
+  if (!localStorage.getItem("token")) return false;
+  try {
+    return JSON.parse(localStorage.getItem("currentUser") || "{}").role === "provider";
+  } catch {
+    return false;
+  }
+};
+
 export const useDriver = () => {
   const context = useContext(DriverContext);
   if (!context) {
@@ -229,7 +239,7 @@ export const DriverProvider = ({ children }) => {
 
   /* 🔓 INIT AUDIO (ONCE) — only for logged-in drivers, not every homepage visitor */
   useEffect(() => {
-    if (!localStorage.getItem("token")) return;
+    if (!isDriverSession()) return;
     ringRef.current = new Audio("/sounds/gaonConnect.mp3");
     ringRef.current.loop = true;
     ringRef.current.preload = "auto";
@@ -293,8 +303,8 @@ export const DriverProvider = ({ children }) => {
 
   /* ---------------- INITIAL LOAD ---------------- */
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token && !hasLoaded.current) {
+    // Sirf driver ke liye — customer par ye dono call har page par 404 deti thi
+    if (isDriverSession() && !hasLoaded.current) {
       loadDriverProfile();
       loadCurrentRide();
       hasLoaded.current = true;
