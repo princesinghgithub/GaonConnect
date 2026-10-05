@@ -12,12 +12,16 @@ const dotenv = require('dotenv');
 const Provider = require('../models/Provider');
 const Vehicle = require('../models/Vehicle');
 
+// Server jaisa: .env.local (apna computer) pehle — wahan test database
+dotenv.config({ path: require('path').join(__dirname, '..', '.env.local') });
 dotenv.config();
 
 const isDryRun = process.argv.includes('--dry-run');
 
 const migrate = async () => {
   await mongoose.connect(process.env.MONGO_URI);
+  // Kis database par chal raha hai — galti se live par na chale
+  console.log(`📦 Database: ${mongoose.connection.name}`);
   console.log(`Connected to MongoDB${isDryRun ? ' (DRY RUN — no writes)' : ''}`);
 
   // The old Provider schema had a unique, non-sparse index on `vehicle.number`.

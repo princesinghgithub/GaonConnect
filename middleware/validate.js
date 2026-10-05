@@ -95,6 +95,18 @@ const schemas = {
     // Vehicle types are admin-managed (Setting.vehicleRates), not a fixed
     // list — fareCalculator falls back to 'auto' pricing for unknown types.
     vehicleType:        Joi.string().lowercase().required(),
+    // Car ki category (hatchback / sedan / suv) aur AC. Daam yahan se nahi
+    // aata — client sirf "kya chahiye" bhejta hai, rate settings se lagta hai.
+    vehicleVariant:     Joi.string().lowercase().max(40).optional().allow(''),
+    ac:                 Joi.boolean().optional(),
+    // App ne customer ko pichhla baaki dikha diya hai aur wo kiraye mein jude.
+    includeDues:        Joi.boolean().optional(),
+    // Raaste mein ek jagah rukna hai (pickup → stop → drop).
+    stop: Joi.object({
+      address:   Joi.string().required(),
+      latitude:  Joi.number().min(-90).max(90).required(),
+      longitude: Joi.number().min(-180).max(180).required(),
+    }).optional(),
     // Negative doori ka koi matlab nahi, aur 2000 km se lambi ride is app ka
     // kaam nahi — dono taraf seema.
     distance:           Joi.number().min(0).max(2000).required(),
@@ -128,7 +140,17 @@ const schemas = {
     hourlyRate:         Joi.number().min(0).optional(),
     workNote:           Joi.string().max(500).optional().allow(''),
     promoCode:          Joi.string().optional().allow(null, ''),
-  }).or('drop', 'dropoff'),
+    // Tractor/JCB booking mein customer ne kya maanga — booking sirf usi
+    // driver ko jaati hai jiske paas ye sab ho (utils/vehicleMatch.js).
+    equipment:          Joi.array().items(Joi.string().lowercase().max(40)).max(12).optional(),
+    minHorsepower:      Joi.number().min(0).max(150).optional(),
+    trolleyType:        Joi.string().max(40).optional().allow(''),
+  }),
+  // Pehle yahan `.or('drop', 'dropoff')` tha — yaani drop HAMESHA zaroori.
+  // Par khet/site ka kaam (jutai, khudai) wahin hota hai jahan bulaya, uska
+  // drop hota hi nahi, aur app use bhejta bhi nahi — har aisi booking yahin
+  // 400 se gir jaati thi. Drop ki jaanch ab createRide karta hai: service
+  // booking mein pickup hi kaam ki jagah hai, baaki sab mein drop zaroori.
 
   // Wallet
   requestWithdrawal: Joi.object({
@@ -146,7 +168,13 @@ const schemas = {
     dropLat:   Joi.number().min(-90).max(90).required(),
     dropLng:   Joi.number().min(-180).max(180).required(),
 
+    // Raaste ka stop (optional) — doori dono tukdon ki judti hai.
+    stopLat:   Joi.number().min(-90).max(90).optional(),
+    stopLng:   Joi.number().min(-180).max(180).optional(),
+
     vehicleType: Joi.string().max(40).optional().allow(''),
+    variant:     Joi.string().lowercase().max(40).optional().allow(''),
+    ac:          Joi.boolean().truthy('true').falsy('false').optional(),
 
     // Driver customer se kitni door hai — long pickup charge iske hisaab se.
     pickupKm:    Joi.number().min(0).max(500).optional(),

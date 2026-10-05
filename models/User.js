@@ -54,6 +54,12 @@ const UserSchema = new mongoose.Schema({
     type:    String,
     default: null,
   },
+  // Driver customer ko jo rating deta hai uska average — Rapido jaisa, nayi
+  // booking ki request par driver ko dikhta hai. count 0 = naya customer.
+  rating: {
+    average: { type: Number, default: 0 },
+    count:   { type: Number, default: 0 },
+  },
   // ─── Emergency contacts ─────────────────────────────────────────────────────
   // SOS dabane par sirf 112 dial hota tha aur admin ko alert jaata tha — kisi
   // apne ko khabar nahi jaati thi. Yeh contacts SOS response mein wapas aate

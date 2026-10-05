@@ -117,4 +117,6 @@ module.exports = {
 
     followUps: {},
   },
+  // (Car ka "shaadi ki booking bhi lunga" wala option tha — Wedding Car seva
+  // band hone par hata diya; dekho config/retiredVehicleTypes.js.)
 };

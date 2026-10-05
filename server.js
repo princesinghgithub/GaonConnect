@@ -7,6 +7,11 @@ const http       = require('http');
 const path       = require('path');
 const mongoose   = require('mongoose');
 
+// `.env.local` (sirf apne computer par, git mein nahi) pehle — wahan likhi
+// value `.env` se upar. Local test alag database / Redis prefix se chalta
+// hai taaki live data aur live server ka cache na chhue. Server par yeh file
+// hoti hi nahi.
+dotenv.config({ path: path.join(__dirname, '.env.local') });
 dotenv.config();
 
 // JWT_SECRET missing hone par har login/OTP-verify silently 500 dega, bina reason bataye —

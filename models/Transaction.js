@@ -74,6 +74,14 @@ const TransactionSchema = new mongoose.Schema({
 
   processedAt: Date,
 
+  // Customer ka cancel charge jab wasool hoga tab kis driver ko dena hai.
+  // Charge 'pending' ho to driver ko paisa turant nahi milta — customer ke
+  // bharte hi (agli ride par) isi driver ke wallet mein jaata hai.
+  payoutProvider: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Provider'
+  },
+
   failureReason: String,
 
   createdAt: {

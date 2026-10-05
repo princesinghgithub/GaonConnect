@@ -88,6 +88,13 @@ const RideSchema = new mongoose.Schema(
       lowercase: true,
     },
 
+    // Car ke andar kaunsi category chuni (hatchback / sedan / suv) aur AC
+    // chahiye ya nahi. Label bhi saath rakhte hain — admin baad mein category
+    // ka naam badal de to purani ride pe wahi dikhe jo customer ne book kiya tha.
+    vehicleVariant:      { type: String, default: '', trim: true, lowercase: true },
+    vehicleVariantLabel: { type: String, default: '' },
+    ac:                  { type: Boolean, default: false },
+
     distance: {
       type: Number, // in km
       required: true,
@@ -136,6 +143,85 @@ const RideSchema = new mongoose.Schema(
     commissionPercent: { type: Number, default: 0 },
     platformFee:       { type: Number, default: 0 },
     driverEarning:     { type: Number, default: 0 },
+
+    // Promo se kitna kam hua. `fare` promo ke BAAD ka hai (customer itna deta
+    // hai); driver ki kamai fare + promoDiscount par banti hai — offer platform
+    // ka hai, driver ka nahi.
+    promoCode:     { type: String, default: '' },
+    promoDiscount: { type: Number, default: 0 },
+
+    // Customer ka pichhla baaki jo is ride ke kiraye mein juda hai. `fare`
+    // mein ye shaamil hai (customer itna hi deta hai), par driver ki kamai
+    // isme se nahi banti. Ride poori hone par ye "bhara hua" ho jaata hai.
+    dues: {
+      amount:  { type: Number, default: 0 },
+      txnIds:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'Transaction' }],
+      rideIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Ride' }],
+    },
+
+    // Raaste mein rukne ki jagah (pickup → stop → drop). Kiraya dono tukdon
+    // ki doori jod kar banta hai.
+    stops: [{
+      _id: false,
+      address:   String,
+      latitude:  Number,
+      longitude: Number,
+    }],
+
+    // Customer ne ride ke dauraan drop badalne ko kaha — driver ke haan/na
+    // kehne tak yahan rehta hai. Haan par ride ka drop, doori aur kiraya isi
+    // se badalte hain.
+    pendingDropChange: {
+      address:     String,
+      latitude:    Number,
+      longitude:   Number,
+      distance:    Number,
+      fare:        Number,
+      requestedAt: Date,
+    },
+
+    // Customer ne cancel karte waqt driver ki galti batayi ("driver ne cancel
+    // karne ko kaha") — admin ko jaanchna hai.
+    flaggedForReview: { type: Boolean, default: false },
+
+    // Kaam usi jagah hona hai jahan bulaya gaya (khet jotna, JCB se khudai) —
+    // is ride ka koi "drop" nahi hai. Model mein `drop` zaroori field hai,
+    // isliye usme pickup hi rakha jaata hai; par apps aur dashboard isi flag
+    // se jaante hain ki drop dikhana nahi hai.
+    workAtPickup: { type: Boolean, default: false },
+
+    // Kaam tay se zyada nikla — driver ne mauke par extra raashi jodi aur
+    // customer ne haan kahi. `fareAdjustment` un sab ka jod hai aur `fare` mein
+    // shaamil hai; list isliye ki baad mein pata chale kab, kitna aur kyun.
+    fareAdjustment: { type: Number, default: 0 },
+    fareAdjustments: [{
+      _id: false,
+      amount:   Number,
+      hours:    Number,
+      reason:   String,
+      approved: Boolean,
+      at:       { type: Date, default: Date.now },
+    }],
+
+    // Kaam se pehle aur baad ki photo (tractor / JCB / saamaan) — jhagde ke
+    // waqt yahi saboot hota hai.
+    workProof: {
+      before: { url: String, at: Date },
+      after:  { url: String, at: Date },
+    },
+
+    // Ride complete hote waqt paisa kahan maana gaya:
+    //   'cash'     — driver ke haath mein
+    //   'platform' — platform ke paas (online / QR), driver ke wallet mein juda
+    // Cash ride baad mein QR se bhari jaaye to 'cash' → 'platform' hota hai,
+    // aur ye badlav ek hi baar ho sakta hai (dekho utils/walletOps.js).
+    walletSettled: { type: String, enum: ['', 'cash', 'platform'], default: '' },
+
+    // Accept ke waqt driver pickup se kitna door tha aur kitni der mein
+    // pahunchna tha. Isi se tay hota hai ki driver "der" kar raha hai ya nahi —
+    // der driver ki ho to customer se cancel ka charge nahi liya jaata.
+    pickupKmAtAccept: { type: Number, default: 0 },
+    pickupEtaMinutes: { type: Number, default: 0 },
 
     otp: {
       type: String,
@@ -228,6 +314,53 @@ serviceType: {
   default: ''
 },
 
+// Pre-booking — driver pehle se pakka. Status 'scheduled' hi rehta hai par
+// `provider` lag jaata hai; samay se pehle cron use 'accepted' (chalu) karta hai.
+scheduledAcceptedAt: {
+  type: Date,
+  default: null
+},
+// "Kal subah 7 baje" wala yaad-dihani — ek hi baar jaaye
+scheduleReminderAt: {
+  type: Date,
+  default: null
+},
+
+// Ghante wale kaam ki ghadi — server par, taaki driver aur customer dono ek
+// hi waqt dekhein. Chala hua waqt = abhi − workStartedAt − pausedSeconds
+// (aur abhi ruka ho to − (abhi − pausedAt)).
+pausedAt: {
+  type: Date,
+  default: null
+},
+pausedSeconds: {
+  type: Number,
+  default: 0
+},
+
+// Tractor/JCB booking mein customer ne kya maanga: kaunse upkaran (hal,
+// rotavator, breaker…), kam se kam kitne HP ka tractor, aur trolley kaisi.
+// Booking sirf usi driver ko jaati hai jiske paas ye sab ho, aur driver ko
+// pehle se dikhta hai ki kya leke aana hai.
+equipment: {
+  type: [String],
+  default: undefined
+},
+// Kaam ke liye zaroori auzaar (koi ek) — booking bante waqt admin ke Rate
+// Card niyam se likha jaata hai (utils/vehicleMatch.js requiredEquipment).
+serviceEquipment: {
+  type: [String],
+  default: undefined
+},
+minHorsepower: {
+  type: Number,
+  default: 0
+},
+trolleyType: {
+  type: String,
+  default: ''
+},
+
 // Hourly booking ke liye
 estimatedHours: {
   type: Number,
@@ -310,5 +443,9 @@ RideSchema.index({ provider: 1, createdAt: -1 });
 RideSchema.index({ status: 1 });
 // Cron sweep — "status searching + nextDispatchAt due" ko fast dhoondne ke liye
 RideSchema.index({ status: 1, nextDispatchAt: 1 });
+// Driver ka demand heatmap (GET /provider/demand) — har online driver har
+// minute "pichhle 60 minute ki bookings" maangta hai; bina index poori table
+// padhni padti
+RideSchema.index({ createdAt: -1, vehicleType: 1 });
 
 module.exports = mongoose.model("Ride", RideSchema);

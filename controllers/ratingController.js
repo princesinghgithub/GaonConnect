@@ -22,6 +22,19 @@ const recalcProviderRating = async (providerId) => {
   });
 };
 
+// Driver ne customer ko rate kiya — customer ka average (driver ko request
+// par dikhta hai)
+const recalcCustomerRating = async (customerId) => {
+  const User = require('../models/User');
+  const ratings = await Rating.find({ customer: customerId, raterType: 'driver' }).select('stars');
+  if (!ratings.length) return;
+  const avg = ratings.reduce((sum, r) => sum + r.stars, 0) / ratings.length;
+  await User.findByIdAndUpdate(customerId, {
+    'rating.average': parseFloat(avg.toFixed(1)),
+    'rating.count':   ratings.length,
+  });
+};
+
 // ─── POST /api/ratings/submit ─────────────────────────────────────────────────
 // Customer → driver ko rate kare ya Driver → customer ko rate kare
 exports.submitRating = async (req, res) => {
@@ -73,6 +86,7 @@ exports.submitRating = async (req, res) => {
       await Ride.findByIdAndUpdate(rideId, { 'rating.customerRating': stars, 'rating.customerFeedback': review });
     } else {
       await Ride.findByIdAndUpdate(rideId, { 'rating.driverRating': stars, 'rating.driverFeedback': review });
+      await recalcCustomerRating(ride.customer._id).catch(() => {});
     }
 
     return res.status(201).json({
