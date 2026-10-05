@@ -3914,6 +3914,21 @@ const updateSettings = async (req, res) => {
       }
     }
 
+    // App version "1.2.0" jaisa hi — "1.2" ya galat likha to apps ki tulna
+    // ulti pad sakti hai (sabko zabardasti update screen).
+    for (const app of ['customer', 'driver']) {
+      const u = req.body.appUpdate?.[app];
+      if (!u) continue;
+      for (const key of ['minVersion', 'latestVersion']) {
+        const v = u[key];
+        if (v === undefined || v === '' || (key === 'minVersion' && v === '0.0.0')) continue;
+        if (!/^\d+\.\d+\.\d+$/.test(String(v).trim())) {
+          return res.status(400).json({ success: false, message: `${app} ka ${key} "1.2.0" jaisa likho` });
+        }
+        u[key] = String(v).trim();
+      }
+    }
+
     const settings = await Setting.findOneAndUpdate(
       {},
       { $set: req.body },

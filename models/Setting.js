@@ -494,6 +494,24 @@ const SettingSchema = new mongoose.Schema({
     appVersion:     { type: String, default: '2.0.0'          },
   },
 
+  // ─── App update (Uber/Rapido jaisa) ──────────────────────────────────────────
+  // minVersion se purani app khulte hi "Update karo" screen — band nahi hoti
+  // (jab purani app naye backend ke saath galat chalne lage). latestVersion se
+  // purani app ko halki "naya version aaya hai" screen, baad mein bhi kar sakte.
+  // Default '0.0.0' — admin dashboard se badle bina kisi ko roka nahi jaata.
+  appUpdate: {
+    customer: {
+      minVersion:    { type: String, default: '0.0.0' },
+      latestVersion: { type: String, default: '' },
+      storeUrl:      { type: String, default: 'https://play.google.com/store/apps/details?id=com.gaonconnect.user' },
+    },
+    driver: {
+      minVersion:    { type: String, default: '0.0.0' },
+      latestVersion: { type: String, default: '' },
+      storeUrl:      { type: String, default: 'https://play.google.com/store/apps/details?id=com.gaonconnect.driver' },
+    },
+  },
+
 }, { timestamps: true });
 
 module.exports = mongoose.model('Setting', SettingSchema);
