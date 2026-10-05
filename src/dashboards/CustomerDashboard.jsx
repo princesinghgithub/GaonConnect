@@ -58,8 +58,8 @@ const CustomerDashboard = () => {
       <div className="bg-white border-b sticky top-0 z-30">
         <div className="container mx-auto px-4 flex">
           {[
-            { id: 'booking', label: 'Book a Ride' },
-            { id: 'history', label: 'Ride History' },
+            { id: 'booking', label: 'Booking karein' },
+            { id: 'history', label: 'Meri rides' },
           ].map((tab) => (
             <button
               key={tab.id}

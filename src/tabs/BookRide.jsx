@@ -84,6 +84,24 @@ const localInputValue = (d) => {
 };
 const UNIT_WORD = { hour: 'ghanta', km: 'km', acre: 'acre', quintal: 'quintal', job: 'poora kaam' };
 
+// Kiraye ki lines backend English mein bhejta hai (apps bhi yahi padhti hain) —
+// website par baaki page jaisi bhasha. "(43.5 km)" / "(10%)" waisa hi rehta hai.
+const FARE_WORDS = [
+  [/^Minimum Fare/, 'Kam se kam kiraya'],
+  [/^Distance Charge/, 'Doori ka kiraya'],
+  [/^Time Charge/, 'Samay ka kiraya'],
+  [/^Waiting Charge|^Waiting/, 'Intezaar'],
+  [/^Long Pickup/, 'Door se aane ka charge'],
+  [/^Night Charge/, 'Raat ka charge'],
+  [/^AC Charge/, 'AC charge'],
+  [/^Fuel Adjustment/, 'Diesel/petrol ka badlav'],
+  [/^Booking Fee/, 'Booking fee'],
+];
+const fareLabel = (label = '') => {
+  const hit = FARE_WORDS.find(([re]) => re.test(label));
+  return hit ? label.replace(hit[0], hit[1]) : label;
+};
+
 // ─── Backend ki shakal mein booking ──────────────────────────────────────────
 // Search box jagah ko {addressLine1, addressLine2, location: {latitude,
 // longitude}} deta hai, par backend (apps jaisa) seedha {address, latitude,
@@ -115,9 +133,9 @@ const toRideBody = (data) => ({
 // saath), phir confirm. Pehle sab kuch ek hi lambe form mein tha — customer
 // ko pata hi nahi chalta tha ki abhi kya karna hai aur kitna baaki hai.
 const STEPS = [
-  { id: 1, label: 'Location' },
+  { id: 1, label: 'Jagah' },
   { id: 2, label: 'Gaadi' },
-  { id: 3, label: 'Confirm' },
+  { id: 3, label: 'Pakka' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,11 +182,11 @@ const BookRide = () => {
     const markers = [];
     if (initialBooking?.pickup?.location) {
       const { latitude, longitude } = initialBooking.pickup.location;
-      markers.push({ lat: latitude, lng: longitude, label: 'Pickup' });
+      markers.push({ lat: latitude, lng: longitude, label: 'Pickup', kind: 'pickup' });
     }
     if (initialBooking?.drop?.location) {
       const { latitude, longitude } = initialBooking.drop.location;
-      markers.push({ lat: latitude, lng: longitude, label: 'Drop' });
+      markers.push({ lat: latitude, lng: longitude, label: 'Drop', kind: 'drop' });
     }
     return markers;
   });
@@ -333,8 +351,8 @@ const BookRide = () => {
 
   const updateMapMarkers = (p, d) => {
     const markers = [];
-    if (p?.location)  markers.push({ lat: p.location.latitude,  lng: p.location.longitude,  label: 'Pickup' });
-    if (d?.location)  markers.push({ lat: d.location.latitude,  lng: d.location.longitude,  label: 'Drop'   });
+    if (p?.location)  markers.push({ lat: p.location.latitude,  lng: p.location.longitude,  label: 'Pickup', kind: 'pickup' });
+    if (d?.location)  markers.push({ lat: d.location.latitude,  lng: d.location.longitude,  label: 'Drop', kind: 'drop' });
     setMapMarkers(markers);
   };
 
@@ -456,7 +474,7 @@ const BookRide = () => {
   }, [tripLimits]);
 
   const goToVehicleStep = () => {
-    if (!pickup) { toast.error('Pickup location select karo'); return; }
+    if (!pickup) { toast.error('Pickup ki jagah chuniye'); return; }
     trackEvent('booking_step_view', { step: 'vehicle' });
     setStep(2);
     if (dropoff) loadQuotes(pickup, dropoff);
@@ -468,7 +486,7 @@ const BookRide = () => {
       return;
     }
     if (needsDropoff && !dropoff) {
-      toast.error('Drop location select karo');
+      toast.error('Kahan tak jaana hai, chuniye');
       return;
     }
     if (tripLimits[vehicleType]?.tooFar) {
@@ -615,19 +633,19 @@ const BookRide = () => {
   // ── Confirm ─────────────────────────────────────────────────────────────────
   const handleConfirmRide = async () => {
     if (submittingRef.current) return;
-    if (!pickup) { toast.error('Pickup location select karo'); return; }
-    if (!isTractorJcb && !dropoff) { toast.error('Drop location select karo'); return; }
+    if (!pickup) { toast.error('Pickup ki jagah chuniye'); return; }
+    if (!isTractorJcb && !dropoff) { toast.error('Kahan tak jaana hai, chuniye'); return; }
     if (!localStorage.getItem('token')) {
-      toast.error('Login karke booking karo');
+      toast.error('Booking ke liye login kariye');
       navigate('/auth');
       return;
     }
     if (isTractorJcb && (!selectedCategory || !selectedSub)) {
-      toast.error('Service type chuniye');
+      toast.error('Kaam chuniye');
       return;
     }
     if (!isTractorJcb && !fare) {
-      toast.error('Fare calculate ho raha hai, thoda ruko');
+      toast.error('Kiraya nikal raha hai, ek pal rukiye');
       return;
     }
     const scheduledDate = when === 'later' && laterAt ? new Date(laterAt) : null;
@@ -700,7 +718,7 @@ const BookRide = () => {
       }
     } catch (error) {
       if (error.response?.status === 401) {
-        toast.error('Login karke booking karo');
+        toast.error('Booking ke liye login kariye');
         navigate('/auth');
       } else {
         toast.error(error.response?.data?.message || 'Booking fail ho gayi, dobara try karo');
@@ -752,12 +770,12 @@ const BookRide = () => {
             </button>
           )}
           <div className="min-w-0">
-            <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 truncate">
+            <h2 className="text-2xl lg:text-3xl font-black text-gray-900 truncate">
               {step === 1 && 'Kahan se kahan?'}
               {step === 2 && 'Gaadi chuniye'}
               {step === 3 && 'Booking confirm karein'}
             </h2>
-            <p className="text-sm text-gray-500">Step {step} of 3</p>
+            <p className="text-sm text-gray-500">Kadam {step} / 3</p>
           </div>
         </div>
 
@@ -788,15 +806,15 @@ const BookRide = () => {
             {/* ── STEP 1: Location ── */}
             {step === 1 && (
               <>
-                <div className="bg-white rounded-xl shadow-sm p-6 space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Where to?</h3>
+                <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-4">
+                  <h3 className="text-lg font-bold text-gray-900">Kahan jaana hai?</h3>
                   <LocationSearchInput
-                    placeholder="Pickup Location"
+                    placeholder="Pickup kahan se?"
                     onSelectLocation={handlePickupSelect}
                     value={pickup?.addressLine1 || ''}
                   />
                   <LocationSearchInput
-                    placeholder="Drop Location"
+                    placeholder="Kahan tak jaana hai?"
                     onSelectLocation={handleDropoffSelect}
                     value={dropoff?.addressLine1 || ''}
                   />
@@ -807,12 +825,14 @@ const BookRide = () => {
                 </div>
 
                 {/* Mobile map — desktop par right column mein hamesha dikhta hai */}
-                <div className="lg:hidden bg-white rounded-xl shadow-sm overflow-hidden">
+                <div className="lg:hidden bg-white rounded-2xl border border-gray-100 overflow-hidden">
                   <div className="h-56">
                     <Map
                       center={pickup?.location ? [pickup.location.latitude, pickup.location.longitude] : [20.5937, 78.9629]}
                       zoom={pickup ? 13 : 5}
                       markers={mapMarkers}
+                      fit
+                      height="100%"
                     />
                   </div>
                 </div>
@@ -820,7 +840,7 @@ const BookRide = () => {
                 <button
                   onClick={goToVehicleStep}
                   disabled={!pickup}
-                  className="w-full bg-gradient-to-r from-orange-600 to-orange-500 text-white py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="w-full bg-gray-900 hover:bg-black text-white py-4 rounded-xl font-bold text-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition"
                 >
                   Aage badhein
                 </button>
@@ -833,7 +853,7 @@ const BookRide = () => {
                 {/* Trip recap — customer ko yaad rahe ki kis route ka daam dikh raha hai */}
                 <button
                   onClick={() => setStep(1)}
-                  className="w-full text-left bg-white rounded-xl shadow-sm p-4 hover:bg-gray-50 transition"
+                  className="w-full text-left bg-white rounded-2xl border border-gray-100 p-4 hover:bg-gray-50 transition"
                 >
                   <p className="text-sm text-gray-700 truncate">
                     <span className="text-green-600">●</span> {pickup?.addressLine1 || '—'}
@@ -844,8 +864,8 @@ const BookRide = () => {
                   <span className="text-xs text-orange-600 font-semibold mt-2 inline-block">Badlein</span>
                 </button>
 
-                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 space-y-2">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Choose Vehicle</h3>
+                <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-6 space-y-2">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Aapke liye gaadiyan</h3>
                   {VEHICLE_OPTIONS.flatMap((opt) =>
                     // Car = Mini / Sedan / SUV, har ek apni line (Uber/Rapido jaisa)
                     opt.type === 'car' && carVariants.length
@@ -923,7 +943,7 @@ const BookRide = () => {
                                 onClick={() => { setCarAc(!!o.ac); setFare(null); setFareBreakdown([]); }}
                                 aria-pressed={on}
                                 className={`py-2 rounded-full border text-xs font-semibold transition ${
-                                  on ? 'bg-blue-900 border-blue-900 text-white' : 'border-gray-300 text-gray-600 hover:border-gray-400'
+                                  on ? 'bg-gray-900 border-gray-900 text-white' : 'border-gray-300 text-gray-600 hover:border-gray-400'
                                 }`}
                               >
                                 {o.ac ? '❄️ AC' : '☀️ Non-AC'} · ₹{o.totalFare}
@@ -946,8 +966,8 @@ const BookRide = () => {
                 {isTractorJcb && (
                   <>
                     {/* Category */}
-                    <div className="bg-white rounded-xl shadow-sm p-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Kaam ka Prakar Chuniye</h3>
+                    <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Kaun sa kaam?</h3>
                       <div className="space-y-2">
                         {services.map((cat) => (
                           <button
@@ -973,8 +993,8 @@ const BookRide = () => {
 
                     {/* Sub-service */}
                     {selectedCategory && (
-                      <div className="bg-white rounded-xl shadow-sm p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-3">Service Chuniye</h3>
+                      <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-3">Kaam chuniye</h3>
                         <div className="grid grid-cols-2 gap-3">
                           {selectedCategory.sub.map((sub) => (
                             <button
@@ -982,7 +1002,7 @@ const BookRide = () => {
                               onClick={() => setSelectedSub(sub)}
                               className={`text-left p-3 rounded-lg border-2 transition ${
                                 selectedSub?.id === sub.id
-                                  ? 'border-blue-900 bg-blue-50'
+                                  ? 'border-orange-600 bg-orange-50'
                                   : 'border-gray-200 hover:border-gray-300'
                               }`}
                             >
@@ -994,7 +1014,7 @@ const BookRide = () => {
                                   className="mb-2 h-16 w-full object-contain"
                                 />
                               )}
-                              <p className={`text-sm font-700 ${selectedSub?.id === sub.id ? 'text-blue-900' : 'text-gray-600'}`}>
+                              <p className={`text-sm font-bold ${selectedSub?.id === sub.id ? 'text-orange-700' : 'text-gray-700'}`}>
                                 {sub.label}
                               </p>
                               <p className="text-orange-600 font-bold text-base mt-1">
@@ -1011,8 +1031,8 @@ const BookRide = () => {
 
                     {/* Hours Selection — only for hourly */}
                     {isHourly && (
-                      <div className="bg-white rounded-xl shadow-sm p-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-3">Kitne Ghante Chahiye?</h3>
+                      <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-3">Kitne ghante chahiye?</h3>
                         <div className="flex flex-wrap gap-2">
                           {HOURS_OPTIONS.map((h) => (
                             <button
@@ -1020,7 +1040,7 @@ const BookRide = () => {
                               onClick={() => setSelectedHours(h)}
                               className={`px-4 py-2 rounded-lg border-2 font-semibold text-sm transition ${
                                 selectedHours === h
-                                  ? 'bg-blue-900 border-blue-900 text-white'
+                                  ? 'bg-gray-900 border-gray-900 text-white'
                                   : 'border-gray-200 text-gray-700 hover:border-gray-300'
                               }`}
                             >
@@ -1036,7 +1056,7 @@ const BookRide = () => {
 
                     {/* Kitne acre / quintal — harvester ki katai waghera */}
                     {isQuantity && (
-                      <div className="bg-white rounded-xl shadow-sm p-6">
+                      <div className="bg-white rounded-2xl border border-gray-100 p-6">
                         <h3 className="text-lg font-semibold text-gray-900 mb-3">
                           Kitne {UNIT_WORD[workUnit]}?
                         </h3>
@@ -1047,7 +1067,7 @@ const BookRide = () => {
                               onClick={() => setQuantity(n)}
                               className={`px-4 py-2 rounded-lg border-2 font-semibold text-sm transition ${
                                 quantity === n
-                                  ? 'bg-blue-900 border-blue-900 text-white'
+                                  ? 'bg-gray-900 border-gray-900 text-white'
                                   : 'border-gray-200 text-gray-700 hover:border-gray-300'
                               }`}
                             >
@@ -1062,9 +1082,9 @@ const BookRide = () => {
                     )}
 
                     {/* Work Note */}
-                    <div className="bg-white rounded-xl shadow-sm p-6">
+                    <div className="bg-white rounded-2xl border border-gray-100 p-6">
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        Koi Khaas Baat? <span className="text-gray-400 font-normal text-sm">(Optional)</span>
+                        Koi khaas baat? <span className="text-gray-400 font-normal text-sm">(zaroori nahi)</span>
                       </h3>
                       <textarea
                         className="w-full border-2 border-gray-200 rounded-lg p-3 text-sm text-gray-700 resize-none focus:outline-none focus:border-orange-400"
@@ -1080,7 +1100,7 @@ const BookRide = () => {
                 <button
                   onClick={goToConfirmStep}
                   disabled={pricing || (isTractorJcb && !selectedSub) || (needsDropoff && !dropoff)}
-                  className="w-full bg-gradient-to-r from-orange-600 to-orange-500 text-white py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="w-full bg-gray-900 hover:bg-black text-white py-4 rounded-xl font-bold text-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition"
                 >
                   {pricing ? (
                     <span className="flex items-center justify-center">{spinner}Kiraya nikala ja raha hai...</span>
@@ -1095,8 +1115,8 @@ const BookRide = () => {
             {step === 3 && (
               <>
                 {/* Trip summary */}
-                <div className="bg-white rounded-xl shadow-sm p-6 space-y-3">
-                  <h3 className="text-lg font-semibold text-gray-900">Trip Details</h3>
+                <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-3">
+                  <h3 className="text-lg font-bold text-gray-900">Safar</h3>
                   <div className="space-y-1">
                     <p className="text-sm text-gray-700">
                       <span className="text-green-600">●</span> {pickup?.addressLine1 || '—'}
@@ -1108,17 +1128,17 @@ const BookRide = () => {
                     )}
                   </div>
                   <div className="flex justify-between items-center py-2 border-t">
-                    <span className="text-gray-600">Vehicle</span>
+                    <span className="text-gray-600">Gaadi</span>
                     <span className="font-semibold">{vehicleName()}</span>
                   </div>
                   {distance && (
                     <>
                       <div className="flex justify-between items-center py-2 border-t">
-                        <span className="text-gray-600">Distance</span>
+                        <span className="text-gray-600">Doori</span>
                         <span className="font-semibold">{distance.distance.text}</span>
                       </div>
                       <div className="flex justify-between items-center py-2 border-t">
-                        <span className="text-gray-600">Estimated Time</span>
+                        <span className="text-gray-600">Lagbhag samay</span>
                         <span className="font-semibold">{distance.duration.text}</span>
                       </div>
                     </>
@@ -1127,19 +1147,19 @@ const BookRide = () => {
 
                 {/* Fare — road vehicles */}
                 {!isTractorJcb && fare != null && (
-                  <div className="bg-white rounded-xl shadow-sm p-6 space-y-3">
-                    <h3 className="text-lg font-semibold text-gray-900">Fare</h3>
+                  <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-3">
+                    <h3 className="text-lg font-bold text-gray-900">Kiraya</h3>
                     {/* Poora hisaab — customer ko dikhna chahiye ki kis cheez ka
                         kitna paisa laga. Ek akela number bharosa nahi banata. */}
                     {fareBreakdown.map((line, i) => (
                       <div key={`${line.label}-${i}`} className="flex justify-between items-center py-1.5 text-sm">
-                        <span className="text-gray-500">{line.label}</span>
+                        <span className="text-gray-500">{fareLabel(line.label)}</span>
                         <span className="text-gray-700 font-medium">₹{line.amount}</span>
                       </div>
                     ))}
 
                     <div className="flex justify-between items-center py-3 bg-orange-50 rounded-lg px-4">
-                      <span className="text-gray-700 font-semibold">Total Fare</span>
+                      <span className="text-gray-700 font-semibold">Kul kiraya</span>
                       <span className="text-3xl font-bold text-orange-600">₹{fare}</span>
                     </div>
 
@@ -1152,7 +1172,7 @@ const BookRide = () => {
                 {/* Kiraya na aa paya (network/backend) — customer ko step 3 par
                     phansa mat chhodo, yahin se dobara koshish karne do. */}
                 {!isTractorJcb && fare == null && (
-                  <div className="bg-white rounded-xl shadow-sm p-6 text-center space-y-3">
+                  <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center space-y-3">
                     <p className="text-sm text-gray-600">
                       Kiraya nikal nahi paya. Internet check karke dobara koshish karein.
                     </p>
@@ -1172,11 +1192,11 @@ const BookRide = () => {
 
                 {/* Fare — tractor / JCB */}
                 {isTractorJcb && selectedSub && (
-                  <div className="bg-white rounded-xl shadow-sm p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Fare Summary</h3>
+                  <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                    <h3 className="text-lg font-bold text-gray-900 mb-3">Kiraya</h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between py-2 border-b">
-                        <span className="text-gray-600">Service</span>
+                        <span className="text-gray-600">Kaam</span>
                         <span className="font-semibold">{selectedSub.label}</span>
                       </div>
                       <div className="flex justify-between py-2 border-b">
@@ -1187,7 +1207,7 @@ const BookRide = () => {
                       </div>
                       {isHourly && (
                         <div className="flex justify-between py-2 border-b">
-                          <span className="text-gray-600">Hours</span>
+                          <span className="text-gray-600">Ghante</span>
                           <span className="font-semibold">{selectedHours} ghante</span>
                         </div>
                       )}
@@ -1205,13 +1225,13 @@ const BookRide = () => {
                       )}
                       <div className="flex justify-between items-center py-3 bg-orange-50 rounded-lg px-3 mt-2">
                         <span className="font-bold text-gray-800">
-                          {isHourly ? 'Estimated Fare' : 'Total Fare'}
+                          {isHourly ? 'Andaazan kiraya' : 'Kul kiraya'}
                         </span>
                         <span className="text-3xl font-bold text-orange-600">₹{displayFare}</span>
                       </div>
                       {isHourly && (
                         <p className="text-xs text-gray-400 text-center">
-                          * Final fare actual ghanton ke hisab se hoga
+                          * Aakhri kiraya asli ghanton ke hisaab se banega
                         </p>
                       )}
                     </div>
@@ -1219,7 +1239,7 @@ const BookRide = () => {
                 )}
 
                 {/* Kab chahiye — abhi ya pre-booking */}
-                <div className="bg-white rounded-xl shadow-sm p-6">
+                <div className="bg-white rounded-2xl border border-gray-100 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Kab chahiye?</h3>
                   <div className="grid grid-cols-2 gap-3">
                     {[
@@ -1259,12 +1279,12 @@ const BookRide = () => {
                 </div>
 
                 {/* Payment Method */}
-                <div className="bg-white rounded-xl shadow-sm p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Payment Method</h3>
+                <div className="bg-white rounded-2xl border border-gray-100 p-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-3">Bhugtaan kaise karenge?</h3>
                   <div className="grid grid-cols-2 gap-3">
                     {[
                       { id: 'cash',   label: '💵 Cash' },
-                      { id: 'online', label: '💳 Pay Online' },
+                      { id: 'online', label: '💳 Online (UPI / card)' },
                     ].map((pm) => (
                       <button
                         key={pm.id}
@@ -1285,16 +1305,16 @@ const BookRide = () => {
                 <button
                   onClick={handleConfirmRide}
                   disabled={loading || !pickup || (!isTractorJcb && (!dropoff || !fare))}
-                  className="w-full bg-gradient-to-r from-orange-600 to-orange-500 text-white py-4 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="w-full bg-gray-900 hover:bg-black text-white py-4 rounded-xl font-bold text-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition"
                 >
                   {loading ? (
-                    <span className="flex items-center justify-center">{spinner}Booking...</span>
+                    <span className="flex items-center justify-center">{spinner}Book ho rahi hai...</span>
                   ) : isTractorJcb ? (
-                    vehicleType === 'jcb' ? '🚧 JCB Book Karo'
-                      : vehicleType === 'harvester' ? '🌾 Harvester Book Karo'
-                      : '🚜 Tractor Book Karo'
+                    vehicleType === 'jcb' ? '🚧 JCB book karein'
+                      : vehicleType === 'harvester' ? '🌾 Harvester book karein'
+                      : '🚜 Tractor book karein'
                   ) : (
-                    'Confirm Booking'
+                    'Booking pakki karein'
                   )}
                 </button>
               </>
@@ -1302,7 +1322,7 @@ const BookRide = () => {
           </div>
 
           {/* ── Right: Map ── */}
-          <div className="hidden lg:block bg-white rounded-xl shadow-sm overflow-hidden sticky top-8" style={{ height: 'fit-content' }}>
+          <div className="hidden lg:block bg-white rounded-2xl border border-gray-100 overflow-hidden sticky top-8" style={{ height: 'fit-content' }}>
             <div className="h-[600px]">
               <Map
                 center={
@@ -1312,6 +1332,8 @@ const BookRide = () => {
                 }
                 zoom={pickup ? 13 : 5}
                 markers={mapMarkers}
+                fit
+                height="100%"
               />
             </div>
           </div>

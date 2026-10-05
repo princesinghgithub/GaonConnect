@@ -32,8 +32,8 @@ const ICONS = {
 /**
  * markers: [{ lat, lng, label, kind?: 'pickup'|'drop'|'driver' }]
  * fit: sab markers ek saath dikhao (center/zoom ki jagah). Sirf tab dobara
- *      fit hota hai jab marker ginti badle — warna har poll par customer ka
- *      zoom/pan reset ho jaata.
+ *      fit hota hai jab pickup/drop badle ya marker ginti badle — warna har
+ *      poll par customer ka zoom/pan reset ho jaata.
  * height: CSS height (default 400px)
  */
 const Map = ({ center = [20.5937, 78.9629], zoom = 5, markers = [], route = [], fit = false, height = '400px', zoomPosition = 'topleft' }) => {
@@ -41,7 +41,7 @@ const Map = ({ center = [20.5937, 78.9629], zoom = 5, markers = [], route = [], 
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
   const routeLayerRef = useRef(null);
-  const fittedCount = useRef(0);
+  const fittedKey = useRef('');
   const lastBounds = useRef(null);
 
   useEffect(() => {
@@ -106,8 +106,11 @@ const Map = ({ center = [20.5937, 78.9629], zoom = 5, markers = [], route = [], 
       markersLayerRef.current.addLayer(leafletMarker);
     });
 
-    if (fit && valid.length && valid.length !== fittedCount.current) {
-      fittedCount.current = valid.length;
+    // Pickup/drop badle ya naya marker aaya tab hi dobara fit — driver ke har
+    // hilne par nahi, warna customer ka zoom baar-baar uchhalta.
+    const fitKey = `${valid.length}|${valid.filter((m) => m.kind !== 'driver').map((m) => `${m.lat},${m.lng}`).join(';')}`;
+    if (fit && valid.length && fitKey !== fittedKey.current) {
+      fittedKey.current = fitKey;
       map.invalidateSize();
       if (valid.length === 1) {
         lastBounds.current = null;
