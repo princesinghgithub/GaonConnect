@@ -11,8 +11,8 @@
 // syncEquipmentConfig.js ki tarah poora config nahi chipkata: sirf jo gaadi,
 // category ya kaam GAAYAB hai wahi jodta hai. Admin ne jo rate, naam ya
 // chalu/band badla hai wo waisa hi rehta hai. Naye kaam rate 0 aur band aate
-// hain — admin dashboard (Rate Card) se apne ilaake ka rate bharega aur chalu
-// karega, tab customer ko dikhenge.
+// hain, nayi gaadi bhi band — admin dashboard (Rate Card) se apne ilaake ka
+// rate bharega aur chalu karega, tab customer ko dikhenge.
 //
 // Chalane ka tareeka:
 //   node scripts/addToolServices.js --dry-run   (sirf batata hai)
@@ -56,11 +56,14 @@ const plain = (x) => (x && typeof x.toObject === 'function' ? x.toObject() : x);
   // ── 1. Gaadi ke rate card (vehicleRates) ─────────────────────────────────
   // Naya (khaali) Setting banakar uske default padhte hain — models/Setting.js
   // mein likhe default hi asli source hain, yahan dobara nahi likhe.
+  // Nayi gaadi BAND aati hai, naye kaam ki tarah — warna distance wali gaadi
+  // (jaise E-Rickshaw) default rate par turant customer app mein khul jaati.
+  // Admin Rate Card se chalu karega.
   const fresh = new Setting();
   for (const [id, rate] of fresh.vehicleRates.entries()) {
     if (!settings.vehicleRates.has(id)) {
-      if (!DRY) settings.vehicleRates.set(id, plain(rate));
-      added.push(`gaadi → "${rate.label || id}" ka rate card`);
+      if (!DRY) settings.vehicleRates.set(id, { ...plain(rate), isActive: false });
+      added.push(`gaadi → "${rate.label || id}" ka rate card (band)`);
     }
   }
 
