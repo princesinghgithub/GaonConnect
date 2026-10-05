@@ -41,6 +41,9 @@ const { createPhotoUpload } = require('../middleware/upload');
 
 const workProofUpload = createPhotoUpload('gaonconnect/work-proof');
 
+// Safar ka OTP driver app ko kisi jawab mein na jaaye (customer batata hai)
+router.use(require('../middleware/hideOtpFromDriver'));
+
 // ─── Customer ─────────────────────────────────────────────────────────────────
 router.post('/create',          protect, validate(schemas.createRide), createRide);
 router.get('/current/customer', protect, getCurrentRideCustomer);

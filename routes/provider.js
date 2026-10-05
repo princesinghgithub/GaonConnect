@@ -38,6 +38,10 @@ const { sendPhoneOTP, verifyPhoneOTP } = require('../controllers/authController'
 // ─── Profile photo upload config ─────────────────────────────────────────────
 const photoUpload = createPhotoUpload('gaonconnect/profile');
 
+// Driver ki kisi bhi list/jawab mein safar ka OTP na jaaye (login wale OTP
+// routes token ke bina hain — un par ye lagta hi nahi)
+router.use(require('../middleware/hideOtpFromDriver'));
+
 // ─── PUBLIC ROUTES — no token needed ─────────────────────────────────────────
 
 // Driver OTP login (phone based)
