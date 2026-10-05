@@ -41,6 +41,9 @@ const { createPhotoUpload } = require('../middleware/upload');
 
 const workProofUpload = createPhotoUpload('gaonconnect/work-proof');
 
+// Safar ka OTP driver app ko kisi jawab mein na jaaye (customer batata hai)
+router.use(require('../middleware/hideOtpFromDriver'));
+
 // ─── Customer ─────────────────────────────────────────────────────────────────
 router.post('/create',          protect, validate(schemas.createRide), createRide);
 router.get('/current/customer', protect, getCurrentRideCustomer);
@@ -249,9 +252,15 @@ router.get('/fare-estimate',
       // Specific vehicle — detailed breakdown
       if (vehicleType) {
         const breakdown = await getDynamicFare(distance, vehicleType, fareOptions);
+        const MAX_TRIP_DISTANCE_KM = require('../config/maxTripDistanceConfig');
+        const maxTripKm = MAX_TRIP_DISTANCE_KM[vehicleType] ?? MAX_TRIP_DISTANCE_KM.auto;
         return res.json({
           success: true,
-          data: { distance, duration, route: trip.points, distanceIsRoad: trip.isRoad, ...breakdown },
+          data: {
+            distance, duration, route: trip.points, distanceIsRoad: trip.isRoad, ...breakdown,
+            maxTripKm,
+            tooFar: (breakdown.pricingType || 'distance') === 'distance' && distance > maxTripKm,
+          },
         });
       }
 
@@ -288,9 +297,17 @@ router.get('/fare-estimate',
         console.error('fare-estimate dues error:', duesErr.message);
       }
 
+      // Har gaadi ki lambi-trip ki had (auto 40 km...) — booking par createRide
+      // isse lambi trip mana karta hai. Pehle ye sirf "Confirm" dabane par pata
+      // chalta tha; ab list hi bata de ki ye gaadi is doori ke liye nahi.
+      const MAX_TRIP_DISTANCE_KM = require('../config/maxTripDistanceConfig');
+      const tripLimit = (type) => MAX_TRIP_DISTANCE_KM[type] ?? MAX_TRIP_DISTANCE_KM.auto;
+
       // App ke liye simplified list bhi bhejo
       const fareList = Object.entries(allFares).map(([type, data]) => ({
         vehicleType:  type,
+        maxTripKm:    tripLimit(type),
+        tooFar:       (data.pricingType || 'distance') === 'distance' && distance > tripLimit(type),
         // Sabse paas wali khaali gaadi kitne minute door. null = aas-paas koi nahi.
         etaMinutes:   etaFor(nearby, type),
         label:        data.label,

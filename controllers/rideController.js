@@ -707,6 +707,18 @@ exports.getRideById = async (req, res) => {
 
     if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
 
+    // Sirf ride ke log — customer, uska driver, admin. Pehle koi bhi login
+    // wala ride id se customer ka phone, ghar ka pata aur safar ka OTP dekh
+    // sakta tha; website par ye id URL mein hoti hai (/ride/:id) aur share ho
+    // jaati hai.
+    const uid = String(req.user?._id || req.user?.id || '');
+    const isCustomer = String(ride.customer?._id || ride.customer || '') === uid;
+    const isDriver   = !!ride.provider?.user && String(ride.provider.user._id || ride.provider.user) === uid;
+    const isAdmin    = req.user?.role === 'admin';
+    if (!isCustomer && !isDriver && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Ye ride aapki nahi hai' });
+    }
+
     return res.status(200).json({ success: true, data: ride });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Ride fetch karne mein error' });
