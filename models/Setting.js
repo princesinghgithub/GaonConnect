@@ -130,17 +130,20 @@ const vehicleRateSchema = new mongoose.Schema({
 // maintenance aur waqt nikal aaye. Sirf Uber/Rapido se sasta dikhne ke liye
 // rate neeche nahi rakhe gaye.
 const DEFAULT_VEHICLE_RATES = {
+  // Bike/auto Rapido jaisa: kam se kam + har km + safar ke har minute ka
+  // chhota charge (jaam/dheemi sadak par driver ka nuksaan na ho) + 3 min
+  // muft intezaar. Samay sadak ke raaste se (utils/routing.js), app se nahi.
   bike: {
     label: 'Bike Taxi', icon: '🏍️', pricingType: 'distance', fuelType: 'petrol',
-    minimumFare: 30, includedKm: 2, perKmRate: 15,
-    freeWaitingMinutes: 5, waitingPerMinute: 1,
+    minimumFare: 20, includedKm: 2, perKmRate: 5, perMinuteRate: 0.5,
+    freeWaitingMinutes: 3, waitingPerMinute: 1,
     freePickupKm: 3, longPickupPerKm: 3,
     nightChargePercent: 10, cancellationFee: 10,
   },
   auto: {
     label: 'Auto Rickshaw', icon: '🛺', pricingType: 'distance', fuelType: 'cng',
-    minimumFare: 50, includedKm: 2, perKmRate: 16,
-    freeWaitingMinutes: 5, waitingPerMinute: 1.5,
+    minimumFare: 30, includedKm: 2, perKmRate: 12, perMinuteRate: 1,
+    freeWaitingMinutes: 3, waitingPerMinute: 1.5,
     freePickupKm: 3, longPickupPerKm: 4,
     nightChargePercent: 10, cancellationFee: 20,
   },

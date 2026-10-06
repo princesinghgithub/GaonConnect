@@ -228,6 +228,11 @@ const RideSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Trip share (Rapido/Uber jaisa) — family ko bheja link /track/:token.
+    // Customer "share" dabaye tabhi banta hai; bina login dekhne ke liye,
+    // isliye lamba random (ride id nahi — wo customer ke apne pages kholti).
+    shareToken: { type: String, index: { unique: true, sparse: true } },
+
     status: {
       type: String,
       enum: [

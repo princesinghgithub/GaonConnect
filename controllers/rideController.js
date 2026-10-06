@@ -388,6 +388,10 @@ exports.createRide = async (req, res) => {
     // aur app usme seedhi doori bhejti thi (sadak se 20-30% kam). Khet par
     // kaam (pickup = drop) ki doori 0 hi aati hai, uska kiraya ghante/acre se.
     const isDistanceRide = !req.body.packageId;
+    // Safar ka samay bhi server ka (sadak se) — app ka bheja nahi. Warna app se
+    // kam samay bhej kar "safar ke samay" ka charge ghataya ja sakta tha, aur
+    // fare screen par dikha kiraya booking se alag ho jaata.
+    let serverMinutes = null;
     if (isDistanceRide && pickup && dropLocation) {
       const pLat = pickup.latitude  ?? pickup.location?.latitude;
       const pLng = pickup.longitude ?? pickup.location?.longitude;
@@ -400,6 +404,7 @@ exports.createRide = async (req, res) => {
         const trip = via
           ? await measureLegs([[pLat, pLng], [via.latitude, via.longitude], [dLat, dLng]])
           : await measureTrip(pLat, pLng, dLat, dLng);
+        serverMinutes = trip.durationMinutes || null;
         if (trip.isRoad) {
           finalDist = trip.distance;
         } else {
@@ -412,7 +417,10 @@ exports.createRide = async (req, res) => {
         }
       }
     }
-    const finalDur     = estimatedDuration || 30;
+    // Sawari mein sadak ka samay; ghante wale kaam mein app ke ghante (kaam ka samay)
+    const finalDur     = (serverMinutes && !(serviceCategory && serviceType))
+      ? serverMinutes
+      : (estimatedDuration || 30);
 
     // Trip (pickup→drop) distance cap — vehicle type ke hisaab se. Dispatch
     // radius (upar DISPATCH_RADIUS_STAGES) alag cheez hai — wo driver-to-pickup
@@ -524,7 +532,7 @@ exports.createRide = async (req, res) => {
         // Ride ke waqt ka charge booking ke andaaze par — ride ke baad ke
         // asli time par nahi. Customer ko jo daam dikha wahi lagega, chahe
         // raste mein jaam mile.
-        durationMinutes: Number(req.body.estimatedDuration) || calculateDuration(finalDist),
+        durationMinutes: serverMinutes || calculateDuration(finalDist),
         bookingDate: scheduledAt ? new Date(scheduledAt) : new Date(),
         variant: req.body.vehicleVariant || '',
         ac:      Boolean(req.body.ac),
