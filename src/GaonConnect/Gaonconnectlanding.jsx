@@ -26,9 +26,23 @@ const FARE_FORMULAS = {
 // sab khisak jaate the. i18n item ka "id" hi is map ki chaabi hai.
 const metaOf = (service) => LANDING_SERVICES[service?.id] ?? null;
 
-const estimateFare = (service, distanceKm) => {
-  const type = metaOf(service)?.fareType;
-  if (!type || distanceKm == null) return null;
+// Kiraya admin ke Rate Card se (public /ride/rate-card) — backend jaisa hi
+// hisaab: kam se kam kiraya + shamil km ke baad har km. Pehle yahan apna
+// pakka formula tha (auto ₹50 + ₹12/km) jo Rate Card badalne par bhi nahi
+// badalta — landing par ek daam, booking par doosra. Rate Card na mile to
+// purana formula. Raat ka charge/surge booking par jud sakta hai, isliye
+// "lagbhag".
+const ROAD_TYPES = ['auto', 'car', 'tempo'];
+const estimateFare = (service, distanceKm, rateCards = {}) => {
+  const meta = metaOf(service);
+  if (distanceKm == null || !meta) return null;
+  const card = rateCards[meta.vehicleType];
+  if (card && Number.isFinite(Number(card.perKmRate))) {
+    const extraKm = Math.max(0, distanceKm - (Number(card.includedKm) || 0));
+    return Math.round((Number(card.minimumFare) || 0) + extraKm * Number(card.perKmRate));
+  }
+  const type = meta.fareType;
+  if (!type || !FARE_FORMULAS[type]) return null;
   const { base, perKm } = FARE_FORMULAS[type];
   return Math.round(base + perKm * distanceKm);
 };
@@ -63,7 +77,38 @@ const GaonConnectLanding = () => {
   const [heroServices, setHeroServices] = useState([]);
   // Neeche (render ke paas) declare hota tha — upar heroService mein use hote
   // hi "services before initialization" se page gir jaata. Isliye yahan.
-  const services = t('services.items', { returnObjects: true });
+  // Abhi kaun si seva sach mein book ho sakti hai — backend ki public suchi.
+  // Admin ne kisi gaadi ke saare kaam band kiye ho (jaise harvester) to wo
+  // yahan nahi dikhti; warna customer chunkar aage atak jaata. Suchi na mile
+  // (network) to sab dikhao — booking par backend khud rok dega.
+  const [bookable, setBookable] = useState(null);       // Set(vehicleType) | null
+  const [threshingOn, setThreshingOn] = useState(true); // tractor ka thresher kaam chalu?
+  const [rateCards, setRateCards] = useState({});
+  useEffect(() => {
+    let alive = true;
+    rideAPI.getVehicleTypes()
+      .then((res) => {
+        const list = Array.isArray(res?.data?.data) ? res.data.data : [];
+        if (alive && list.length) setBookable(new Set(list.map((v) => v.id)));
+      })
+      .catch(() => {});
+    rideAPI.getServices('tractor')
+      .then((res) => {
+        const cats = res?.data?.data || [];
+        if (alive) setThreshingOn(cats.some((c) => (c.sub || []).some((s) => s.id === 'threshing')));
+      })
+      .catch(() => {});
+    Promise.all(ROAD_TYPES.map((v) => rideAPI.getRateCard(v).then((r) => [v, r?.data?.data]).catch(() => [v, null])))
+      .then((pairs) => { if (alive) setRateCards(Object.fromEntries(pairs.filter(([, c]) => c))); });
+    return () => { alive = false; };
+  }, []);
+  const allServices = t('services.items', { returnObjects: true });
+  const services = (Array.isArray(allServices) ? allServices : []).filter((s) => {
+    const meta = metaOf(s);
+    if (!meta) return true;
+    if (meta.preset?.serviceId === 'threshing' && !threshingOn) return false;
+    return !bookable || bookable.has(meta.vehicleType);
+  });
   const heroService = heroServiceIndex === '' ? null : services[Number(heroServiceIndex)];
   const heroVehicleType = metaOf(heroService)?.vehicleType ?? null;
   const heroIsTractorJcb = WORK_VEHICLE_TYPES.includes(heroVehicleType);
@@ -311,7 +356,7 @@ const GaonConnectLanding = () => {
                     </div>
                   ) : (
                     services.map((service, index) => {
-                      const fare = estimateFare(service, heroDistanceKm);
+                      const fare = estimateFare(service, heroDistanceKm, rateCards);
                       const selected = heroServiceIndex === String(index);
                       return (
                         <button
@@ -338,7 +383,7 @@ const GaonConnectLanding = () => {
                             {service.name}
                           </span>
                           <span className="text-sm font-semibold text-india-green dark:text-green-400 shrink-0">
-                            {fare ? `₹${fare}` : t('hero.quoteOnRequest')}
+                            {fare ? <><span className="mr-1 text-xs font-normal text-gray-400">lagbhag</span>₹{fare}</> : t('hero.quoteOnRequest')}
                           </span>
                         </button>
                       );

@@ -50,7 +50,17 @@ const isTractorOrJcb = (type) => WORK_VEHICLES.includes(type);
 const WEBSITE_HIDDEN = ['bike', 'truck', 'goods', 'ambulance', 'wedding', 'thresher'];
 const mergeBackendTypes = (list) => {
   let changed = false;
-  (Array.isArray(list) ? list : []).forEach((v) => {
+  const live = Array.isArray(list) ? list : [];
+  // Neev ki suchi ki jo gaadi abhi book nahi ho sakti (admin ne saare kaam band
+  // kiye — jaise harvester) wo chhupao; warna customer chunkar atak jaata.
+  if (live.length) {
+    const ids = new Set(live.map((v) => v?.id));
+    VEHICLE_OPTIONS.forEach((o) => {
+      const off = !ids.has(o.type);
+      if (!!o.unavailable !== off) { o.unavailable = off; changed = true; }
+    });
+  }
+  live.forEach((v) => {
     if (!v?.id || WEBSITE_HIDDEN.includes(v.id) || VEHICLE_OPTIONS.some((o) => o.type === v.id)) return;
     if (v.pricingType === 'package') return;
     const isRide = (v.pricingType || 'distance') === 'distance';
@@ -166,7 +176,7 @@ const BookRide = () => {
   const initialIsTractorJcb = isTractorOrJcb(initialVehicleType);
 
   // Admin ki nayi sevayein backend se — aate hi list dobara banti hai
-  const [, setTypesTick] = useState(0);
+  const [typesTick, setTypesTick] = useState(0);
   useEffect(() => {
     let alive = true;
     rideAPI.getVehicleTypes()
@@ -463,6 +473,17 @@ const BookRide = () => {
     if (vehicleType !== 'car' || !selectedCarVariant) return base;
     return `${selectedCarVariant.label} · ${carAcChosen ? 'AC' : 'Non-AC'}`;
   };
+
+  // Chuni seva abhi band hai (landing se harvester chuna, par admin ne uske
+  // kaam band kiye) — batao aur pehli chalu gaadi par aa jao.
+  useEffect(() => {
+    const opt = VEHICLE_OPTIONS.find((o) => o.type === vehicleType);
+    if (!opt?.unavailable) return;
+    toast(`${opt.label} abhi aapke ilaake mein uplabdh nahi hai`, { icon: 'ℹ️' });
+    const next = VEHICLE_OPTIONS.find((o) => !o.unavailable);
+    if (next) handleVehicleChange(next.type);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typesTick]);
 
   // Chuni gaadi is doori ke liye nahi (46 km par auto) — pehli chalne wali
   // sadak ki gaadi par khud aa jao, jaise Rapido list mein sabse upar wali.
@@ -866,7 +887,7 @@ const BookRide = () => {
 
                 <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-6 space-y-2">
                   <h3 className="text-lg font-bold text-gray-900 mb-2">Aapke liye gaadiyan</h3>
-                  {VEHICLE_OPTIONS.flatMap((opt) =>
+                  {VEHICLE_OPTIONS.filter((opt) => !opt.unavailable).flatMap((opt) =>
                     // Car = Mini / Sedan / SUV, har ek apni line (Uber/Rapido jaisa)
                     opt.type === 'car' && carVariants.length
                       ? carVariants.map((v) => ({ ...opt, key: `car:${v.id}`, variant: v }))
@@ -955,6 +976,12 @@ const BookRide = () => {
                       </div>
                     );
                   })}
+                  {dropoff && ROAD_VEHICLES.some((t) => tripLimits[t]) && ROAD_VEHICLES.every((t) => !tripLimits[t] || tripLimits[t].tooFar) && (
+                    <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2 mt-2">
+                      Itni lambi trip ke liye abhi koi gaadi nahi hai. Pickup ya drop dobara dekh lijiye —
+                      kahin galat sheher to nahi chuna gaya?
+                    </p>
+                  )}
                   {!dropoff && (
                     <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2">
                       Drop location daaliye to auto, car aur tempo ka kiraya yahin dikh jayega.

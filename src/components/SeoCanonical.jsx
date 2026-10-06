@@ -57,15 +57,17 @@ const RIDE_TRACKING_META = {
 // index, so unmapped URLs never carry the homepage's indexable meta tags.
 const PAGE_META = {
   '/': {
-    title: 'GaonConnect - Gaon Connect | Rural Transport App | Tractor Auto Car Booking',
+    // index.html ke <title>/description jaisa hi rakhna — pehli load par wo,
+    // page badalne par ye lagta hai
+    title: 'GaonConnect - Tractor, JCB, Auto, Car Online Booking | Gaon ki Gaadi',
     description:
-      'GaonConnect - Madhya Pradesh ka rural transport app. Rewa, Mauganj, Satna, Maihar, Pithampur, Sidhi, Singrauli, Jabalpur, Katni, Shahdol, Sagar, Bhopal, Indore mein auto, car, tractor, JCB, tempo, pickup, thresher, harvester booking. Jahan bhi zarurat ho, GaonConnect.',
+      'Gaon aur dehat ke liye online gaadi booking - tractor, JCB, auto, car, tempo. Website ya app se book karein, kiraya pehle dekhein, driver ko live track karein. Rewa, Satna, Jabalpur, Bhopal, Indore samet poore Madhya Pradesh mein.',
     keywords:
-      'gaon connect, gaonconnect, rural transport app, rural ride booking, village transport india, gaon ki gaadi, kisan gadi booking, tractor booking india, JCB booking, auto booking village, car booking rural india, tempo booking, pickup booking, thresher booking, harvester booking, jutai ke liye tractor, shaadi ki gadi booking, dehat transport, rural cab booking, gaon mein gaadi, MP rural transport, Rewa transport, Satna transport, Jabalpur rural transport, Bhopal rural gaadi, Indore rural transport, village cab service, kisan vehicle booking, har jagah gaadi booking, Tractor Rental, JCB Rental, Farm Equipment Rental, Agriculture Machinery, Village Transport, Agriculture Logistics, Tractor on Rent, JCB on Rent, Farm Services, Agricultural Equipment, Tractor Near Me, JCB Near Me',
+      'gaon connect, gaonconnect, online tractor booking, online gaadi booking, tractor book online, JCB book online, rural transport app, rural ride booking, village transport india, gaon ki gaadi, kisan gadi booking, tractor booking india, JCB booking, auto booking village, car booking rural india, tempo booking, pickup booking, thresher booking, harvester booking, jutai ke liye tractor, dehat transport, rural cab booking, gaon mein gaadi, MP rural transport, Rewa transport, Satna transport, Jabalpur rural transport, Bhopal rural gaadi, Indore rural transport, village cab service, kisan vehicle booking, har jagah gaadi booking, Tractor Rental, JCB Rental, Farm Equipment Rental, Agriculture Machinery, Village Transport, Agriculture Logistics, Tractor on Rent, JCB on Rent, Farm Services, Agricultural Equipment, Tractor Near Me, JCB Near Me',
   },
   '/auth': {
-    title: 'Login / Register - GaonConnect',
-    description: 'Login ya register karein GaonConnect par.',
+    title: 'Login - GaonConnect',
+    description: 'Mobile number aur OTP se GaonConnect par login karein — naya number ho to account apne aap ban jaata hai.',
     keywords: 'gaonconnect login, gaonconnect register, gaon connect signup, rural transport app account, driver partner login',
     noindex: true,
   },
@@ -118,7 +120,7 @@ const PAGE_META = {
     breadcrumb: 'Contact Us',
   },
   '/customer': {
-    title: 'Book a Ride - GaonConnect',
+    title: 'Gaadi Book Karein - GaonConnect',
     description: 'Apni gaadi book karein - pickup aur drop chunkar.',
     noindex: true,
   },
