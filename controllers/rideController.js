@@ -384,7 +384,10 @@ exports.createRide = async (req, res) => {
     // Kaam wali booking (tractor/JCB) aur wedding package isme nahi aate —
     // unka kiraya ghante/acre/package se banta hai, aur wahan "doori" ka
     // matlab alag hai.
-    const isDistanceRide = !req.body.packageId && !(serviceCategory && serviceType);
+    // Kaam wali booking bhi — tractor se fasal/saamaan dhona km se chalta hai,
+    // aur app usme seedhi doori bhejti thi (sadak se 20-30% kam). Khet par
+    // kaam (pickup = drop) ki doori 0 hi aati hai, uska kiraya ghante/acre se.
+    const isDistanceRide = !req.body.packageId;
     if (isDistanceRide && pickup && dropLocation) {
       const pLat = pickup.latitude  ?? pickup.location?.latitude;
       const pLng = pickup.longitude ?? pickup.location?.longitude;
@@ -401,10 +404,11 @@ exports.createRide = async (req, res) => {
           finalDist = trip.distance;
         } else {
           // Routing abhi nahi chali. Client ki doori tabhi maano jab wo
-          // samajh mein aane wali ho: seedhi doori se kam nahi, aur usse
-          // dhai guna se zyada nahi.
+          // samajh mein aane wali ho: server ke andaaze (seedhi × 1.25, wahi
+          // jo fare screen ne dikhaya) se kam nahi, aur seedhi ke dhai guna
+          // se zyada nahi. Purani app seedhi doori bhejti hai — wo kam padti.
           const claimed = Number(finalDist) || 0;
-          finalDist = Math.min(Math.max(claimed, trip.straight), trip.straight * 2.5 + 1);
+          finalDist = Math.min(Math.max(claimed, trip.distance), trip.straight * 2.5 + 1);
         }
       }
     }

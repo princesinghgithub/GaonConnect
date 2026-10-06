@@ -131,8 +131,11 @@ exports.reverseGeocode = async (req, res) => {
 };
 
 // ─── POST /api/location/distance ─────────────────────────────────────────────
-// Straight-line distance + rough ETA. Koi external call nahi — isliye ye
-// Nominatim throttle se bilkul independent hai.
+// Sadak ki doori + andaazan samay — wahi measureTrip jo kiraya banata hai
+// (fare-estimate, createRide). Pehle yahan seedhi doori (haversine) thi:
+// website par "Doori 37.8 km" dikhta aur kiraya 46.5 km sadak ka lagta, aur
+// km wale kaam (tractor se dhulai) ka kiraya hi seedhi doori se banta tha.
+// Routing na chale to measureTrip khud seedhi × 1.25 deta hai.
 exports.calculateDistance = async (req, res) => {
   try {
     const { origin, destination, vehicleType = 'auto' } = req.body;
@@ -144,12 +147,11 @@ exports.calculateDistance = async (req, res) => {
       });
     }
 
-    const distance = calculateHaversineDistance(
-      origin.latitude,
-      origin.longitude,
-      destination.latitude,
-      destination.longitude
-    );
+    const { measureTrip } = require('../utils/routing');
+    const trip = await measureTrip(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
+    const distance = Number.isFinite(trip.distance)
+      ? trip.distance
+      : calculateHaversineDistance(origin.latitude, origin.longitude, destination.latitude, destination.longitude);
 
     const avgSpeed = vehicleType === 'bike' ? 40 : vehicleType === 'auto' ? 30 : 50; // km/h
     const durationMinutes = Math.round((distance / avgSpeed) * 60);
