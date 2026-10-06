@@ -61,6 +61,7 @@
     "subheading": "The right vehicle for every need — pick a service and get started!",
     "clickToSelect": "Click to select →",
     "items": [
+      { "id": "bike", "name": "Bike Taxi", "icon": "🏍️", "price": "₹20+" },
       { "id": "auto", "name": "Auto Rickshaw", "icon": "🛺", "price": "₹30+" },
       { "id": "car", "name": "Car", "icon": "🚗", "price": "₹100+" },
       { "id": "tractor", "name": "Tractor (Jutai)", "icon": "🚜", "price": "₹400+" },

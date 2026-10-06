@@ -20,6 +20,7 @@
 // fareType  = hero ka live kiraya-anumaan is formula se banta hai (null = anumaan nahi)
 // vehicleType = BookRide.jsx post-login jis gaadi ko samajhta hai (null = aage nahi le jaana)
 export const LANDING_SERVICES = {
+  bike:        { image: '/vehicles/bike.webp',      fareType: null,   vehicleType: 'bike',    basePrice: 20 },
   auto:        { image: '/vehicles/auto.webp',      fareType: 'auto', vehicleType: 'auto',    basePrice: 50 },
   car:         { image: '/vehicles/car.webp',       fareType: 'car',  vehicleType: 'car',     basePrice: 100 },
   tractor:     { image: '/vehicles/tractor.webp',   fareType: null,   vehicleType: 'tractor', basePrice: 400 },
@@ -39,8 +40,6 @@ export const WORK_VEHICLE_TYPES = ['tractor', 'jcb', 'harvester'];
 
 // BookRide ke "Choose Vehicle" cards vehicleType se chalte hain, index se nahi.
 export const VEHICLE_IMAGES = {
-  // Bike filhaal band hai (LANDING_SERVICES aur BookRide dono se hataayi gayi
-  // hai). Photo aur entry chhodi hai taaki wapas chaalu karna aasan rahe.
   bike:    '/vehicles/bike.webp',
   auto:    '/vehicles/auto.webp',
   car:     '/vehicles/car.webp',
@@ -75,4 +74,23 @@ export const SUB_SERVICE_IMAGES = {
   leveling:       '/vehicles/leveler.webp',
   loading:        '/vehicles/jcb_loader.webp',
   construction:   '/vehicles/jcb_backhoe.webp',
+  // Auzaar wale kaam (Rate Card se chalu hote hi website par)
+  cultivator:     '/cultivator.webp',
+  land_leveling:  '/vehicles/leveler.webp',
+  threshing:      '/vehicles/thresher.webp',
+  straw_reaper:   '/vehicles/straw_reaper.webp',
+  baling:         '/baler.webp',
+  post_hole:      '/post_hole_digger.webp',
+  breaking:       '/jcb_breaker.webp',
+  drilling:       '/earth_auger.webp',
+  // Thresher ka kaam (ghanta / acre / quintal) aur harvester ki fasalein
+  per_hour:       '/vehicles/thresher.webp',
+  per_acre:       '/vehicles/thresher.webp',
+  per_quintal:    '/vehicles/thresher.webp',
+  fixed_job:      '/vehicles/thresher.webp',
+  wheat:          '/vehicles/harvester.webp',
+  paddy:          '/vehicles/harvester.webp',
+  soybean:        '/vehicles/harvester.webp',
+  gram:           '/vehicles/harvester.webp',
+  other:          '/vehicles/harvester.webp',
 };

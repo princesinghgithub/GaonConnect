@@ -157,12 +157,9 @@ const servicePages = [
   },
   {
     slug: 'bike-taxi-booking',
-    // Bike taxi filhaal band hai. Page live hai taaki purane search results aur
-    // links tootein nahi, par noindex hai aur sitemap mein nahi hai.
-    paused: true,
     emoji: '🏍️',
-    title: 'Bike Taxi Booking for Village & Rural Travel | GaonConnect',
-    metaDescription: 'Bike taxi booking gaon aur dehat ke liye — sabse sasta aur tez safar ka tarika, GaonConnect app se turant book karein.',
+    title: 'Bike Taxi Booking Online for Village & Rural Travel | GaonConnect',
+    metaDescription: 'Bike taxi booking gaon aur dehat ke liye — sabse sasta aur tez safar. GaonConnect website ya app se turant book karein, kiraya pehle dekhein.',
     keywords: 'bike taxi rural, bike taxi booking, bike booking village, rural bike service, bike near me gaon',
     heroTitle: 'Bike Taxi Booking',
     heroSubtitle: 'Akele safar ke liye sabse tez aur sasta option — bike taxi turant book karein.',

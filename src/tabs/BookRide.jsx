@@ -5,7 +5,7 @@ import { VEHICLE_IMAGES, SUB_SERVICE_IMAGES } from '../constants/serviceImages';
 import Map from './Map';
 import { locationAPI, rideAPI } from '../services/api';
 import { toast } from 'react-hot-toast';
-import { FaCarSide, FaTractor, FaTruckPickup } from 'react-icons/fa';
+import { FaCarSide, FaMotorcycle, FaTractor, FaTruckPickup } from 'react-icons/fa';
 import { MdDirectionsRun } from 'react-icons/md';
 import { GiMineTruck } from 'react-icons/gi';
 import { HOURS_OPTIONS } from '../constants/tractorJcbServices';
@@ -17,13 +17,11 @@ import { trackEvent } from '../utils/analytics';
 // aur lagta. Ab kiraya backend hi banata hai, ek hi jagah se.
 
 // ── Vehicle options ───────────────────────────────────────────────────────────
-// Bike filhaal band hai — website ki services list se bhi hataayi gayi hai, to
-// yahan bhi nahi dikhni chahiye, warna customer wo gaadi book kar leta jo hum
-// abhi de nahi rahe. Wapas chaalu karne ke liye: neeche wali line uncomment
-// karo, ROAD_VEHICLES mein 'bike' jodo, FaMotorcycle import wapas lao, aur
-// serviceImages.js ke LANDING_SERVICES mein bike ki entry daalo.
-// { type: 'bike', icon: <FaMotorcycle />, label: 'Bike', desc: 'Per km', tagline: 'Sabse sasta — akele jaana ho to' },
+// Ye neev ki suchi hai — kaun si abhi sach mein book ho sakti hai wo backend
+// (/ride/vehicle-types) batata hai; admin Rate Card se band kare to yahan se
+// apne aap chhup jaati hai (mergeBackendTypes).
 const VEHICLE_OPTIONS = [
+  { type: 'bike',    icon: <FaMotorcycle />,    label: 'Bike',    desc: 'Per km',            tagline: 'Sabse sasta — akele jaana ho to' },
   { type: 'auto',    icon: <MdDirectionsRun />, label: 'Auto',    desc: 'Per km',            tagline: '3 log tak, gaon aur sheher dono' },
   { type: 'car',     icon: <FaCarSide />,       label: 'Car',     desc: 'Per km',            tagline: '4 log tak, aaram se aur AC ke saath' },
   { type: 'tempo',   icon: <FaTruckPickup />,   label: 'Tempo / Pickup', desc: 'Per km',     tagline: 'Saamaan, fasal ya ghar ka shifting' },
@@ -34,7 +32,7 @@ const VEHICLE_OPTIONS = [
 
 // Vehicles jinka kiraya sirf pickup→drop se banta hai. Inka daam ek saath
 // mangwa kar dikhaya jaata hai, taki customer compare kar sake.
-const ROAD_VEHICLES = ['auto', 'car', 'tempo'];
+const ROAD_VEHICLES = ['bike', 'auto', 'car', 'tempo'];
 
 // Kaam wali gaadiyan — inka kiraya backend ki service list (Rate Card) se
 // banta hai: kaam chuno, phir ghante / acre / km. Naam purana rakha hai
@@ -47,7 +45,7 @@ const isTractorOrJcb = (type) => WORK_VEHICLES.includes(type);
 // Seva" se jo gaadi/machine jode, wo backend /ride/vehicle-types se yahan
 // apne aap jud jaati hai — website ka code badle bina. Band sevayein aur
 // bike (website par jaan-boojh kar band, upar dekho) nahi.
-const WEBSITE_HIDDEN = ['bike', 'truck', 'goods', 'ambulance', 'wedding', 'thresher'];
+const WEBSITE_HIDDEN = ['truck', 'goods', 'ambulance', 'wedding', 'thresher'];
 const mergeBackendTypes = (list) => {
   let changed = false;
   const live = Array.isArray(list) ? list : [];

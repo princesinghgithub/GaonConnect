@@ -32,7 +32,7 @@ const metaOf = (service) => LANDING_SERVICES[service?.id] ?? null;
 // badalta — landing par ek daam, booking par doosra. Rate Card na mile to
 // purana formula. Raat ka charge/surge booking par jud sakta hai, isliye
 // "lagbhag".
-const ROAD_TYPES = ['auto', 'car', 'tempo'];
+const ROAD_TYPES = ['bike', 'auto', 'car', 'tempo'];
 const estimateFare = (service, distanceKm, rateCards = {}) => {
   const meta = metaOf(service);
   if (distanceKm == null || !meta) return null;
