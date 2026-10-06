@@ -9,7 +9,7 @@ const Transaction  = require('../models/Transaction');
 const Message      = require('../models/Message');
 const {
   getDynamicFare, getDynamicHourlyFare, getDynamicWeddingFare, getSettings, getVariantOrder,
-  getEquipmentCatalog, getServiceEquipment,
+  getEquipmentCatalog, getServiceEquipment, getMaxTripKm,
 } = require('../utils/dynamicFare');
 const { vehicleFilterForRide, vehicleFitsRide, rideTypesFor, sanitizeEquipment, sanitizeVariant } = require('../utils/vehicleMatch');
 const EQUIPMENT_DEFAULTS = require('../config/equipmentDefaults');
@@ -425,7 +425,7 @@ exports.createRide = async (req, res) => {
     // Trip (pickup→drop) distance cap — vehicle type ke hisaab se. Dispatch
     // radius (upar DISPATCH_RADIUS_STAGES) alag cheez hai — wo driver-to-pickup
     // distance control karta hai, ye actual ride ki lambai control karta hai.
-    const maxTripKm = MAX_TRIP_DISTANCE_KM[vehicleType] ?? MAX_TRIP_DISTANCE_KM.auto;
+    const maxTripKm = await getMaxTripKm(vehicleType); // admin Rate Card se
     if (finalDist > maxTripKm) {
       return res.status(400).json({
         success: false,
@@ -1848,7 +1848,7 @@ exports.requestDropChange = async (req, res) => {
 
     const quote = await quoteDropChange(ride, provider, { latitude, longitude });
 
-    const maxTripKm = MAX_TRIP_DISTANCE_KM[ride.vehicleType] ?? MAX_TRIP_DISTANCE_KM.auto;
+    const maxTripKm = await getMaxTripKm(ride.vehicleType); // admin Rate Card se
     if (quote.distance > maxTripKm) {
       return res.status(400).json({
         success: false,

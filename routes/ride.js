@@ -254,8 +254,7 @@ router.get('/fare-estimate',
       // Specific vehicle — detailed breakdown
       if (vehicleType) {
         const breakdown = await getDynamicFare(distance, vehicleType, fareOptions);
-        const MAX_TRIP_DISTANCE_KM = require('../config/maxTripDistanceConfig');
-        const maxTripKm = MAX_TRIP_DISTANCE_KM[vehicleType] ?? MAX_TRIP_DISTANCE_KM.auto;
+        const maxTripKm = await require('../utils/dynamicFare').getMaxTripKm(vehicleType);
         return res.json({
           success: true,
           data: {
@@ -302,8 +301,9 @@ router.get('/fare-estimate',
       // Har gaadi ki lambi-trip ki had (auto 40 km...) — booking par createRide
       // isse lambi trip mana karta hai. Pehle ye sirf "Confirm" dabane par pata
       // chalta tha; ab list hi bata de ki ye gaadi is doori ke liye nahi.
-      const MAX_TRIP_DISTANCE_KM = require('../config/maxTripDistanceConfig');
-      const tripLimit = (type) => MAX_TRIP_DISTANCE_KM[type] ?? MAX_TRIP_DISTANCE_KM.auto;
+      const { getMaxTripKm } = require('../utils/dynamicFare');
+      const limits = Object.fromEntries(await Promise.all(Object.keys(allFares).map(async (t) => [t, await getMaxTripKm(t)])));
+      const tripLimit = (type) => limits[type];
 
       // App ke liye simplified list bhi bhejo
       const fareList = Object.entries(allFares).map(([type, data]) => ({

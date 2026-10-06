@@ -76,6 +76,10 @@ const vehicleRateSchema = new mongoose.Schema({
   /** Per-vehicle commission. Khaali chhodo to global commission lagta hai. */
   commissionPercent:  { type: Number, default: null },
 
+  /** Sabse lambi trip (km) — isse lambi booking nahi banti (bike 40, car 150…).
+   *  Khaali = code ki had (config/maxTripDistanceConfig.js). */
+  maxTripKm:          { type: Number, default: null },
+
   /** Fuel adjustment kis eendhan pe lagega. */
   fuelType: { type: String, enum: ['petrol', 'diesel', 'cng', 'electric'], default: 'petrol' },
 
