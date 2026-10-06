@@ -1131,7 +1131,14 @@ exports.updateRideStatus = async (req, res) => {
     if (status === 'completed') {
       updateFields.completedAt = new Date();
       let hourlyOwnsWaiting = false;
-      if (ride.workStartedAt) {
+      // Ghante wala kaam (tractor/JCB) — jitna chala utna hi paisa. Driver ne
+      // "kaam shuru" (working) na dabaya ho to bhi: OTP se safar/kaam shuru
+      // (startedAt) se ginte hain. Pehle aisi ride par andaaze wale ghante
+      // (booking ke 2 ghante) ka hi paisa lag jaata tha, kaam kitna bhi chala.
+      const isHourlyJob = !!(ride.serviceCategory && ride.serviceType)
+        && (ride.bookingMode === 'hourly' || Number(ride.estimatedHours) > 0);
+      const workStart = ride.workStartedAt || (isHourlyJob ? ride.startedAt : null);
+      if (workStart) {
         updateFields.workEndedAt = updateFields.completedAt;
         // Ruka hua waqt — server ne khud gina (pause/resume yahin aate hain).
         // Abhi ruka hua ho to woh daur bhi jodo.
@@ -1147,7 +1154,7 @@ exports.updateRideStatus = async (req, res) => {
         // customer se lagta tha. Ab chala hua waqt lagta hai; par ghadi ke
         // farak (ruka hua waqt ghata kar) se zyada kabhi nahi, taaki app se
         // badha kar na bheja ja sake.
-        const wallHours = Math.max(0, (updateFields.completedAt - ride.workStartedAt) / 1000 - pausedSec) / 3600;
+        const wallHours = Math.max(0, (updateFields.completedAt - new Date(workStart)) / 1000 - pausedSec) / 3600;
         const workedSec = Number(req.body.workedSeconds);
         const hours     = Number.isFinite(workedSec) && workedSec > 0
           ? Math.min(workedSec / 3600, wallHours)
@@ -1159,7 +1166,7 @@ exports.updateRideStatus = async (req, res) => {
         // minimumHours floor, so kaam jaldi khatam ho jaaye to bhi minimum
         // charge lagta hai, lekin estimate se kam kaam hua to poora estimate
         // charge nahi hota — sirf actual (ya minimum, jo bhi zyada ho).
-        if (ride.bookingMode === 'hourly' && ride.serviceCategory && ride.serviceType) {
+        if (isHourlyJob) {
           const recalculated = await getDynamicHourlyFare(
             ride.vehicleType, ride.serviceCategory, ride.serviceType,
             updateFields.actualHours, ride.distance,
@@ -1170,7 +1177,9 @@ exports.updateRideStatus = async (req, res) => {
               bookingDate: ride.acceptedAt || ride.createdAt || new Date(),
             },
           );
-          if (recalculated.fare) {
+          // Sirf ghante wale kaam par — acre/quintal/km/poora-kaam ka kiraya
+          // samay se nahi badalta (wo booking par hi tay hai).
+          if (recalculated.fare && (recalculated.unit || 'hour') === 'hour') {
             // Naya kiraya asli ghanton se bana hai — par booking ke waqt ka
             // promo aur juda hua pichhla baaki usme nahi hota. Pehle yahan
             // seedha `recalculated.fare` rakh diya jaata tha: customer ka
