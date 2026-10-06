@@ -302,9 +302,14 @@ bookingMode: {
 },
 
 // Service category — farming, transport, construction etc.
+// Pakki enum nahi: categories admin Rate Card se aati hain (post_harvest,
+// harvester ki harvesting, dashboard se jodi nayi category). Enum ke chalte
+// inki har booking "not a valid enum value" se 500 deti thi — app aur website
+// dono par. Sahi category hai ya nahi, createRide Rate Card se jaanchta hai.
 serviceCategory: {
   type: String,
-  enum: ['farming', 'transport', 'spraying', 'water', 'construction', 'custom', ''],
+  trim: true,
+  maxlength: 60,
   default: ''
 },
 
