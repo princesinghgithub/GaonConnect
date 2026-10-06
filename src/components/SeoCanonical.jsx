@@ -45,7 +45,8 @@ const NOT_FOUND_META = {
 // real pages - without an entry here they fell through to NOT_FOUND_META and a
 // logged-in customer's browser tab read "Page Not Found" while they were
 // booking a ride.
-const RIDE_TRACKING_PATH = /^\/ride\/[^/]+$/;
+// /track/:token — family ke liye share kiya safar; niji, index nahi
+const RIDE_TRACKING_PATH = /^\/(ride|track)\/[^/]+$/;
 const RIDE_TRACKING_META = {
   title: 'Ride Tracking - GaonConnect',
   description: 'Apni ride live track karein.',

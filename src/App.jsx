@@ -173,6 +173,7 @@ const AdminDashboard = lazy(() => import('./dashboards/AdminDashboard'));
 
 const BookRide = lazy(() => import('./tabs/BookRide'));
 const RideTracking = lazy(() => import('./components/RideTracking'));
+const TrackShared = lazy(() => import('./components/pages/TrackShared'));
 
 const PrivacyPolicy = lazy(() => import('./components/pages/PrivacyPolicy'));
 const AccountDeletion = lazy(() => import('./components/pages/AccountDeletion'));
@@ -326,6 +327,9 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* Family ke liye share kiya safar — bina login (Rapido/Uber jaisa) */}
+            <Route path="/track/:token" element={<TrackShared />} />
 
             {/* PRIVACY POLICY - Public page for Play Store */}
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />

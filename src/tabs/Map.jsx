@@ -123,18 +123,21 @@ const Map = ({ center = [20.5937, 78.9629], zoom = 5, markers = [], route = [], 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markerKey, fit]);
 
-  // Update route
+  // Update route — sadak ka raasta (Rapido jaisi gehri line). `fit` wale map
+  // par markers hi frame tay karte hain, raasta har update par zoom na badle.
+  const routeKey = route && route.length ? `${route.length}:${route[0]}:${route[route.length - 1]}` : '';
   useEffect(() => {
     if (routeLayerRef.current) {
       routeLayerRef.current.clearLayers();
 
-      if (route && route.length > 0) {
-        const polyline = L.polyline(route, { color: 'blue', weight: 4 });
+      if (route && route.length > 1) {
+        const polyline = L.polyline(route, { color: '#111827', weight: 5, opacity: 0.85 });
         routeLayerRef.current.addLayer(polyline);
-        mapInstanceRef.current.fitBounds(polyline.getBounds());
+        if (!fit) mapInstanceRef.current.fitBounds(polyline.getBounds());
       }
     }
-  }, [route]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeKey, fit]);
 
   return <div ref={mapRef} style={{ height, width: '100%' }} />;
 };

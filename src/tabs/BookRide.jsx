@@ -21,7 +21,7 @@ import { trackEvent } from '../utils/analytics';
 // (/ride/vehicle-types) batata hai; admin Rate Card se band kare to yahan se
 // apne aap chhup jaati hai (mergeBackendTypes).
 const VEHICLE_OPTIONS = [
-  { type: 'bike',    icon: <FaMotorcycle />,    label: 'Bike',    desc: 'Per km',            tagline: 'Sabse sasta — akele jaana ho to' },
+  { type: 'bike',    icon: <FaMotorcycle />,    label: 'Bike',    desc: 'Per km',            tagline: '1 savari · helmet milega · sabse sasta' },
   { type: 'auto',    icon: <MdDirectionsRun />, label: 'Auto',    desc: 'Per km',            tagline: '3 log tak, gaon aur sheher dono' },
   { type: 'car',     icon: <FaCarSide />,       label: 'Car',     desc: 'Per km',            tagline: '4 log tak, aaram se aur AC ke saath' },
   { type: 'tempo',   icon: <FaTruckPickup />,   label: 'Tempo / Pickup', desc: 'Per km',     tagline: 'Saamaan, fasal ya ghar ka shifting' },
@@ -214,6 +214,10 @@ const BookRide = () => {
   const [quotesLoading, setQuotesLoading] = useState(false);
   // { auto: { tooFar: true, maxTripKm: 40 } } — lambi trip par wo gaadi band
   const [tripLimits, setTripLimits] = useState({});
+  // Captain kitni der mein — { auto: 4, bike: null } (null = paas mein koi nahi)
+  const [etas, setEtas] = useState({});
+  // Map par sadak ka raasta [[lat, lng], ...] — fare-estimate hi bhejta hai
+  const [routeLine, setRouteLine] = useState([]);
   // Car ki categories (Mini / Sedan / SUV) — Uber/Rapido jaisa, har ek apne
   // daam ke saath. Backend fare-estimate har category ka AC / Non-AC daam
   // bhejta hai: [{ id, label, models, seats, options: [{ ac, totalFare }] }]
@@ -427,6 +431,7 @@ const BookRide = () => {
   // isliye customer ko har gaadi par tap karke wapas aana nahi padta.
   const loadQuotes = async (origin, destination) => {
     if (!origin?.location || !destination?.location) return;
+    setRouteLine([]);
     setQuotesLoading(true);
     const params = {
       pickupLat: origin.location.latitude,
@@ -447,6 +452,9 @@ const BookRide = () => {
       setQuotes(q);
       // Is doori ke liye kaun si gaadi nahi chal sakti (auto 40 km tak...)
       setTripLimits(Object.fromEntries(fares.map((f) => [f.vehicleType, { tooFar: !!f.tooFar, maxTripKm: f.maxTripKm }])));
+      setEtas(Object.fromEntries(fares.map((f) => [f.vehicleType, typeof f.etaMinutes === 'number' ? f.etaMinutes : null])));
+      const pts = Array.isArray(res?.data?.data?.route) ? res.data.data.route : [];
+      setRouteLine(pts.map((q) => [q.latitude, q.longitude]));
       const car = fares.find((x) => x.vehicleType === 'car');
       const variants = (Array.isArray(car?.variants) ? car.variants : [])
         .map((v) => ({ ...v, options: (v.options || []).filter((o) => typeof o.totalFare === 'number') }))
@@ -850,6 +858,7 @@ const BookRide = () => {
                       center={pickup?.location ? [pickup.location.latitude, pickup.location.longitude] : [20.5937, 78.9629]}
                       zoom={pickup ? 13 : 5}
                       markers={mapMarkers}
+                      route={step >= 2 ? routeLine : []}
                       fit
                       height="100%"
                     />
@@ -869,6 +878,16 @@ const BookRide = () => {
             {/* ── STEP 2: Vehicle + service ── */}
             {step === 2 && (
               <>
+                {/* Mobile: upar chhota map sadak ke raaste ke saath — Rapido jaisa,
+                    gaadi chunte waqt dikhe kis raaste ka daam hai */}
+                {dropoff && (
+                  <div className="lg:hidden bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <div className="h-44">
+                      <Map center={[20.5937, 78.9629]} zoom={5} markers={mapMarkers} route={routeLine} fit height="100%" zoomPosition="topright" />
+                    </div>
+                  </div>
+                )}
+
                 {/* Trip recap — customer ko yaad rahe ki kis route ka daam dikh raha hai */}
                 <button
                   onClick={() => setStep(1)}
@@ -933,6 +952,17 @@ const BookRide = () => {
                             {v?.seats ? <span className="ml-2 text-xs font-normal text-gray-500">👤 {v.seats}</span> : null}
                           </span>
                           <span className="block text-xs text-gray-500 truncate">{v ? (v.models || opt.tagline) : opt.tagline}</span>
+                          {/* Captain kitni der mein — Rapido jaisa. Car ki har category ka apna */}
+                          {isRoad && dropoff && !tooFar && (() => {
+                            const eta = v ? carOptionOf(v)?.etaMinutes : etas[opt.type];
+                            return typeof eta === 'number' ? (
+                              <span className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-green-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-green-600" /> Captain {Math.max(1, eta)} min door
+                              </span>
+                            ) : (opt.type in etas || v) ? (
+                              <span className="mt-0.5 block text-xs text-gray-400">Abhi paas mein koi nahi — booking par dhundhenge</span>
+                            ) : null;
+                          })()}
                         </span>
                         <span className="shrink-0 text-right">
                           {tooFar ? (
@@ -1357,6 +1387,7 @@ const BookRide = () => {
                 }
                 zoom={pickup ? 13 : 5}
                 markers={mapMarkers}
+                      route={step >= 2 ? routeLine : []}
                 fit
                 height="100%"
               />

@@ -9,6 +9,7 @@ Disallow: /driver
 Disallow: /admin
 Disallow: /book-ride
 Disallow: /ride/
+Disallow: /track/
 Disallow: /auth
 Disallow: /register
 

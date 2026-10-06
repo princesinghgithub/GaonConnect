@@ -440,6 +440,15 @@ export const rideAPI = {
 
   // Customer ke liye bookable gaadiyan — admin dashboard ki nayi seva samet
   getVehicleTypes: () => api.get('/ride/vehicle-types'),
+
+  // Trip share — family ke liye link (Rapido/Uber jaisa)
+  createShareLink: (rideId) => api.post(`/ride/${rideId}/share`),
+  // Bina login (share link kholne wala) — token hi pehchaan hai
+  getSharedRide: (token) => api.get(`/ride/track/${token}`),
+  // Do jagahon ke beech sadak ka raasta (map par line)
+  getRoute: (from, to) => api.get('/ride/route', {
+    params: { fromLat: from.lat, fromLng: from.lng, toLat: to.lat, toLng: to.lng },
+  }),
 };
 
 

@@ -13,7 +13,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { toast } from 'react-hot-toast';
-import { ArrowLeft, Car, CheckCircle2, Loader2, MapPin, Phone, ShieldCheck, Star, XCircle, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Car, CheckCircle2, Loader2, MapPin, Phone, Share2, ShieldCheck, Star, XCircle, CalendarClock } from 'lucide-react';
 import { rideAPI, ratingAPI } from '../services/api';
 import config from '../config/config';
 import Map from '../tabs/Map';
@@ -57,6 +57,9 @@ const RideTracking = () => {
   const [review, setReview] = useState('');
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [submittingRating, setSubmittingRating] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [routeLine, setRouteLine] = useState([]);
+  const routeFor = useRef('');
   const statusRef = useRef(null);
 
   const fetchRide = useCallback(async () => {
@@ -113,6 +116,61 @@ const RideTracking = () => {
     ['rideStatusUpdate', 'rideAccepted', 'rideCancelled', 'scheduledDriverAssigned', 'scheduledRideActivated'].forEach((ev) => sock.on(ev, refresh));
     return () => sock.disconnect();
   }, [rideId, isActive, fetchRide]);
+
+  // Trip share — family ko live link (Rapido/Uber jaisa). Phone par share
+  // sheet, computer par link copy.
+  // Map par sadak ka raasta — driver aa raha ho to driver → pickup, safar
+  // chal raha ho to pickup → drop. Driver ~100 m hile tabhi dobara mangwao.
+  useEffect(() => {
+    if (!ride) return;
+    const st = ride.status;
+    const p = ride.pickup?.coordinates;
+    const d = ride.drop?.coordinates;
+    const drvPt = liveDriver || driverPoint(ride);
+    let from = null;
+    let to = null;
+    if (['accepted', 'arrived'].includes(st) && drvPt && p) {
+      from = drvPt; to = { lat: p.latitude, lng: p.longitude };
+    } else if (st === 'started' && p && d && !(p.latitude === d.latitude && p.longitude === d.longitude)) {
+      from = { lat: p.latitude, lng: p.longitude }; to = { lat: d.latitude, lng: d.longitude };
+    }
+    if (!from) {
+      if (routeFor.current) { routeFor.current = ''; setRouteLine([]); }
+      return;
+    }
+    const key = `${st}:${Number(from.lat).toFixed(3)},${Number(from.lng).toFixed(3)}`;
+    if (key === routeFor.current) return;
+    routeFor.current = key;
+    rideAPI.getRoute(from, to)
+      .then((r) => setRouteLine((r.data?.data?.points || []).map((q) => [q.latitude, q.longitude])))
+      .catch(() => {});
+  }, [ride, liveDriver]);
+
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      const res = await rideAPI.createShareLink(rideId);
+      const url = res.data?.data?.url;
+      if (!url) throw new Error('no url');
+      const text = 'Mera GaonConnect safar live dekhein';
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: 'GaonConnect safar', text, url });
+          return;
+        } catch (e) {
+          // Customer ne khud band kiya — kuch mat karo. Share chala hi nahi
+          // (kuch computer/browser) — tab link copy kar do.
+          if (e?.name === 'AbortError') return;
+        }
+      }
+      await navigator.clipboard.writeText(`${text}: ${url}`);
+      toast.success('Link copy ho gaya — WhatsApp par bhej dijiye');
+    } catch {
+      toast.error('Share link nahi ban paya');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const handleCancel = async () => {
     let fee = 0;
@@ -255,7 +313,7 @@ const RideTracking = () => {
     <div className="min-h-screen bg-gray-100 lg:grid lg:h-screen lg:grid-cols-[1fr_440px]">
       {/* ── Naksha ── */}
       <div className="relative h-[42vh] lg:h-full">
-        <Map markers={markers} fit height="100%" zoomPosition="topright" center={[pickup.latitude || 20.59, pickup.longitude || 78.96]} zoom={14} />
+        <Map markers={markers} route={routeLine} fit height="100%" zoomPosition="topright" center={[pickup.latitude || 20.59, pickup.longitude || 78.96]} zoom={14} />
         <button
           onClick={() => navigate('/customer')}
           className="absolute left-4 top-4 z-[500] flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-lg"
@@ -389,6 +447,13 @@ const RideTracking = () => {
               <p className="font-semibold text-green-700">🙏 Rating ke liye shukriya!</p>
             )}
           </div>
+        )}
+
+        {/* Trip share — family live dekh sake */}
+        {['accepted', 'arrived', 'started', 'working', 'scheduled'].includes(status) && (
+          <button onClick={handleShare} disabled={sharing} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-100 py-3.5 font-bold text-gray-900 hover:bg-gray-200 disabled:opacity-50">
+            <Share2 size={18} /> {sharing ? 'Link ban raha hai...' : 'Safar share karein'}
+          </button>
         )}
 
         {/* Cancel */}
