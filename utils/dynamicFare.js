@@ -277,8 +277,21 @@ const getServiceEquipment = async (vehicleType) => {
   return out;
 };
 
+// ─── Sabse lambi trip ki had (km) ─────────────────────────────────────────────
+// Admin Rate Card se (vehicleRates[type].maxTripKm); khaali ho to code ki had.
+// createRide, drop badalna aur fare-estimate — sab yahi padhte hain, taaki
+// fare screen par "40 km tak hi" aur booking ka mana ek hi number se ho.
+const MAX_TRIP_DEFAULTS = require('../config/maxTripDistanceConfig');
+const getMaxTripKm = async (vehicleType, settingsArg) => {
+  const settings = settingsArg || await getSettings();
+  const own = Number(settings?.vehicleRates?.[vehicleType]?.maxTripKm);
+  if (Number.isFinite(own) && own > 0) return own;
+  return MAX_TRIP_DEFAULTS[vehicleType] ?? MAX_TRIP_DEFAULTS.auto;
+};
+
 module.exports = {
   getSettings,
+  getMaxTripKm,
   getVariantOrder,
   getEquipmentCatalog,
   getEquipmentVehicleTypes,

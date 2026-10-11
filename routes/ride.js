@@ -232,7 +232,9 @@ router.get('/fare-estimate',
         ? await measureLegs([[pickupLat, pickupLng], [stopLat, stopLng], [dropLat, dropLng]])
         : await measureTrip(pickupLat, pickupLng, dropLat, dropLng);
       const distance = trip.distance;
-      const duration = calculateDuration(distance);
+      // Sadak ka asli samay (OSRM, +30%); na mile to andaaza. createRide bhi
+      // yahi leta hai — dikha aur laga "safar ke samay" ka charge ek jaisa.
+      const duration = trip.durationMinutes || calculateDuration(distance);
 
       const bookingDate = new Date();
       const fareOptions = {
@@ -252,8 +254,7 @@ router.get('/fare-estimate',
       // Specific vehicle — detailed breakdown
       if (vehicleType) {
         const breakdown = await getDynamicFare(distance, vehicleType, fareOptions);
-        const MAX_TRIP_DISTANCE_KM = require('../config/maxTripDistanceConfig');
-        const maxTripKm = MAX_TRIP_DISTANCE_KM[vehicleType] ?? MAX_TRIP_DISTANCE_KM.auto;
+        const maxTripKm = await require('../utils/dynamicFare').getMaxTripKm(vehicleType);
         return res.json({
           success: true,
           data: {
@@ -300,8 +301,9 @@ router.get('/fare-estimate',
       // Har gaadi ki lambi-trip ki had (auto 40 km...) — booking par createRide
       // isse lambi trip mana karta hai. Pehle ye sirf "Confirm" dabane par pata
       // chalta tha; ab list hi bata de ki ye gaadi is doori ke liye nahi.
-      const MAX_TRIP_DISTANCE_KM = require('../config/maxTripDistanceConfig');
-      const tripLimit = (type) => MAX_TRIP_DISTANCE_KM[type] ?? MAX_TRIP_DISTANCE_KM.auto;
+      const { getMaxTripKm } = require('../utils/dynamicFare');
+      const limits = Object.fromEntries(await Promise.all(Object.keys(allFares).map(async (t) => [t, await getMaxTripKm(t)])));
+      const tripLimit = (type) => limits[type];
 
       // App ke liye simplified list bhi bhejo
       const fareList = Object.entries(allFares).map(([type, data]) => ({
@@ -386,6 +388,74 @@ router.post('/:id/drop-change-request', protect, requestDropChange);
 
 // ─── Invoice ──────────────────────────────────────────────────────────────────
 router.get('/:id/invoice', protect, getRideInvoice);
+
+// ─── Trip share (Rapido/Uber jaisa) ──────────────────────────────────────────
+// Customer family ko link bhejta hai; family bina login ride live dekhti hai.
+// Link par sirf utna jo dekhne ke liye chahiye — driver ka phone, safar ka OTP,
+// customer ka phone kabhi nahi. Ride khatam hone ke ek ghante baad link band.
+const SHARE_SITE = (process.env.PUBLIC_SITE_URL || 'https://www.gaonconnect.in').replace(/\/+$/, '');
+const SHARE_LIVE = ['scheduled', 'searching', 'accepted', 'arrived', 'started', 'working'];
+const SHARE_GRACE_MS = 60 * 60 * 1000;
+
+router.post('/:id/share', protect, async (req, res) => {
+  try {
+    const Ride = require('../models/Ride');
+    const ride = await Ride.findById(req.params.id).select('customer status shareToken');
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
+    if (String(ride.customer) !== String(req.user._id || req.user.id)) {
+      return res.status(403).json({ success: false, message: 'Ye ride aapki nahi hai' });
+    }
+    if (!ride.shareToken) {
+      ride.shareToken = require('crypto').randomBytes(16).toString('hex');
+      await ride.save();
+    }
+    return res.json({ success: true, data: { token: ride.shareToken, url: `${SHARE_SITE}/track/${ride.shareToken}` } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Share link nahi ban paya' });
+  }
+});
+
+router.get('/track/:token', async (req, res) => {
+  try {
+    const token = String(req.params.token || '');
+    if (!/^[a-f0-9]{32}$/.test(token)) return res.status(404).json({ success: false, message: 'Link sahi nahi hai' });
+    const Ride = require('../models/Ride');
+    const ride = await Ride.findOne({ shareToken: token })
+      .select('status vehicleType vehicleVariantLabel ac pickup drop workAtPickup scheduledAt completedAt updatedAt cancelledAt provider vehicle')
+      .populate({ path: 'provider', select: 'user rating currentLocation', populate: { path: 'user', select: 'name' } })
+      .populate('vehicle', 'number model color type')
+      .lean();
+    if (!ride) return res.status(404).json({ success: false, message: 'Link sahi nahi hai' });
+    const endedAt = ride.completedAt || ride.cancelledAt || (!SHARE_LIVE.includes(ride.status) ? ride.updatedAt : null);
+    if (endedAt && Date.now() - new Date(endedAt).getTime() > SHARE_GRACE_MS) {
+      return res.status(410).json({ success: false, message: 'Ye safar khatam ho chuka hai' });
+    }
+    const c = ride.provider?.currentLocation?.coordinates;
+    return res.json({
+      success: true,
+      data: {
+        status:      ride.status,
+        vehicleType: ride.vehicleType,
+        vehicleLabel: ride.vehicleVariantLabel || '',
+        ac:          ride.ac,
+        workAtPickup: !!ride.workAtPickup,
+        scheduledAt: ride.scheduledAt,
+        pickup: { address: ride.pickup?.address, latitude: ride.pickup?.coordinates?.latitude, longitude: ride.pickup?.coordinates?.longitude },
+        drop:   { address: ride.drop?.address,   latitude: ride.drop?.coordinates?.latitude,   longitude: ride.drop?.coordinates?.longitude },
+        driver: ride.provider ? {
+          // Sirf pehla naam — poora naam/phone share link par nahi
+          name:   String(ride.provider.user?.name || 'Driver').split(' ')[0],
+          rating: ride.provider.rating?.count ? Number(ride.provider.rating.average).toFixed(1) : null,
+          location: Array.isArray(c) && (c[0] || c[1]) ? { latitude: c[1], longitude: c[0] } : null,
+        } : null,
+        vehicle: ride.vehicle ? { number: ride.vehicle.number, model: ride.vehicle.model, color: ride.vehicle.color } : null,
+        updatedAt: ride.updatedAt,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Safar ki jaankari nahi mili' });
+  }
+});
 
 // ⚠️  Dynamic :id — SABSE LAST
 router.get('/:id', protect, getRideById);

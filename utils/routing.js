@@ -52,7 +52,8 @@ const getRoute = async (fromLat, fromLng, toLat, toLng) => {
   if (!nums.every(Number.isFinite)) return null;
   const [aLat, aLng, bLat, bLng] = nums;
 
-  const cacheKey = `route:${key4(aLat)},${key4(aLng)}:${key4(bLat)},${key4(bLng)}`;
+  // route2: — samay (durationMin) wala naya roop; purani entry mein samay nahi tha
+  const cacheKey = `route2:${key4(aLat)},${key4(aLng)}:${key4(bLat)},${key4(bLng)}`;
   try {
     const cached = await redis.get(cacheKey);
     if (cached) return JSON.parse(cached);
@@ -74,6 +75,9 @@ const getRoute = async (fromLat, fromLng, toLat, toLng) => {
 
     const result = {
       distanceKm: Math.round((route.distance / 1000) * 100) / 100,
+      // OSRM khaali sadak ka samay deta hai — gaon ki sadak, mod, mandi ki
+      // bheed ke liye 30% zyada (Rapido ka "safar ke samay" ka charge isi par).
+      durationMin: Math.ceil((Number(route.duration) || 0) / 60 * 1.3),
       points: thin(coords.map(([lng, lat]) => ({ latitude: lat, longitude: lng }))),
     };
 
@@ -85,20 +89,43 @@ const getRoute = async (fromLat, fromLng, toLat, toLng) => {
   }
 };
 
+// Routing na chale to seedhi doori ka itna guna. Seedhi doori sadak se hamesha
+// kam hoti hai — MP ke asli raaston par naapa: lambi trip 1.07–1.17x, shehar
+// ke andar 1.5x tak. Seedhi doori par kiraya banane se driver ko 20-30% kam
+// paisa milta tha.
+const ROAD_FACTOR = 1.25;
+// Andaaze wali doori itni der yaad — fare screen par jo dikha, booking par
+// wahi lage (beech mein OSRM chal pada to bhi alag number na aaye).
+const FALLBACK_TTL_SEC = 15 * 60;
+
 /**
- * Trip ki doori — sadak se, aur wo na mile to seedhi.
+ * Trip ki doori — sadak se, aur wo na mile to seedhi × ROAD_FACTOR.
  * @returns {Promise<{ distance: number, straight: number, isRoad: boolean, points: Array }>}
  */
 const measureTrip = async (fromLat, fromLng, toLat, toLng) => {
   const straight = calculateDistance(Number(fromLat), Number(fromLng), Number(toLat), Number(toLng));
-  const route    = await getRoute(fromLat, fromLng, toLat, toLng);
+  const fbKey = `routefb:${key4(fromLat)},${key4(fromLng)}:${key4(toLat)},${key4(toLng)}`;
+
+  // Abhi-abhi andaaza diya tha to wahi — fare screen aur booking ek jaisi
+  try {
+    const fb = await redis.get(fbKey);
+    if (fb) return { distance: Number(fb), straight, isRoad: false, points: [], durationMinutes: null };
+  } catch { /* cache na chale to bhi chalo */ }
+
+  const route = await getRoute(fromLat, fromLng, toLat, toLng);
 
   // Sadak ki doori seedhi se kam ho hi nahi sakti. Ho to data mein gadbad hai
-  // (jaise pickup sadak se bahut door) — tab seedhi doori par bharosa.
+  // (jaise pickup sadak se bahut door) — tab andaaze par.
   if (route && route.distanceKm >= straight) {
-    return { distance: route.distanceKm, straight, isRoad: true, points: route.points };
+    return {
+      distance: route.distanceKm, straight, isRoad: true, points: route.points,
+      // Purane cache mein samay nahi — tab null (call karne wala andaaza lagaye)
+      durationMinutes: Number(route.durationMin) > 0 ? route.durationMin : null,
+    };
   }
-  return { distance: straight, straight, isRoad: false, points: [] };
+  const estimate = Math.round(straight * ROAD_FACTOR * 100) / 100;
+  redis.setex(fbKey, FALLBACK_TTL_SEC, String(estimate)).catch(() => {});
+  return { distance: estimate, straight, isRoad: false, points: [], durationMinutes: null };
 };
 
 /**
@@ -113,18 +140,22 @@ const measureLegs = async (stops) => {
   let straight = 0;
   let isRoad   = true;
   let points   = [];
+  let minutes  = 0;
 
   for (let i = 0; i < stops.length - 1; i += 1) {
     const leg = await measureTrip(stops[i][0], stops[i][1], stops[i + 1][0], stops[i + 1][1]);
     distance += leg.distance;
     straight += leg.straight;
     if (!leg.isRoad) isRoad = false;
+    // Kisi tukde ka samay na mile to poore ka null — andaaza call karne wala lagaye
+    minutes = minutes === null || !leg.durationMinutes ? null : minutes + leg.durationMinutes;
     points = points.concat(leg.points);
   }
 
   return {
     distance: Math.round(distance * 100) / 100,
     straight: Math.round(straight * 100) / 100,
+    durationMinutes: minutes,
     isRoad,
     // Sab tukde sadak se mile tabhi poora raasta kheenchne layak hai.
     points: isRoad ? points : [],

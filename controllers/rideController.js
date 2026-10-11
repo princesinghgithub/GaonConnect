@@ -9,7 +9,7 @@ const Transaction  = require('../models/Transaction');
 const Message      = require('../models/Message');
 const {
   getDynamicFare, getDynamicHourlyFare, getDynamicWeddingFare, getSettings, getVariantOrder,
-  getEquipmentCatalog, getServiceEquipment,
+  getEquipmentCatalog, getServiceEquipment, getMaxTripKm,
 } = require('../utils/dynamicFare');
 const { vehicleFilterForRide, vehicleFitsRide, rideTypesFor, sanitizeEquipment, sanitizeVariant } = require('../utils/vehicleMatch');
 const EQUIPMENT_DEFAULTS = require('../config/equipmentDefaults');
@@ -384,7 +384,14 @@ exports.createRide = async (req, res) => {
     // Kaam wali booking (tractor/JCB) aur wedding package isme nahi aate —
     // unka kiraya ghante/acre/package se banta hai, aur wahan "doori" ka
     // matlab alag hai.
-    const isDistanceRide = !req.body.packageId && !(serviceCategory && serviceType);
+    // Kaam wali booking bhi — tractor se fasal/saamaan dhona km se chalta hai,
+    // aur app usme seedhi doori bhejti thi (sadak se 20-30% kam). Khet par
+    // kaam (pickup = drop) ki doori 0 hi aati hai, uska kiraya ghante/acre se.
+    const isDistanceRide = !req.body.packageId;
+    // Safar ka samay bhi server ka (sadak se) — app ka bheja nahi. Warna app se
+    // kam samay bhej kar "safar ke samay" ka charge ghataya ja sakta tha, aur
+    // fare screen par dikha kiraya booking se alag ho jaata.
+    let serverMinutes = null;
     if (isDistanceRide && pickup && dropLocation) {
       const pLat = pickup.latitude  ?? pickup.location?.latitude;
       const pLng = pickup.longitude ?? pickup.location?.longitude;
@@ -397,23 +404,28 @@ exports.createRide = async (req, res) => {
         const trip = via
           ? await measureLegs([[pLat, pLng], [via.latitude, via.longitude], [dLat, dLng]])
           : await measureTrip(pLat, pLng, dLat, dLng);
+        serverMinutes = trip.durationMinutes || null;
         if (trip.isRoad) {
           finalDist = trip.distance;
         } else {
           // Routing abhi nahi chali. Client ki doori tabhi maano jab wo
-          // samajh mein aane wali ho: seedhi doori se kam nahi, aur usse
-          // dhai guna se zyada nahi.
+          // samajh mein aane wali ho: server ke andaaze (seedhi × 1.25, wahi
+          // jo fare screen ne dikhaya) se kam nahi, aur seedhi ke dhai guna
+          // se zyada nahi. Purani app seedhi doori bhejti hai — wo kam padti.
           const claimed = Number(finalDist) || 0;
-          finalDist = Math.min(Math.max(claimed, trip.straight), trip.straight * 2.5 + 1);
+          finalDist = Math.min(Math.max(claimed, trip.distance), trip.straight * 2.5 + 1);
         }
       }
     }
-    const finalDur     = estimatedDuration || 30;
+    // Sawari mein sadak ka samay; ghante wale kaam mein app ke ghante (kaam ka samay)
+    const finalDur     = (serverMinutes && !(serviceCategory && serviceType))
+      ? serverMinutes
+      : (estimatedDuration || 30);
 
     // Trip (pickup→drop) distance cap — vehicle type ke hisaab se. Dispatch
     // radius (upar DISPATCH_RADIUS_STAGES) alag cheez hai — wo driver-to-pickup
     // distance control karta hai, ye actual ride ki lambai control karta hai.
-    const maxTripKm = MAX_TRIP_DISTANCE_KM[vehicleType] ?? MAX_TRIP_DISTANCE_KM.auto;
+    const maxTripKm = await getMaxTripKm(vehicleType); // admin Rate Card se
     if (finalDist > maxTripKm) {
       return res.status(400).json({
         success: false,
@@ -520,7 +532,7 @@ exports.createRide = async (req, res) => {
         // Ride ke waqt ka charge booking ke andaaze par — ride ke baad ke
         // asli time par nahi. Customer ko jo daam dikha wahi lagega, chahe
         // raste mein jaam mile.
-        durationMinutes: Number(req.body.estimatedDuration) || calculateDuration(finalDist),
+        durationMinutes: serverMinutes || calculateDuration(finalDist),
         bookingDate: scheduledAt ? new Date(scheduledAt) : new Date(),
         variant: req.body.vehicleVariant || '',
         ac:      Boolean(req.body.ac),
@@ -1127,7 +1139,14 @@ exports.updateRideStatus = async (req, res) => {
     if (status === 'completed') {
       updateFields.completedAt = new Date();
       let hourlyOwnsWaiting = false;
-      if (ride.workStartedAt) {
+      // Ghante wala kaam (tractor/JCB) — jitna chala utna hi paisa. Driver ne
+      // "kaam shuru" (working) na dabaya ho to bhi: OTP se safar/kaam shuru
+      // (startedAt) se ginte hain. Pehle aisi ride par andaaze wale ghante
+      // (booking ke 2 ghante) ka hi paisa lag jaata tha, kaam kitna bhi chala.
+      const isHourlyJob = !!(ride.serviceCategory && ride.serviceType)
+        && (ride.bookingMode === 'hourly' || Number(ride.estimatedHours) > 0);
+      const workStart = ride.workStartedAt || (isHourlyJob ? ride.startedAt : null);
+      if (workStart) {
         updateFields.workEndedAt = updateFields.completedAt;
         // Ruka hua waqt — server ne khud gina (pause/resume yahin aate hain).
         // Abhi ruka hua ho to woh daur bhi jodo.
@@ -1143,7 +1162,7 @@ exports.updateRideStatus = async (req, res) => {
         // customer se lagta tha. Ab chala hua waqt lagta hai; par ghadi ke
         // farak (ruka hua waqt ghata kar) se zyada kabhi nahi, taaki app se
         // badha kar na bheja ja sake.
-        const wallHours = Math.max(0, (updateFields.completedAt - ride.workStartedAt) / 1000 - pausedSec) / 3600;
+        const wallHours = Math.max(0, (updateFields.completedAt - new Date(workStart)) / 1000 - pausedSec) / 3600;
         const workedSec = Number(req.body.workedSeconds);
         const hours     = Number.isFinite(workedSec) && workedSec > 0
           ? Math.min(workedSec / 3600, wallHours)
@@ -1155,7 +1174,7 @@ exports.updateRideStatus = async (req, res) => {
         // minimumHours floor, so kaam jaldi khatam ho jaaye to bhi minimum
         // charge lagta hai, lekin estimate se kam kaam hua to poora estimate
         // charge nahi hota — sirf actual (ya minimum, jo bhi zyada ho).
-        if (ride.bookingMode === 'hourly' && ride.serviceCategory && ride.serviceType) {
+        if (isHourlyJob) {
           const recalculated = await getDynamicHourlyFare(
             ride.vehicleType, ride.serviceCategory, ride.serviceType,
             updateFields.actualHours, ride.distance,
@@ -1166,7 +1185,9 @@ exports.updateRideStatus = async (req, res) => {
               bookingDate: ride.acceptedAt || ride.createdAt || new Date(),
             },
           );
-          if (recalculated.fare) {
+          // Sirf ghante wale kaam par — acre/quintal/km/poora-kaam ka kiraya
+          // samay se nahi badalta (wo booking par hi tay hai).
+          if (recalculated.fare && (recalculated.unit || 'hour') === 'hour') {
             // Naya kiraya asli ghanton se bana hai — par booking ke waqt ka
             // promo aur juda hua pichhla baaki usme nahi hota. Pehle yahan
             // seedha `recalculated.fare` rakh diya jaata tha: customer ka
@@ -1827,7 +1848,7 @@ exports.requestDropChange = async (req, res) => {
 
     const quote = await quoteDropChange(ride, provider, { latitude, longitude });
 
-    const maxTripKm = MAX_TRIP_DISTANCE_KM[ride.vehicleType] ?? MAX_TRIP_DISTANCE_KM.auto;
+    const maxTripKm = await getMaxTripKm(ride.vehicleType); // admin Rate Card se
     if (quote.distance > maxTripKm) {
       return res.status(400).json({
         success: false,

@@ -4441,6 +4441,9 @@ const getVehicleTypes = async (req, res) => {
       nightChargePercent: r.nightChargePercent,
       cancellationFee:    r.cancellationFee,
       commissionPercent:  r.commissionPercent ?? null,
+      // Sabse lambi trip — khaali = code ki had (dashboard placeholder mein dikhti hai)
+      maxTripKm:          r.maxTripKm ?? null,
+      defaultMaxTripKm:   (require('../config/maxTripDistanceConfig')[id] ?? require('../config/maxTripDistanceConfig').auto),
 
       extras:       r.extras || {},
       // Database mein na hon to wahi defaults dikhao jo fare mein lag rahe hain.
@@ -4503,6 +4506,20 @@ const updateVehicleType = async (req, res) => {
     }
 
     if (req.body.isActive !== undefined) next.isActive = Boolean(req.body.isActive);
+
+    // Sabse lambi trip: khaali/null = code ki had; warna 1–1000 km
+    if (req.body.maxTripKm !== undefined) {
+      const m = req.body.maxTripKm;
+      if (m === null || m === '') {
+        next.maxTripKm = null;
+      } else {
+        const v = Number(m);
+        if (!Number.isFinite(v) || v < 1 || v > 1000) {
+          return res.status(400).json({ success: false, message: 'Sabse lambi trip 1 se 1000 km ke beech rakhein' });
+        }
+        next.maxTripKm = v;
+      }
+    }
 
     // commissionPercent null rakhna maayne rakhta hai: "global commission use karo".
     if (req.body.commissionPercent !== undefined) {
