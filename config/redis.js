@@ -1,12 +1,14 @@
 const Redis = require('ioredis');
 
+// Kabhi haar mat maano. Pehle 10 koshish ke baad `null` lautate the — Upstash
+// ka chhota sa rukna (network/DNS) bhi Redis ko server restart tak band kar
+// deta tha: OTP, settings cache, routing cache — sab fail, rate card 404.
+// Ab har ~5 second dobara judne ki koshish; log har 10vi baar.
 const retryStrategy = (times) => {
-  if (times > 10) {
-    console.error('❌ Redis: Max retry attempts reached');
-    return null;
+  const delay = Math.min(times * 200, 5000);
+  if (times <= 3 || times % 10 === 0) {
+    console.warn(`⚠️  Redis: Retrying connection (attempt ${times}) in ${delay}ms`);
   }
-  const delay = Math.min(times * 100, 3000);
-  console.warn(`⚠️  Redis: Retrying connection (attempt ${times}) in ${delay}ms`);
   return delay;
 };
 

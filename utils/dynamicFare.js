@@ -14,13 +14,24 @@ const SETTINGS_CACHE_KEY = 'app:settings';
 const SETTINGS_CACHE_TTL = 300; // 5 minutes
 
 // ─── Settings DB se load karo (Redis cache ke saath) ─────────────────────────
+// Redis sirf cache hai — wo na chale (Upstash ruka, network) to bhi settings
+// MongoDB se aani chahiye. Pehle Redis ki koi bhi galti poore getSettings ko
+// `null` bana deti thi: rate card 404, kiraya code ke defaults se, booking
+// "rate set nahi" — jabki asli settings DB mein padi thi.
 const getSettings = async () => {
   try {
-    // Redis cache check karo pehle
-    const cached = await redis.get(SETTINGS_CACHE_KEY);
+    // Redis dobara jud raha ho to command line mein atak jaata hai — 1.5s se
+    // zyada ruke to DB se padh lo, booking/kiraya dheema na pade.
+    const cached = await Promise.race([
+      redis.get(SETTINGS_CACHE_KEY),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('redis timeout')), 1500)),
+    ]);
     if (cached) return JSON.parse(cached);
+  } catch (err) {
+    console.error('getSettings cache error (DB se padh rahe hain):', err.message);
+  }
 
-    // DB se load karo
+  try {
     let settings = await Setting.findOne().lean();
 
     // Pehli baar — default document create karo
@@ -31,8 +42,8 @@ const getSettings = async () => {
       settings = settings.toObject({ flattenMaps: true });
     }
 
-    // Cache karo 5 minutes ke liye
-    await redis.setex(SETTINGS_CACHE_KEY, SETTINGS_CACHE_TTL, JSON.stringify(settings));
+    // Cache karo 5 minutes ke liye (na ho paaye to bhi settings lautao)
+    redis.setex(SETTINGS_CACHE_KEY, SETTINGS_CACHE_TTL, JSON.stringify(settings)).catch(() => {});
 
     return settings;
   } catch (err) {
@@ -42,8 +53,11 @@ const getSettings = async () => {
 };
 
 // ─── Cache invalidate karo jab admin settings update kare ────────────────────
+// Redis band ho to bhi admin ka save fail na ho — cache 5 min mein khud purani hogi
 const invalidateSettingsCache = async () => {
-  await redis.del(SETTINGS_CACHE_KEY);
+  try { await redis.del(SETTINGS_CACHE_KEY); } catch (err) {
+    console.error('settings cache clear nahi hua:', err.message);
+  }
 };
 
 // ─── Single vehicle fare breakdown ────────────────────────────────────────────
