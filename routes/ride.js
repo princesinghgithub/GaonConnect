@@ -259,6 +259,7 @@ router.get('/fare-estimate',
           success: true,
           data: {
             distance, duration, route: trip.points, distanceIsRoad: trip.isRoad, ...breakdown,
+            traffic: trip.traffic || [], trafficDelayMin: trip.trafficDelayMin || 0, routeProvider: trip.provider,
             maxTripKm,
             tooFar: (breakdown.pricingType || 'distance') === 'distance' && distance > maxTripKm,
           },
@@ -342,6 +343,10 @@ router.get('/fare-estimate',
           // Map par raasta kheenchne ke liye. Khaali ho to app seedhi lakeer banati hai.
           route: trip.points,
           distanceIsRoad: trip.isRoad,
+          // Raaste par jaam wale tukde (Google) + jaam se kitni der zyada
+          traffic: trip.traffic || [],
+          trafficDelayMin: trip.trafficDelayMin || 0,
+          routeProvider: trip.provider,
           dues,
           fares: fareList,
           surgeActive: fareList.some((f) => f.surgeActive),
@@ -366,7 +371,11 @@ router.get('/route', protect, async (req, res) => {
     const trip = await measureTrip(...nums);
     return res.json({
       success: true,
-      data: { distance: trip.distance, isRoad: trip.isRoad, points: trip.points },
+      data: {
+        distance: trip.distance, isRoad: trip.isRoad, points: trip.points,
+        durationMinutes: trip.durationMinutes, traffic: trip.traffic || [], trafficDelayMin: trip.trafficDelayMin || 0,
+        provider: trip.provider,
+      },
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
