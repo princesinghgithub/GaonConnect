@@ -36,7 +36,7 @@ const ICONS = {
  *      poll par customer ka zoom/pan reset ho jaata.
  * height: CSS height (default 400px)
  */
-const Map = ({ center = [20.5937, 78.9629], zoom = 5, markers = [], route = [], fit = false, height = '400px', zoomPosition = 'topleft' }) => {
+const Map = ({ center = [20.5937, 78.9629], zoom = 5, markers = [], route = [], traffic = [], fit = false, height = '400px', zoomPosition = 'topleft' }) => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
@@ -125,14 +125,23 @@ const Map = ({ center = [20.5937, 78.9629], zoom = 5, markers = [], route = [], 
 
   // Update route — sadak ka raasta (Rapido jaisi gehri line). `fit` wale map
   // par markers hi frame tay karte hain, raasta har update par zoom na badle.
-  const routeKey = route && route.length ? `${route.length}:${route[0]}:${route[route.length - 1]}` : '';
+  // traffic: [{ speed: 'normal'|'slow'|'jam', points: [{latitude, longitude}] }]
+  // — jaam wale hisse upar se peele/laal (Rapido/Google jaisa)
+  const routeKey = route && route.length ? `${route.length}:${route[0]}:${route[route.length - 1]}:${(traffic || []).length}` : '';
   useEffect(() => {
     if (routeLayerRef.current) {
       routeLayerRef.current.clearLayers();
 
       if (route && route.length > 1) {
-        const polyline = L.polyline(route, { color: '#111827', weight: 5, opacity: 0.85 });
+        const polyline = L.polyline(route, { color: '#1A3A6B', weight: 5, opacity: 0.9 });
         routeLayerRef.current.addLayer(polyline);
+        (traffic || []).forEach((s) => {
+          if (s?.speed === 'normal' || !Array.isArray(s?.points) || s.points.length < 2) return;
+          routeLayerRef.current.addLayer(L.polyline(
+            s.points.map((q) => [q.latitude, q.longitude]),
+            { color: s.speed === 'jam' ? '#DC2626' : '#F59E0B', weight: 5, opacity: 0.95 },
+          ));
+        });
         if (!fit) mapInstanceRef.current.fitBounds(polyline.getBounds());
       }
     }

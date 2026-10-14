@@ -218,6 +218,9 @@ const BookRide = () => {
   const [etas, setEtas] = useState({});
   // Map par sadak ka raasta [[lat, lng], ...] — fare-estimate hi bhejta hai
   const [routeLine, setRouteLine] = useState([]);
+  // Raaste par jaam ke tukde + jaam se kitne minute zyada (Google se aata hai)
+  const [routeTraffic, setRouteTraffic] = useState([]);
+  const [trafficDelay, setTrafficDelay] = useState(0);
   // Car ki categories (Mini / Sedan / SUV) — Uber/Rapido jaisa, har ek apne
   // daam ke saath. Backend fare-estimate har category ka AC / Non-AC daam
   // bhejta hai: [{ id, label, models, seats, options: [{ ac, totalFare }] }]
@@ -432,6 +435,8 @@ const BookRide = () => {
   const loadQuotes = async (origin, destination) => {
     if (!origin?.location || !destination?.location) return;
     setRouteLine([]);
+    setRouteTraffic([]);
+    setTrafficDelay(0);
     setQuotesLoading(true);
     const params = {
       pickupLat: origin.location.latitude,
@@ -455,6 +460,8 @@ const BookRide = () => {
       setEtas(Object.fromEntries(fares.map((f) => [f.vehicleType, typeof f.etaMinutes === 'number' ? f.etaMinutes : null])));
       const pts = Array.isArray(res?.data?.data?.route) ? res.data.data.route : [];
       setRouteLine(pts.map((q) => [q.latitude, q.longitude]));
+      setRouteTraffic(Array.isArray(res?.data?.data?.traffic) ? res.data.data.traffic : []);
+      setTrafficDelay(Number(res?.data?.data?.trafficDelayMin) || 0);
       const car = fares.find((x) => x.vehicleType === 'car');
       const variants = (Array.isArray(car?.variants) ? car.variants : [])
         .map((v) => ({ ...v, options: (v.options || []).filter((o) => typeof o.totalFare === 'number') }))
@@ -859,6 +866,7 @@ const BookRide = () => {
                       zoom={pickup ? 13 : 5}
                       markers={mapMarkers}
                       route={step >= 2 ? routeLine : []}
+                      traffic={step >= 2 ? routeTraffic : []}
                       fit
                       height="100%"
                     />
@@ -883,7 +891,7 @@ const BookRide = () => {
                 {dropoff && (
                   <div className="lg:hidden bg-white rounded-2xl border border-gray-100 overflow-hidden">
                     <div className="h-44">
-                      <Map center={[20.5937, 78.9629]} zoom={5} markers={mapMarkers} route={routeLine} fit height="100%" zoomPosition="topright" />
+                      <Map center={[20.5937, 78.9629]} zoom={5} markers={mapMarkers} route={routeLine} traffic={routeTraffic} fit height="100%" zoomPosition="topright" />
                     </div>
                   </div>
                 )}
@@ -901,6 +909,12 @@ const BookRide = () => {
                   </p>
                   <span className="text-xs text-orange-600 font-semibold mt-2 inline-block">Badlein</span>
                 </button>
+
+                {trafficDelay >= 3 && (
+                  <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700">
+                    🚦 Raaste mein jaam — lagbhag {trafficDelay} min zyada lag sakte hain
+                  </p>
+                )}
 
                 <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-6 space-y-2">
                   <h3 className="text-lg font-bold text-gray-900 mb-2">Aapke liye gaadiyan</h3>
@@ -1388,6 +1402,7 @@ const BookRide = () => {
                 zoom={pickup ? 13 : 5}
                 markers={mapMarkers}
                       route={step >= 2 ? routeLine : []}
+                      traffic={step >= 2 ? routeTraffic : []}
                 fit
                 height="100%"
               />

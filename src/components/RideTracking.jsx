@@ -59,6 +59,7 @@ const RideTracking = () => {
   const [submittingRating, setSubmittingRating] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [routeLine, setRouteLine] = useState([]);
+  const [routeTraffic, setRouteTraffic] = useState([]);
   const routeFor = useRef('');
   const statusRef = useRef(null);
 
@@ -135,14 +136,17 @@ const RideTracking = () => {
       from = { lat: p.latitude, lng: p.longitude }; to = { lat: d.latitude, lng: d.longitude };
     }
     if (!from) {
-      if (routeFor.current) { routeFor.current = ''; setRouteLine([]); }
+      if (routeFor.current) { routeFor.current = ''; setRouteLine([]); setRouteTraffic([]); }
       return;
     }
     const key = `${st}:${Number(from.lat).toFixed(3)},${Number(from.lng).toFixed(3)}`;
     if (key === routeFor.current) return;
     routeFor.current = key;
     rideAPI.getRoute(from, to)
-      .then((r) => setRouteLine((r.data?.data?.points || []).map((q) => [q.latitude, q.longitude])))
+      .then((r) => {
+        setRouteLine((r.data?.data?.points || []).map((q) => [q.latitude, q.longitude]));
+        setRouteTraffic(Array.isArray(r.data?.data?.traffic) ? r.data.data.traffic : []);
+      })
       .catch(() => {});
   }, [ride, liveDriver]);
 
@@ -313,7 +317,7 @@ const RideTracking = () => {
     <div className="min-h-screen bg-gray-100 lg:grid lg:h-screen lg:grid-cols-[1fr_440px]">
       {/* ── Naksha ── */}
       <div className="relative h-[42vh] lg:h-full">
-        <Map markers={markers} route={routeLine} fit height="100%" zoomPosition="topright" center={[pickup.latitude || 20.59, pickup.longitude || 78.96]} zoom={14} />
+        <Map markers={markers} route={routeLine} traffic={routeTraffic} fit height="100%" zoomPosition="topright" center={[pickup.latitude || 20.59, pickup.longitude || 78.96]} zoom={14} />
         <button
           onClick={() => navigate('/customer')}
           className="absolute left-4 top-4 z-[500] flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-lg"
