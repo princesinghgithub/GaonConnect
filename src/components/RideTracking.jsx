@@ -60,6 +60,8 @@ const RideTracking = () => {
   const [sharing, setSharing] = useState(false);
   const [routeLine, setRouteLine] = useState([]);
   const [routeTraffic, setRouteTraffic] = useState([]);
+  // Driver kitni door / kitni der — { km, min, at }
+  const [liveEta, setLiveEta] = useState(null);
   const routeFor = useRef('');
   const statusRef = useRef(null);
 
@@ -121,7 +123,8 @@ const RideTracking = () => {
   // Trip share — family ko live link (Rapido/Uber jaisa). Phone par share
   // sheet, computer par link copy.
   // Map par sadak ka raasta — driver aa raha ho to driver → pickup, safar
-  // chal raha ho to pickup → drop. Driver ~100 m hile tabhi dobara mangwao.
+  // chal raha ho to driver → drop (bacha hua). Driver ~100 m hile tabhi
+  // dobara mangwao. Saath mein kitne km aur kitne minute (Rapido jaisa).
   useEffect(() => {
     if (!ride) return;
     const st = ride.status;
@@ -133,10 +136,10 @@ const RideTracking = () => {
     if (['accepted', 'arrived'].includes(st) && drvPt && p) {
       from = drvPt; to = { lat: p.latitude, lng: p.longitude };
     } else if (st === 'started' && p && d && !(p.latitude === d.latitude && p.longitude === d.longitude)) {
-      from = { lat: p.latitude, lng: p.longitude }; to = { lat: d.latitude, lng: d.longitude };
+      from = drvPt || { lat: p.latitude, lng: p.longitude }; to = { lat: d.latitude, lng: d.longitude };
     }
     if (!from) {
-      if (routeFor.current) { routeFor.current = ''; setRouteLine([]); setRouteTraffic([]); }
+      if (routeFor.current) { routeFor.current = ''; setRouteLine([]); setRouteTraffic([]); setLiveEta(null); }
       return;
     }
     const key = `${st}:${Number(from.lat).toFixed(3)},${Number(from.lng).toFixed(3)}`;
@@ -146,6 +149,9 @@ const RideTracking = () => {
       .then((r) => {
         setRouteLine((r.data?.data?.points || []).map((q) => [q.latitude, q.longitude]));
         setRouteTraffic(Array.isArray(r.data?.data?.traffic) ? r.data.data.traffic : []);
+        const km = Number(r.data?.data?.distance) || 0;
+        const min = Number(r.data?.data?.durationMinutes) || Math.ceil((km / 25) * 60);
+        setLiveEta(km ? { km, min: Math.max(1, min), at: Date.now() } : null);
       })
       .catch(() => {});
   }, [ride, liveDriver]);
@@ -334,6 +340,13 @@ const RideTracking = () => {
           <div className="min-w-0">
             <h1 className="text-xl font-black text-gray-900">{head.title}</h1>
             {head.sub && <p className="mt-1 text-sm text-gray-500">{head.sub}</p>}
+            {liveEta && ['accepted', 'started'].includes(status) && (
+              <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-gray-900 px-3 py-1 text-sm font-bold text-white">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
+                {status === 'accepted' ? 'Driver ' : 'Manzil '}{liveEta.km >= 1 ? liveEta.km.toFixed(1) : liveEta.km.toFixed(2)} km · ~{liveEta.min} min ·{' '}
+                {new Date(liveEta.at + liveEta.min * 60000).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} tak
+              </p>
+            )}
           </div>
         </div>
 
