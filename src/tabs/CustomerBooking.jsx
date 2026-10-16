@@ -195,7 +195,7 @@
 //             key={v}
 //             onClick={() => setVehicle(v)}
 //             className={`px-4 py-2 rounded border ${
-//               vehicle === v ? "bg-orange-500 text-white" : ""
+//               vehicle === v ? "bg-brand text-ink" : ""
 //             }`}
 //           >
 //             {v}
@@ -212,7 +212,7 @@
 
 //       <button
 //         onClick={handleConfirm}
-//         className="w-full bg-orange-500 text-white py-3 rounded-lg font-bold"
+//         className="w-full bg-brand text-ink py-3 rounded-lg font-bold"
 //       >
 //         {status === "searching" ? "Searching Driver..." : "Confirm Ride"}
 //       </button>
@@ -291,7 +291,7 @@
 //             key={v}
 //             onClick={() => setVehicle(v)}
 //             className={`px-4 py-2 border rounded ${
-//               vehicle === v ? "bg-orange-500 text-white" : ""
+//               vehicle === v ? "bg-brand text-ink" : ""
 //             }`}
 //           >
 //             {v}
@@ -304,7 +304,7 @@
 
 //       <button
 //         onClick={handleConfirm}
-//         className="w-full bg-orange-500 text-white py-3 rounded"
+//         className="w-full bg-brand text-ink py-3 rounded"
 //       >
 //         Confirm Ride
 //       </button>
@@ -395,7 +395,7 @@
 //               }}
 //               className={`flex-1 py-2 rounded-lg capitalize ${
 //                 vehicleType === type
-//                   ? 'bg-orange-600 text-white'
+//                   ? 'bg-brand text-ink'
 //                   : 'bg-gray-200 text-gray-700'
 //               }`}
 //             >
@@ -420,7 +420,7 @@
 
 //         <button
 //           disabled={!pickup || !dropoff}
-//           className="w-full bg-orange-600 text-white py-3 rounded-lg font-semibold hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+//           className="w-full bg-brand text-ink py-3 rounded-lg font-semibold hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed"
 //         >
 //           Confirm Ride
 //         </button>
@@ -613,7 +613,7 @@ const BookRide = () => {
                 }}
                 className={`flex-1 py-3 rounded-lg capitalize font-semibold ${
                   vehicleType === type
-                    ? 'bg-orange-600 text-white'
+                    ? 'bg-brand text-ink'
                     : 'bg-gray-200 text-gray-700'
                 }`}
               >
@@ -645,14 +645,14 @@ const BookRide = () => {
 
           {/* <button
             disabled={!pickup || !dropoff}
-            className="w-full bg-orange-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className="w-full bg-brand text-ink py-4 rounded-lg font-semibold text-lg hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
             Confirm Ride
           </button> */}
           <button
   disabled={!pickup || !dropoff}
   onClick={handleConfirmRide} // ✅ Yaha add karna hai
-  className="w-full bg-orange-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+  className="w-full bg-brand text-ink py-4 rounded-lg font-semibold text-lg hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed transition"
 >
   Confirm Ride
 </button>

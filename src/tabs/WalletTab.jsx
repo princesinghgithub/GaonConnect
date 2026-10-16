@@ -1,6 +1,6 @@
 // const WalletTab = () => (
 //   <div className="pb-20 space-y-4">
-//     <div className="bg-orange-500 text-white p-5 rounded-xl">
+//     <div className="bg-brand text-ink p-5 rounded-xl">
 //       <h3 className="font-bold">Wallet Balance</h3>
 //       <p className="text-3xl">₹3,250</p>
 //       <button className="mt-3 bg-white text-orange-600 px-4 py-2 rounded">
@@ -27,7 +27,7 @@
 //     <div className="pb-20 space-y-4">
       
 //       {/* ✅ Main Balance Card */}
-//       <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 rounded-2xl shadow-xl">
+//       <div className="bg-gradient-to-br from-brand to-brand-dark text-ink p-6 rounded-2xl shadow-xl">
 //         <div className="flex items-center justify-between mb-4">
 //           <div>
 //             <p className="text-sm opacity-90">Available Balance</p>
@@ -214,7 +214,7 @@
 //     <div className="pb-20 space-y-4">
       
 //       {/* Balance Card */}
-//       <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 rounded-2xl shadow-xl">
+//       <div className="bg-gradient-to-br from-brand to-brand-dark text-ink p-6 rounded-2xl shadow-xl">
 //         <div className="flex items-center justify-between mb-4">
 //           <div className="flex items-center gap-2">
 //             <Wallet size={24} />
@@ -273,7 +273,7 @@
 //               onClick={() => setFilter('all')}
 //               className={`px-4 py-2 rounded-lg font-semibold text-sm transition ${
 //                 filter === 'all'
-//                   ? 'bg-orange-600 text-white'
+//                   ? 'bg-brand text-ink'
 //                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
 //               }`}
 //             >
@@ -484,7 +484,7 @@ const WalletTab = () => {
     <div className="pb-20 space-y-4">
 
       {/* BALANCE CARD */}
-      <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 rounded-2xl shadow-xl">
+      <div className="bg-gradient-to-br from-brand to-brand-dark text-ink p-6 rounded-2xl shadow-xl">
 
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">

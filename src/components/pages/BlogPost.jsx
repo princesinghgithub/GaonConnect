@@ -22,7 +22,7 @@ const BlogPost = () => {
     <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
       <Navbar onDownloadApp={handleDownloadApp} />
 
-      <section className="relative bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-700 dark:to-orange-800 text-white overflow-hidden">
+      <section className="relative bg-gradient-to-br from-brand to-brand-dark dark:from-orange-700 dark:to-orange-800 text-ink overflow-hidden">
         <div className="relative z-10 max-w-3xl mx-auto px-6 py-14 md:py-20">
           <nav className="text-sm opacity-90 mb-6" aria-label="Breadcrumb">
             <Link to="/" className="hover:underline">Home</Link>
@@ -77,7 +77,7 @@ const BlogPost = () => {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => trackEvent('whatsapp_click', { source: 'blog_post_cta', post: post.slug })}
-              className="inline-flex bg-saffron hover:bg-cta text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+              className="inline-flex bg-brand hover:bg-brand-dark text-ink px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
             >
               💬 WhatsApp par Support Se Baat Karein
             </a>

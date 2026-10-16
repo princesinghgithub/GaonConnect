@@ -3,7 +3,7 @@
 
 // // const Header = ({ notifications, walletBalance, showMenu, setShowMenu, user, onLogout }) => {
 // //   return (
-// //     <header className="bg-gradient-to-r from-orange-600 to-yellow-600 text-white shadow-lg sticky top-0 z-50">
+// //     <header className="bg-gradient-to-r from-brand to-yellow-600 text-ink shadow-lg sticky top-0 z-50">
 // //       <div className="container mx-auto px-4 py-4">
 // //         <div className="flex items-center justify-between">
 // //           <div className="flex items-center gap-3">
@@ -61,7 +61,7 @@
 
 // const Header = ({ notifications = 0, walletBalance = 0, showMenu, setShowMenu, user, onLogout }) => {
 //   return (
-//     <header className="bg-gradient-to-r from-orange-600 to-yellow-500 text-white shadow sticky top-0 z-50">
+//     <header className="bg-gradient-to-r from-brand to-yellow-500 text-ink shadow sticky top-0 z-50">
 //       <div className="container mx-auto px-4 py-3">
 //         <div className="flex items-center justify-between">
 
@@ -194,7 +194,7 @@ const Header = ({
   onLogout,
 }) => {
   return (
-    <header className="w-full bg-gradient-to-r from-orange-600 to-yellow-500 text-white shadow-md sticky top-0 z-50">
+    <header className="w-full bg-gradient-to-r from-brand to-yellow-500 text-ink shadow-md sticky top-0 z-50">
       <div className="w-full px-4 py-3 flex items-center justify-between">
 
         {/* Logo Section */}

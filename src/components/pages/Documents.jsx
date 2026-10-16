@@ -114,7 +114,7 @@ const DriverDocuments = () => {
           <button
             type="submit"
             disabled={status === 'under_review' || status === 'approved'}
-            className="w-full bg-orange-600 text-white py-3 rounded-lg font-bold disabled:opacity-50"
+            className="w-full bg-brand text-ink py-3 rounded-lg font-bold disabled:opacity-50"
           >
             Submit for Verification
           </button>

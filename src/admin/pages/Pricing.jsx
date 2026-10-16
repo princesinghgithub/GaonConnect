@@ -178,7 +178,7 @@ const Pricing = () => {
             <button
               onClick={() => saveVehicle(key)}
               disabled={saving[key]}
-              className="px-5 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 font-medium"
+              className="px-5 py-2 bg-brand text-ink rounded-lg hover:bg-brand disabled:opacity-50 font-medium"
             >
               {saving[key] ? 'Saving...' : 'Save'}
             </button>
@@ -238,7 +238,7 @@ const Pricing = () => {
                   <button
                     onClick={() => saveCategory(vehicleType, category)}
                     disabled={savingCategory[key]}
-                    className="px-4 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 text-sm font-medium"
+                    className="px-4 py-1.5 bg-brand text-ink rounded-lg hover:bg-brand disabled:opacity-50 text-sm font-medium"
                   >
                     {savingCategory[key] ? 'Saving...' : 'Save'}
                   </button>
@@ -282,7 +282,7 @@ const Pricing = () => {
           <button
             onClick={saveSurge}
             disabled={saving.surge}
-            className="px-5 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 font-medium"
+            className="px-5 py-2 bg-brand text-ink rounded-lg hover:bg-brand disabled:opacity-50 font-medium"
           >
             {saving.surge ? 'Saving...' : 'Save'}
           </button>
@@ -344,7 +344,7 @@ const Pricing = () => {
           <button
             onClick={saveCommission}
             disabled={saving.commission}
-            className="px-5 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 font-medium"
+            className="px-5 py-2 bg-brand text-ink rounded-lg hover:bg-brand disabled:opacity-50 font-medium"
           >
             {saving.commission ? 'Saving...' : 'Save'}
           </button>

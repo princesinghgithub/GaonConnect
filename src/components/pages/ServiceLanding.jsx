@@ -24,7 +24,7 @@ const ServiceLanding = ({ slugKey }) => {
     <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
       <Navbar onDownloadApp={handleDownloadApp} />
 
-      <section className="relative bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-700 dark:to-orange-800 text-white overflow-hidden">
+      <section className="relative bg-gradient-to-br from-brand to-brand-dark dark:from-orange-700 dark:to-orange-800 text-ink overflow-hidden">
         <div className="relative z-10 max-w-4xl mx-auto px-6 py-16 md:py-20 text-center">
           {/* Google wants the BreadcrumbList schema on this route to have a
               visible counterpart; without it these pages also had no link
@@ -157,7 +157,7 @@ const ServiceLanding = ({ slugKey }) => {
             <Link
               to="/"
               onClick={() => trackEvent('service_page_book_click', { service: page.slug })}
-              className="inline-flex bg-saffron hover:bg-cta text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+              className="inline-flex bg-brand hover:bg-brand-dark text-ink px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
             >
               🚗 Online Booking Karein
             </Link>

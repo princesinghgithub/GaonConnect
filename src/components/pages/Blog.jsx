@@ -16,7 +16,7 @@ const Blog = () => {
     <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
       <Navbar onDownloadApp={handleDownloadApp} />
 
-      <section className="relative bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-700 dark:to-orange-800 text-white overflow-hidden">
+      <section className="relative bg-gradient-to-br from-brand to-brand-dark dark:from-orange-700 dark:to-orange-800 text-ink overflow-hidden">
         <div className="relative z-10 max-w-4xl mx-auto px-6 py-16 md:py-20 text-center">
           <div className="text-6xl mb-4">📰</div>
           <h1 className="text-3xl md:text-5xl font-bold mb-4">{t('blogPage.heroTitle')}</h1>

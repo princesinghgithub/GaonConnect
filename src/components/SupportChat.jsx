@@ -85,7 +85,7 @@ export default function SupportChat() {
           onClick={() => setOpen(true)}
           aria-label="Support chat kholein"
           className="fixed right-5 bottom-5 z-50 flex h-[60px] w-[60px] items-center justify-center rounded-full text-white shadow-lg transition hover:scale-105 active:scale-95"
-          style={{ backgroundColor: "#F5A623" }}
+          style={{ backgroundColor: "#111111" }}
         >
           <MessageCircle size={28} />
         </button>
@@ -96,7 +96,7 @@ export default function SupportChat() {
           {/* Header */}
           <div
             className="flex items-center justify-between px-4 py-3 text-white"
-            style={{ backgroundColor: "#F5A623" }}
+            style={{ backgroundColor: "#111111" }}
           >
             <div className="flex items-center gap-2">
               <img
@@ -124,7 +124,7 @@ export default function SupportChat() {
                       ? "rounded-br-sm text-white"
                       : "rounded-bl-sm bg-white text-gray-800 shadow-sm dark:bg-gray-800 dark:text-gray-100"
                   }`}
-                  style={m.role === "user" ? { backgroundColor: "#F5A623" } : undefined}
+                  style={m.role === "user" ? { backgroundColor: "#111111" } : undefined}
                 >
                   {m.typing ? (
                     <span className="inline-flex gap-1 py-1">
@@ -170,7 +170,7 @@ export default function SupportChat() {
               disabled={!input.trim() || sending}
               aria-label="Bhejein"
               className="flex h-9 w-9 items-center justify-center rounded-full text-white disabled:opacity-40"
-              style={{ backgroundColor: "#F5A623" }}
+              style={{ backgroundColor: "#111111" }}
             >
               <Send size={17} />
             </button>

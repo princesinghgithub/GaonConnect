@@ -321,7 +321,7 @@
 //             onClick={() => setFilter('all')}
 //             className={`flex-1 py-2 rounded-lg font-semibold text-sm transition ${
 //               filter === 'all'
-//                 ? 'bg-orange-600 text-white'
+//                 ? 'bg-brand text-ink'
 //                 : 'bg-white text-gray-600 border-2 border-gray-200'
 //             }`}
 //           >
@@ -374,7 +374,7 @@
 //           >
 //             Previous
 //           </button>
-//           <span className="px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold">
+//           <span className="px-4 py-2 bg-brand text-ink rounded-lg font-semibold">
 //             {page} / {totalPages}
 //           </span>
 //           <button

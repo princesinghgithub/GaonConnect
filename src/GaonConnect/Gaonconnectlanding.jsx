@@ -473,7 +473,7 @@ const GaonConnectLanding = () => {
                             onClick={() => setHeroQty(n)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
                               heroQty === n
-                                ? 'bg-saffron border-saffron text-white'
+                                ? 'bg-brand border-saffron text-ink'
                                 : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-gray-300'
                             }`}
                           >
@@ -497,7 +497,7 @@ const GaonConnectLanding = () => {
                             onClick={() => setHeroHours(h)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
                               heroHours === h
-                                ? 'bg-saffron border-saffron text-white'
+                                ? 'bg-brand border-saffron text-ink'
                                 : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-gray-300'
                             }`}
                           >
@@ -517,7 +517,7 @@ const GaonConnectLanding = () => {
                   (heroIsTractorJcb && (!heroCategory || !heroSub))
                 }
                 onClick={() => handleServiceSelect(heroService)}
-                className="w-full bg-cta hover:bg-saffron disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-xl font-bold text-lg shadow-md hover:shadow-lg transition-all duration-300"
+                className="w-full bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-ink px-6 py-4 rounded-xl font-bold text-lg shadow-md hover:shadow-lg transition-all duration-300"
               >
                 {t('hero.bookRideCta')}
               </button>
@@ -597,7 +597,7 @@ const GaonConnectLanding = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {steps.map((step, index) => (
               <div key={index} className="text-center">
-                <div className="w-20 h-20 bg-cta text-white rounded-full flex items-center justify-center text-3xl font-bold mx-auto mb-6 shadow-lg">
+                <div className="w-20 h-20 bg-brand text-ink rounded-full flex items-center justify-center text-3xl font-bold mx-auto mb-6 shadow-lg">
                   {index + 1}
                 </div>
                 <h3 className="text-xl font-semibold mb-3 text-white">{step.title}</h3>
@@ -796,13 +796,13 @@ const GaonConnectLanding = () => {
 
       {/* Download App Section */}
       <section className="py-10 px-6">
-        <div className="max-w-6xl mx-auto bg-gradient-to-br from-saffron to-cta rounded-3xl px-8 py-10 md:px-14 md:py-14 grid grid-cols-1 md:grid-cols-[1.3fr_auto] gap-8 items-center shadow-xl">
+        <div className="max-w-6xl mx-auto bg-gradient-to-br from-brand to-brand-dark rounded-3xl px-8 py-10 md:px-14 md:py-14 grid grid-cols-1 md:grid-cols-[1.3fr_auto] gap-8 items-center shadow-xl">
           <div>
-            <h2 className="text-2xl md:text-3xl font-bold mb-2 text-white">
+            <h2 className="text-2xl md:text-3xl font-bold mb-2 text-ink">
               {t('download.heading')}
             </h2>
-            <p className="text-orange-50">{t('download.subheading')}</p>
-            <p className="text-white/90 text-sm font-medium mt-2">{t('download.promo')}</p>
+            <p className="text-ink/80">{t('download.subheading')}</p>
+            <p className="text-ink/90 text-sm font-medium mt-2">{t('download.promo')}</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
@@ -848,7 +848,7 @@ const GaonConnectLanding = () => {
           <div className="text-center">
             <button
               onClick={handleBecomeDriver}
-              className="bg-saffron hover:bg-cta text-white px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+              className="bg-brand hover:bg-brand-dark text-ink px-8 py-4 rounded-full font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
             >
               {t('partner.cta')}
             </button>
@@ -990,7 +990,7 @@ const GaonConnectLanding = () => {
               <button
                 type="submit"
                 disabled={contactStatus === 'sending'}
-                className="w-full bg-saffron hover:bg-cta disabled:opacity-60 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                className="w-full bg-brand hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed text-ink px-6 py-3 rounded-lg font-semibold transition-colors"
               >
                 {contactStatus === 'sending' ? t('contact.formSending') : t('contact.formSubmit')}
               </button>
@@ -1006,7 +1006,7 @@ const GaonConnectLanding = () => {
       </section>
 
       {/* Final CTA Section */}
-      <section className="bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-700 dark:to-orange-800 text-white py-16 md:py-20 px-6 text-center">
+      <section className="bg-gradient-to-br from-brand to-brand-dark dark:from-orange-700 dark:to-orange-800 text-ink py-16 md:py-20 px-6 text-center">
         <h2 className="text-3xl md:text-5xl font-bold mb-6">🚀 {t('finalCta.heading')}</h2>
         <p className="text-lg md:text-xl mb-10 opacity-95">{t('finalCta.subheading')}</p>
 

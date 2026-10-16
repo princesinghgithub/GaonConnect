@@ -103,7 +103,7 @@ const Navbar = ({ onDownloadApp, scrollToSection }) => {
 
           <button
             onClick={onDownloadApp}
-            className="hidden sm:inline-flex bg-saffron hover:bg-cta text-white text-sm font-semibold px-4 py-2 rounded-full transition-colors"
+            className="hidden sm:inline-flex bg-brand hover:bg-brand-dark text-ink text-sm font-semibold px-4 py-2 rounded-full transition-colors"
           >
             {t('nav.downloadApp')}
           </button>
@@ -142,7 +142,7 @@ const Navbar = ({ onDownloadApp, scrollToSection }) => {
           ))}
           <button
             onClick={() => { setMenuOpen(false); onDownloadApp(); }}
-            className="mt-2 bg-saffron hover:bg-cta text-white text-sm font-semibold px-4 py-2 rounded-full transition-colors"
+            className="mt-2 bg-brand hover:bg-brand-dark text-ink text-sm font-semibold px-4 py-2 rounded-full transition-colors"
           >
             {t('nav.downloadApp')}
           </button>

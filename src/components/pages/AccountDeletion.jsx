@@ -7,7 +7,7 @@ const AccountDeletion = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-6 px-4 shadow-lg">
+      <div className="bg-gradient-to-r from-brand to-yellow-500 text-ink py-6 px-4 shadow-lg">
         <div className="max-w-4xl mx-auto flex items-center gap-4">
           <button
             onClick={() => navigate('/')}

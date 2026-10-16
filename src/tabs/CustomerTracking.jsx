@@ -80,7 +80,7 @@ const CustomerTracking = ({ ride }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <h2 style={{ fontWeight: 800, fontSize: 17, color: '#1a1a2e', margin: 0 }}>Driver aa raha hai 🚗</h2>
         {eta && (
-          <span style={{ background: '#fff7e6', color: '#F5A623', fontWeight: 700, fontSize: 13, borderRadius: 20, padding: '4px 12px', border: '1px solid #F5A623' }}>
+          <span style={{ background: '#fff7e6', color: '#8A6500', fontWeight: 700, fontSize: 13, borderRadius: 20, padding: '4px 12px', border: '1px solid #F5A623' }}>
             {eta} mein
           </span>
         )}
@@ -102,7 +102,7 @@ const CustomerTracking = ({ ride }) => {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 13, color: '#555' }}>
         <span>Vehicle: <b>{ride?.vehicle || '—'}</b></span>
-        <span>Fare: <b style={{ color: '#F5A623', fontSize: 16 }}>₹{ride?.fare || '—'}</b></span>
+        <span>Fare: <b style={{ color: '#8A6500', fontSize: 16 }}>₹{ride?.fare || '—'}</b></span>
       </div>
     </div>
   );

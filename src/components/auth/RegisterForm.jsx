@@ -95,7 +95,7 @@
 //             <button
 //               type="submit"
 //               disabled={loading || otp.length !== 6}
-//               className="w-full bg-gradient-to-r from-orange-600 to-yellow-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50"
+//               className="w-full bg-gradient-to-r from-brand to-yellow-600 text-ink py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50"
 //             >
 //               {loading ? 'Verifying...' : 'Verify & Register'}
 //             </button>
@@ -213,7 +213,7 @@
 //                 onClick={() => setFormData({ ...formData, role: 'customer' })}
 //                 className={`py-3 rounded-lg font-semibold transition ${
 //                   formData.role === 'customer'
-//                     ? 'bg-orange-600 text-white'
+//                     ? 'bg-brand text-ink'
 //                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
 //                 }`}
 //               >
@@ -224,7 +224,7 @@
 //                 onClick={() => setFormData({ ...formData, role: 'provider' })}
 //                 className={`py-3 rounded-lg font-semibold transition ${
 //                   formData.role === 'provider'
-//                     ? 'bg-orange-600 text-white'
+//                     ? 'bg-brand text-ink'
 //                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
 //                 }`}
 //               >
@@ -236,7 +236,7 @@
 //           <button
 //             type="submit"
 //             disabled={loading}
-//             className="w-full bg-gradient-to-r from-orange-600 to-yellow-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+//             className="w-full bg-gradient-to-r from-brand to-yellow-600 text-ink py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
 //           >
 //             {loading ? 'Processing...' : 'Continue'}
 //             <ArrowRight size={20} />
@@ -408,7 +408,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
             <button
               type="submit"
               disabled={loading || otp.length !== 6}
-              className="mt-6 w-full bg-gradient-to-r from-orange-600 to-yellow-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50"
+              className="mt-6 w-full bg-gradient-to-r from-brand to-yellow-600 text-ink py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50"
             >
               {loading ? 'Verifying...' : 'Verify & Continue'}
             </button>
@@ -552,7 +552,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
                 onClick={() => setFormData({ ...formData, role: 'customer' })}
                 className={`py-3 rounded-lg font-semibold transition ${
                   formData.role === 'customer'
-                    ? 'bg-orange-600 text-white'
+                    ? 'bg-brand text-ink'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
@@ -563,7 +563,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
                 onClick={() => setFormData({ ...formData, role: 'provider' })}
                 className={`py-3 rounded-lg font-semibold transition ${
                   formData.role === 'provider'
-                    ? 'bg-orange-600 text-white'
+                    ? 'bg-brand text-ink'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
@@ -581,7 +581,7 @@ const RegisterForm = ({ onSwitchToLogin, onRegisterSuccess }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-orange-600 to-yellow-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-r from-brand to-yellow-600 text-ink py-3 rounded-lg font-bold hover:shadow-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? 'Processing...' : 'Continue'}
             <ArrowRight size={20} />
@@ -711,7 +711,7 @@ export default RegisterForm;
 
 //             <button
 //               disabled={loading}
-//               className="mt-4 w-full bg-orange-600 text-white py-3 rounded-lg font-bold"
+//               className="mt-4 w-full bg-brand text-ink py-3 rounded-lg font-bold"
 //             >
 //               {loading ? 'Verifying...' : 'Verify & Continue'}
 //             </button>
@@ -783,7 +783,7 @@ export default RegisterForm;
 //                 onClick={() => setFormData({ ...formData, role })}
 //                 className={`py-3 rounded-lg font-semibold ${
 //                   formData.role === role
-//                     ? 'bg-orange-600 text-white'
+//                     ? 'bg-brand text-ink'
 //                     : 'bg-gray-100'
 //                 }`}
 //               >
@@ -794,7 +794,7 @@ export default RegisterForm;
 
 //           <button
 //             disabled={loading}
-//             className="w-full bg-orange-600 text-white py-3 rounded-lg font-bold flex justify-center gap-2"
+//             className="w-full bg-brand text-ink py-3 rounded-lg font-bold flex justify-center gap-2"
 //           >
 //             Continue <ArrowRight size={18} />
 //           </button>
@@ -1016,7 +1016,7 @@ export default RegisterForm;
 //             <button
 //               type="submit"
 //               disabled={loading}
-//               className="w-full bg-orange-600 text-white py-3 rounded-lg flex justify-center items-center gap-2"
+//               className="w-full bg-brand text-ink py-3 rounded-lg flex justify-center items-center gap-2"
 //             >
 //               {loading ? 'Sending...' : 'Send OTP'}
 //               <ArrowRight />
@@ -1038,7 +1038,7 @@ export default RegisterForm;
 //             <button
 //               type="submit"
 //               disabled={loading}
-//               className="mt-6 w-full bg-orange-600 text-white py-3 rounded-lg"
+//               className="mt-6 w-full bg-brand text-ink py-3 rounded-lg"
 //             >
 //               {loading ? 'Verifying...' : 'Verify & Register'}
 //             </button>

@@ -100,7 +100,7 @@ export default function Promos() {
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-orange-600 transition"
+          className="flex items-center gap-2 bg-brand text-ink px-4 py-2 rounded-lg font-semibold hover:bg-brand transition"
         >
           <FaPlus size={14} /> Naya Promo
         </button>
@@ -281,7 +281,7 @@ export default function Promos() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-5 py-2 rounded-lg bg-orange-500 text-white font-bold hover:bg-orange-600 disabled:opacity-60"
+                className="px-5 py-2 rounded-lg bg-brand text-ink font-bold hover:bg-brand disabled:opacity-60"
               >
                 {saving ? 'Save ho raha hai...' : 'Save Karo'}
               </button>

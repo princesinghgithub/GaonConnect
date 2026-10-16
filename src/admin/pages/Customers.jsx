@@ -48,7 +48,7 @@ const Customers = () => {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
-          <button type="submit" className="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600">
+          <button type="submit" className="px-3 py-2 bg-brand text-ink rounded-lg hover:bg-brand">
             <FaSearch />
           </button>
         </form>
@@ -198,7 +198,7 @@ const Customers = () => {
             />
             <div className="flex justify-end gap-2">
               <button onClick={closeModal} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Cancel</button>
-              <button onClick={handleBlock} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700">Block</button>
+              <button onClick={handleBlock} className="px-4 py-2 bg-brand text-ink rounded-lg text-sm hover:bg-brand-dark">Block</button>
             </div>
           </div>
         </Modal>

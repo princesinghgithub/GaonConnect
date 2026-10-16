@@ -83,7 +83,7 @@ const Drivers = () => {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
-          <button type="submit" className="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600">
+          <button type="submit" className="px-3 py-2 bg-brand text-ink rounded-lg hover:bg-brand">
             <FaSearch />
           </button>
         </form>
@@ -143,7 +143,7 @@ const Drivers = () => {
                       <tr key={driver._id} className="hover:bg-orange-50 transition">
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-ink font-bold text-sm">
                               {(VEHICLE_ICONS[vehicle] || "🚗")}
                             </div>
                             <div>
@@ -301,7 +301,7 @@ const Drivers = () => {
             />
             <div className="flex justify-end gap-2">
               <button onClick={closeModal} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">Cancel</button>
-              <button onClick={handleBlock} className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm">Block</button>
+              <button onClick={handleBlock} className="px-4 py-2 bg-brand text-ink rounded-lg hover:bg-brand-dark text-sm">Block</button>
             </div>
           </div>
         </Modal>

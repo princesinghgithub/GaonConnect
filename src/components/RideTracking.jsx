@@ -226,7 +226,7 @@ const RideTracking = () => {
         name: 'GaonConnect',
         description: 'Ride ka kiraya',
         prefill: { name: user.name, contact: user.phone, email: user.email },
-        theme: { color: '#ea580c' },
+        theme: { color: '#F9C80E' },
         handler: async (response) => {
           try {
             const verifyRes = await rideAPI.verifyRazorpayPayment({
@@ -481,7 +481,7 @@ const RideTracking = () => {
         )}
 
         {['completed', 'cancelled'].includes(status) && (
-          <button onClick={() => navigate('/customer')} className="mt-4 w-full rounded-xl bg-orange-600 py-4 text-lg font-bold text-white hover:bg-orange-700">
+          <button onClick={() => navigate('/customer')} className="mt-4 w-full rounded-xl bg-brand py-4 text-lg font-bold text-ink hover:bg-brand-dark">
             Nayi booking karein
           </button>
         )}

@@ -86,7 +86,7 @@
 //       </div>
 
 //       {/* ✅ Today's Earnings Summary */}
-//       <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-5 rounded-xl shadow-lg">
+//       <div className="bg-gradient-to-r from-brand to-brand-dark text-ink p-5 rounded-xl shadow-lg">
 //         <div className="flex justify-between items-start mb-4">
 //           <div>
 //             <p className="text-sm opacity-90">Today's Earnings</p>
@@ -315,7 +315,7 @@
 //       </div>
 
 //       {/* Today's Earnings Summary */}
-//       <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-5 rounded-xl shadow-lg">
+//       <div className="bg-gradient-to-r from-brand to-brand-dark text-ink p-5 rounded-xl shadow-lg">
 //         <div className="flex justify-between items-start mb-4">
 //           <div>
 //             <p className="text-sm opacity-90">Today's Earnings</p>
@@ -581,7 +581,7 @@
 //       </div>
 
 //       {/* Today's Earnings Summary */}
-//       <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-5 rounded-xl shadow-lg">
+//       <div className="bg-gradient-to-r from-brand to-brand-dark text-ink p-5 rounded-xl shadow-lg">
 //         <div className="flex justify-between items-start mb-4">
 //           <div>
 //             <p className="text-sm opacity-90">Today's Earnings</p>
@@ -863,7 +863,7 @@
 //       </div>
 
 //       {/* Today's Earnings */}
-//       <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-5 rounded-xl shadow-lg">
+//       <div className="bg-gradient-to-r from-brand to-brand-dark text-ink p-5 rounded-xl shadow-lg">
 //         <div className="flex justify-between items-start mb-4">
 //           <div>
 //             <p className="text-sm opacity-90">Today's Earnings</p>
@@ -1248,7 +1248,7 @@ const HomeTab = ({ setActiveTab }) => {
       )}
 
       {/* Today's Earnings */}
-      <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-5 rounded-xl shadow-lg">
+      <div className="bg-gradient-to-r from-brand to-brand-dark text-ink p-5 rounded-xl shadow-lg">
         <div className="flex justify-between items-start mb-4">
           <div>
             <p className="text-sm opacity-90">Today's Earnings</p>

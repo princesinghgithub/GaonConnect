@@ -199,7 +199,7 @@ const Careers = () => {
             </p>
             <a
               href="mailto:gaonconnect.in@gmail.com?subject=Career%20Interest%20-%20GaonConnect"
-              className="inline-flex bg-saffron hover:bg-cta text-white px-8 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
+              className="inline-flex bg-brand hover:bg-brand-dark text-ink px-8 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300"
             >
               {t('careersPage.resumeCta')}
             </a>

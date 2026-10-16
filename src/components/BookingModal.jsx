@@ -12,7 +12,7 @@ const BookingModal = ({ selectedService, providers, onClose, onBook }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-orange-600 to-yellow-600 text-white p-6 rounded-t-2xl">
+        <div className="sticky top-0 bg-gradient-to-r from-brand to-yellow-600 text-ink p-6 rounded-t-2xl">
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-2xl font-bold">{selectedService.name}</h3>

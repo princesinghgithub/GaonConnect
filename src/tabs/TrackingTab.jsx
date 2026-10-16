@@ -11,7 +11,7 @@ const TrackingTab = ({ tracking, onBackToBooking }) => {
         <p className="text-gray-600 mb-6">Book a service to start tracking</p>
         <button
           onClick={onBackToBooking}
-          className="bg-gradient-to-r from-orange-600 to-yellow-600 text-white px-8 py-3 rounded-lg font-bold hover:shadow-lg transition"
+          className="bg-gradient-to-r from-brand to-yellow-600 text-ink px-8 py-3 rounded-lg font-bold hover:shadow-lg transition"
         >
           Book Now
         </button>

@@ -21,7 +21,7 @@
 //     <div className="pb-20 space-y-4">
       
 //       {/* ✅ Profile Header */}
-//       <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 rounded-2xl shadow-xl">
+//       <div className="bg-gradient-to-br from-brand to-brand-dark text-ink p-6 rounded-2xl shadow-xl">
 //         <div className="flex items-center gap-4 mb-4">
 //           <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center text-3xl font-bold border-4 border-white/30">
 //             PS
@@ -266,7 +266,7 @@
 //     <div className="pb-20 space-y-4">
 
 //       {/* PROFILE HEADER */}
-//       <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 rounded-2xl shadow-xl">
+//       <div className="bg-gradient-to-br from-brand to-brand-dark text-ink p-6 rounded-2xl shadow-xl">
 //         <div className="flex items-center gap-4 mb-4">
           
 //           {/* Profile Photo */}
@@ -728,7 +728,7 @@ const ProfileTab = () => {
     <div className="pb-20 space-y-4">
 
       {/* PROFILE HEADER */}
-      <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 rounded-2xl shadow-xl">
+      <div className="bg-gradient-to-br from-brand to-brand-dark text-ink p-6 rounded-2xl shadow-xl">
         <div className="flex items-center gap-4 mb-4">
           
           {/* Profile Photo */}

@@ -130,7 +130,7 @@ const ContactUs = () => {
               <button
                 type="submit"
                 disabled={status === 'sending'}
-                className="w-full bg-saffron hover:bg-cta disabled:opacity-60 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                className="w-full bg-brand hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed text-ink px-6 py-3 rounded-lg font-semibold transition-colors"
               >
                 {status === 'sending' ? t('contactPage.sendingBtn') : t('contactPage.submitBtn')}
               </button>

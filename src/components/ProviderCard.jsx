@@ -8,7 +8,7 @@ const ProviderCard = ({ provider, onBook }) => {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-yellow-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
+          <div className="w-12 h-12 bg-gradient-to-br from-brand to-yellow-500 rounded-full flex items-center justify-center text-ink font-bold text-lg">
             {provider?.name?.charAt(0)}
           </div>
           <div>
@@ -43,7 +43,7 @@ const ProviderCard = ({ provider, onBook }) => {
       <div className="flex gap-2">
         <button
           onClick={() => onBook(provider)}
-          className="flex-1 bg-gradient-to-r from-orange-600 to-yellow-600 text-white py-3 rounded-lg font-bold hover:shadow-lg transition"
+          className="flex-1 bg-gradient-to-r from-brand to-yellow-600 text-ink py-3 rounded-lg font-bold hover:shadow-lg transition"
         >
           Book Now
         </button>

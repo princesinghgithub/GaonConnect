@@ -56,7 +56,7 @@ const ConfirmModal = ({ data, onConfirm, onCancel }) => (
         </button>
         <button
           onClick={onConfirm}
-          className="flex-1 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition flex items-center justify-center gap-2"
+          className="flex-1 py-2 bg-brand text-ink rounded-lg text-sm font-semibold hover:bg-brand transition flex items-center justify-center gap-2"
         >
           <FaPaperPlane /> Confirm Send
         </button>
@@ -144,7 +144,7 @@ const Notifications = () => {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition ${
-                tab === t.key ? "bg-orange-500 text-white" : "text-gray-500 hover:bg-gray-100"
+                tab === t.key ? "bg-brand text-ink" : "text-gray-500 hover:bg-gray-100"
               }`}
             >
               {t.icon} {t.label}
@@ -258,7 +258,7 @@ const Notifications = () => {
             <button
               onClick={requestBulk}
               disabled={sending}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 disabled:opacity-50 transition"
+              className="w-full flex items-center justify-center gap-2 py-3 bg-brand text-ink rounded-xl font-semibold hover:bg-brand disabled:opacity-50 transition"
             >
               {bulk.scheduledAt ? <FaClock /> : <FaPaperPlane />}
               {sending
@@ -332,7 +332,7 @@ const Notifications = () => {
             <button
               onClick={requestSingle}
               disabled={sending}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 disabled:opacity-50 transition"
+              className="w-full flex items-center justify-center gap-2 py-3 bg-brand text-ink rounded-xl font-semibold hover:bg-brand disabled:opacity-50 transition"
             >
               <FaPaperPlane />
               {sending ? "Sending..." : "Send Notification"}

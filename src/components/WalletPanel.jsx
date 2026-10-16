@@ -2,7 +2,7 @@ import React from 'react';
 
 const WalletPanel = () => {
   return (
-    <div className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white rounded-xl p-5 shadow-lg">
+    <div className="bg-gradient-to-r from-brand to-yellow-500 text-ink rounded-xl p-5 shadow-lg">
       <h3 className="text-xl font-bold mb-2">💰 Wallet</h3>
       <p className="text-3xl font-bold">₹3,250</p>
       <p className="text-sm opacity-90">Pending payout</p>

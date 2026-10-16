@@ -230,7 +230,7 @@ const DocumentUploadModal = ({ isOpen, onClose, onUploadSuccess }) => {
           <button
             onClick={handleUpload}
             disabled={!selectedDoc || !file || uploading}
-            className="flex-1 px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 px-4 py-3 bg-brand hover:bg-brand-dark text-ink rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {uploading ? (
               <>

@@ -158,7 +158,7 @@ const LoginForm = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-screen bg-white lg:grid lg:grid-cols-2">
       {/* ── Bayan: brand (sirf bade screen par) ── */}
-      <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-orange-500 to-amber-500 p-12 text-white">
+      <div className="hidden lg:flex flex-col justify-between bg-gradient-to-br from-brand to-amber-500 p-12 text-ink">
         <button onClick={() => navigate('/')} className="flex items-center gap-3 w-fit">
           <img src="/gaonconnect-icon.png" alt="" className="h-11 w-11 rounded-xl bg-white" />
           <span className="text-2xl font-black tracking-tight">GaonConnect</span>

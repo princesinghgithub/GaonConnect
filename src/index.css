@@ -3,11 +3,28 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-saffron: #e85500;
+  /* saffron/cta ab Rapido sunehra/peela (text accent / bhara rang) */
+  --color-saffron: #8A6500;
   --color-india-green: #2d7a27;
-  --color-cta: #ff8c00;
+  --color-cta: #F9C80E;
   --color-navy: #000080;
   --color-ink: #1a1a1a;
+
+  /* Rapido jaisa peela + kaala. brand = bhara hua button (kaale text ke saath)
+     "orange" palette ko sunehra kar diya — puraane text-orange-600 jaise
+     accent ab peele brand se mel khaate hain aur safed par padhe jaate hain. */
+  --color-brand: #F9C80E;
+  --color-brand-dark: #E5B700;
+  --color-orange-50: #FFFBEA;
+  --color-orange-100: #FFF3C4;
+  --color-orange-200: #FDE68A;
+  --color-orange-300: #FCD34D;
+  --color-orange-400: #F9C80E;
+  --color-orange-500: #E5B700;
+  --color-orange-600: #8A6500;
+  --color-orange-700: #6F5100;
+  --color-orange-800: #574000;
+  --color-orange-900: #3D2D00;
 }
 /* * {
   margin: 0;
