@@ -3391,9 +3391,12 @@ const getOngoingRides = async (req, res) => {
 
 const trackRide = async (req, res) => {
   try {
+    // trail — driver ka chala hua raasta (utils/liveTracking.js); customer
+    // usi gaadi mein hai, isliye ride ka trail hi customer ka raasta hai.
     const ride = await Ride.findById(req.params.id)
-      .select('status pickup drop provider')
-      .populate({ path: 'provider', select: 'user activeVehicle currentLocation', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] });
+      .select('status pickup drop provider customer workAtPickup +trail')
+      .populate('customer', 'name phone')
+      .populate({ path: 'provider', select: 'user activeVehicle currentLocation locationUpdatedAt', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] });
 
     if (!ride) {
       return res.status(404).json({
@@ -3417,19 +3420,36 @@ const trackRide = async (req, res) => {
 
 const getActiveDriversLocation = async (req, res) => {
   try {
+    // Chalu rides pehle — jo driver ride par hai wo duty off kar de tab bhi
+    // map par dikhna chahiye (customer usi ke saath hai).
+    const activeRides = await Ride.find({ status: { $in: ACTIVE_RIDE_STATUSES }, provider: { $ne: null } })
+      .select('provider customer status pickup drop workAtPickup')
+      .populate('customer', 'name phone')
+      .lean();
+    const rideByProvider = new Map(activeRides.map((r) => [String(r.provider), r]));
+
     const activeDrivers = await Driver.find({
-      isOnline: true,
+      $or: [{ isOnline: true }, { _id: { $in: [...rideByProvider.keys()] } }],
       isApproved: true,
       isBlocked: { $ne: true }
     })
       .populate('user', 'name phone')
       .populate('activeVehicle')
-      .select('user activeVehicle currentLocation status');
+      .select('user activeVehicle currentLocation locationUpdatedAt status isOnline');
 
-    // Dashboard 'vehicle' (singular) expect karta hai â€” activeVehicle ko alias kar do
+    // Dashboard 'vehicle' (singular) expect karta hai — activeVehicle ko alias kar do
     const data = activeDrivers.map((d) => {
       const obj = d.toObject();
       obj.vehicle = obj.activeVehicle;
+      const ride = rideByProvider.get(String(d._id));
+      obj.activeRide = ride ? {
+        _id:          ride._id,
+        status:       ride.status,
+        customer:     ride.customer,
+        pickup:       ride.pickup,
+        drop:         ride.drop,
+        workAtPickup: ride.workAtPickup,
+      } : null;
       return obj;
     });
 

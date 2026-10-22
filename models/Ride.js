@@ -233,6 +233,15 @@ const RideSchema = new mongoose.Schema(
     // isliye lamba random (ride id nahi — wo customer ke apne pages kholti).
     shareToken: { type: String, index: { unique: true, sparse: true } },
 
+    // Admin live-tracking ke liye driver ka chala hua raasta (breadcrumb).
+    // utils/liveTracking.js likhta hai — har ~10s / 25m par ek point, aakhri
+    // 1500 tak. select:false — baaki saare ride responses mein ye bhaari
+    // array na jaaye; sirf admin track endpoint '+trail' se maangta hai.
+    trail: {
+      type: [{ _id: false, lat: Number, lng: Number, at: Date }],
+      select: false,
+    },
+
     status: {
       type: String,
       enum: [

@@ -1812,6 +1812,12 @@ exports.updateProviderLocation = async (req, res) => {
 
     await provider.save();
     res.json({ success: true });
+
+    // Admin Live Map + chalu ride ka trail (pickup tak ka raasta bhi isi
+    // background ping se aata hai). Response ke baad — driver ko rukna na pade.
+    require('../utils/liveTracking')
+      .recordDriverLocation({ providerId: provider._id, lat, lng })
+      .catch((e) => console.error('liveTracking error:', e.message));
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

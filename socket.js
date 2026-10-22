@@ -3,6 +3,8 @@ const jwt         = require('jsonwebtoken');
 const Provider     = require('./models/Provider');
 const Ride          = require('./models/Ride');
 const Message       = require('./models/Message');
+const User          = require('./models/User');
+const { recordDriverLocation, ADMIN_ROOM } = require('./utils/liveTracking');
 
 let io = null;
 
@@ -80,6 +82,13 @@ function initSocket(server) {
         socket.providerId = String(provider._id);
       }
 
+      // Admin token par bhi bharosa DB se — role badla ya block hua to
+      // purana token live tracking na dekh paaye (wahi jaisa protect+admin).
+      if (decoded.role === 'admin') {
+        const user = await User.findById(decoded.id).select('role isBlocked');
+        socket.isAdmin = Boolean(user && user.role === 'admin' && !user.isBlocked);
+      }
+
       next();
     } catch (err) {
       next(new Error('Authentication failed'));
@@ -122,6 +131,16 @@ function initSocket(server) {
       console.log(`👤 User joined: ${socket.userId}`);
     });
 
+    // ─── Admin Live Tracking ────────────────────────────────────────────────
+    // Dashboard ka Live Map / ride track — saare drivers ki location turant.
+    socket.on('admin_join_live', () => {
+      if (!socket.isAdmin) return;
+      socket.join(ADMIN_ROOM);
+      console.log(`🛰️  Admin live tracking joined: ${socket.userId}`);
+    });
+
+    socket.on('admin_leave_live', () => socket.leave(ADMIN_ROOM));
+
     // ─── User Joins Booking Room ────────────────────────────────────────────
     socket.on('join_booking', (bookingId) => joinBookingRoom(bookingId));
 
@@ -135,6 +154,9 @@ function initSocket(server) {
         const ride = await Ride.findById(bookingId).select('provider');
         if (!ride || !ride.provider || String(ride.provider) !== socket.providerId) return;
         io.to(`booking_${bookingId}`).emit('location_update', { driverId: socket.providerId, lat, lng });
+        // Admin tak bhi + ride ka trail + Provider.currentLocation taaza
+        recordDriverLocation({ providerId: socket.providerId, lat, lng, rideId: bookingId, saveToProvider: true })
+          .catch((e) => console.error('liveTracking error:', e.message));
       } catch (err) {
         console.error('driverLocation error:', err.message);
       }
