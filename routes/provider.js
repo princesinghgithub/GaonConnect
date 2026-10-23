@@ -206,6 +206,80 @@ router.get('/offers', protect, async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
+// ─── Refer & Earn (driver app → Profile → Refer & Earn) ──────────────────────
+router.get('/referral', protect, async (req, res) => {
+  try {
+    const { getDriverReferralSummary } = require('../utils/referral');
+    res.json({ success: true, data: await getDriverReferralSummary(req.user.id) });
+  } catch (err) {
+    console.error('driver referral error:', err.message);
+    res.status(500).json({ success: false, message: 'Referral info laane mein error' });
+  }
+});
+
+router.post('/referral/apply', protect, async (req, res) => {
+  try {
+    const { applyDriverReferralCode } = require('../utils/referral');
+    const result = await applyDriverReferralCode(req.user.id, req.body?.code);
+    res.status(result.ok ? 200 : 400).json({ success: result.ok, message: result.message });
+  } catch (err) {
+    console.error('driver referral apply error:', err.message);
+    res.status(500).json({ success: false, message: 'Referral code lagane mein error' });
+  }
+});
+
+// ─── Rewards — saare bonus ka hisaab (daily target + referral) ───────────────
+// Purane customer-wallet wale referral bonus bhi (jab driver ka bonus User
+// wallet mein jaata tha) — taaki driver ko apni poori kamai dikhe.
+router.get('/rewards', protect, async (req, res) => {
+  try {
+    const Provider    = require('../models/Provider');
+    const Transaction = require('../models/Transaction');
+    const provider = await Provider.findOne({ user: req.user.id }).select('_id');
+    if (!provider) return res.status(404).json({ success: false, message: 'Provider not found' });
+
+    const match = {
+      type: 'credit',
+      status: 'completed',
+      $or: [
+        { provider: provider._id, category: { $in: ['incentive', 'referral_bonus'] } },
+        { user: req.user._id, category: 'referral_bonus' },
+      ],
+    };
+    const IST = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(Date.now() + IST);
+    const monthStart = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), 1) - IST);
+
+    const [items, totals] = await Promise.all([
+      Transaction.find(match).select('category amount description createdAt').sort({ createdAt: -1 }).limit(100).lean(),
+      Transaction.aggregate([
+        { $match: match },
+        { $group: {
+          _id: '$category',
+          total: { $sum: '$amount' },
+          thisMonth: { $sum: { $cond: [{ $gte: ['$createdAt', monthStart] }, '$amount', 0] } },
+          count: { $sum: 1 },
+        } },
+      ]),
+    ]);
+
+    const by = Object.fromEntries(totals.map((t) => [t._id, t]));
+    res.json({
+      success: true,
+      data: {
+        totalEarned: totals.reduce((a, t) => a + t.total, 0),
+        thisMonth:   totals.reduce((a, t) => a + t.thisMonth, 0),
+        incentive:   by.incentive?.total || 0,
+        referral:    by.referral_bonus?.total || 0,
+        items,
+      },
+    });
+  } catch (err) {
+    console.error('driver rewards error:', err.message);
+    res.status(500).json({ success: false, message: 'Rewards laane mein error' });
+  }
+});
+
 router.get('/earnings/today',  protect, getTodayEarnings);
 router.get('/earnings/weekly', protect, getWeeklyEarnings);
 router.get('/earnings/daily',  protect, require('../controllers/providerController').getDailyEarnings);

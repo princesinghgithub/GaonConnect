@@ -472,6 +472,13 @@ const SettingSchema = new mongoose.Schema({
     // Reward pehli COMPLETED ride ke baad milta hai, sign-up pe nahi — warna
     // log fake account bana bana ke wallet bharte rehte.
     rewardOnFirstRide: { type: Boolean, default: true },
+    // Driver laaye to — naya driver itne din ke andar itni rides poori kare
+    // tab bonus. Sirf register karne par nahi: fake/kabhi-na-chalne wale
+    // driver se kharcha na ho.
+    driverReferrerReward: { type: Number, default: 200 }, // jis driver ne laaya
+    driverRefereeReward:  { type: Number, default: 100 }, // naya driver
+    driverRidesTarget:    { type: Number, default: 10 },
+    driverWindowDays:     { type: Number, default: 30 },
   },
 
   // ─── Driver Incentives ───────────────────────────────────────────────────────

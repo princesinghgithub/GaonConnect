@@ -1230,7 +1230,7 @@ const User = require('../models/User');
 const Ride = require('../models/Ride');
 const multer = require('multer');
 const path = require('path');
-const { applyReferralCode } = require('../utils/referral');
+const { applyDriverReferralCode } = require('../utils/referral');
 const { sanitizeEquipment, sanitizeVariant } = require('../utils/vehicleMatch');
 const { getEquipmentCatalog } = require('../utils/dynamicFare');
 // Admin ke jode auzaar samet maanya id (band wale nahi)
@@ -1659,9 +1659,11 @@ exports.registerProvider = async (req, res) => {
 
       // Referral code galat ho to registration nahi rokte — driver ka itna
       // saara kaam ek code ki wajah se bekaar nahi jaana chahiye.
+      // Driver wala referral (Provider.referral) — inaam driver ki rides par,
+      // customer ki pehli ride par nahi (wo User.referredBy wala hai).
       let referral = null;
       if (clean(referralCode)) {
-        referral = await applyReferralCode(user._id, referralCode).catch(() => null);
+        referral = await applyDriverReferralCode(user._id, referralCode).catch(() => null);
       }
 
       console.log(`✅ New provider registered: ${normalizedEmail}`);

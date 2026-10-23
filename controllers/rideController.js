@@ -22,7 +22,7 @@ const { calculateRideWaitingCharge, calculateDuration, calculateDistance, pricin
 const { computeSettlement, cancellationTerms, PREBOOK_DRIVER_LATE_RELEASE_MIN } = require('../utils/settlement');
 const { adjustProviderWallet } = require('../utils/walletOps');
 const { getCustomerDues, settleCustomerDues, isRideCarriedAsDue } = require('../utils/dues');
-const { rewardReferralIfFirstRide } = require('../utils/referral');
+const { rewardReferralIfFirstRide, rewardDriverReferral } = require('../utils/referral');
 const { creditDriverIncentive } = require('../utils/incentive');
 const { getIO }                     = require('../socket');
 const { notify }                    = require('../utils/notifications');
@@ -1283,6 +1283,9 @@ exports.updateRideStatus = async (req, res) => {
       // Daily incentive — aaj ka target pura hua to bonus. Yeh bhi ride
       // completion ko block nahi karta.
       creditDriverIncentive(provider._id).catch(() => {});
+
+      // Driver kisi ke code se aaya tha — target rides poori hui to dono ko bonus
+      rewardDriverReferral(provider._id).catch(() => {});
 
       // Driver earnings update
       // Commission ki value pehle yahan `ride.fare * 0` likhi thi — yaani

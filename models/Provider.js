@@ -277,6 +277,17 @@ const ProviderSchema = new mongoose.Schema({
     relation: String
   },
 
+  // Driver-to-driver Refer & Earn (Rapido Captain jaisa). Customer wala
+  // referral User.referredBy par hai aur customer ki pehli ride par chalta hai;
+  // ye alag hai — naya driver X din mein N rides poori kare tab dono ko bonus.
+  // utils/referral.js: applyDriverReferralCode / rewardDriverReferral.
+  referral: {
+    referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    appliedAt:  Date,
+    rewarded:   { type: Boolean, default: false },
+    rewardedAt: Date,
+  },
+
   deviceInfo: {
     deviceId: String,
     fcmToken: String, // For push notifications
@@ -301,6 +312,8 @@ const ProviderSchema = new mongoose.Schema({
 
 // Create 2dsphere index for location queries
 ProviderSchema.index({ currentLocation: '2dsphere' });
+// Driver app ki 'mere laaye hue driver' list
+ProviderSchema.index({ 'referral.referredBy': 1 }, { sparse: true });
 ProviderSchema.index({ status: 1, isApproved: 1, isOnline: 1 });
 ProviderSchema.index({ activeVehicle: 1 });
 
