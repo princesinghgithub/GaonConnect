@@ -398,24 +398,69 @@ const getReferralSummary = async (userId) => {
   const code = await ensureReferralCode(userId);
   const settings = await getSettings();
 
-  const [totalReferred, rewardedCount, earnedAgg] = await Promise.all([
+  const [totalReferred, rewardedCount, earnedAgg, customers] = await Promise.all([
     User.countDocuments({ referredBy: userId }),
     User.countDocuments({ referredBy: userId, referralRewarded: true }),
     Transaction.aggregate([
       { $match: { user: require('mongoose').Types.ObjectId.createFromHexString(String(userId)), category: 'referral_bonus' } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]),
+    // User app ki list — naam/number chhupa kar (maskName/maskPhone)
+    User.find({ referredBy: userId })
+      .select('name phone referralRewarded createdAt')
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean(),
   ]);
+
+  const referrerReward = settings?.referral?.referrerReward ?? 50;
 
   return {
     code,
     enabled:        settings?.referral?.enabled !== false,
-    referrerReward: settings?.referral?.referrerReward ?? 50,
+    referrerReward,
     refereeReward:  settings?.referral?.refereeReward ?? 50,
+    appUrl:         settings?.appUpdate?.customer?.storeUrl || 'https://play.google.com/store/apps/details?id=com.gaonconnect.user',
     totalReferred,
     // Jinhone abhi tak pehli ride nahi ki — inhi pe reward pending hai.
     pending:        Math.max(0, totalReferred - rewardedCount),
+    rewarded:       rewardedCount,
     totalEarned:    earnedAgg?.[0]?.total || 0,
+    referrals: customers.map((c) => ({
+      name:     maskName(c.name),
+      phone:    maskPhone(c.phone),
+      joinedAt: c.createdAt,
+      reward:   referrerReward,
+      status:   c.referralRewarded ? 'completed' : 'pending',
+    })),
+  };
+};
+
+/** User app ki "Mere Inaam" — customer wallet mein aaye saare referral bonus. */
+const getCustomerRewards = async (userId) => {
+  const mongoose = require('mongoose');
+  const uid = mongoose.Types.ObjectId.createFromHexString(String(userId));
+  const match = { user: uid, type: 'credit', status: 'completed', category: 'referral_bonus' };
+  const IST = 5.5 * 60 * 60 * 1000;
+  const ist = new Date(Date.now() + IST);
+  const monthStart = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), 1) - IST);
+
+  const [items, agg] = await Promise.all([
+    Transaction.find(match).select('category amount description createdAt').sort({ createdAt: -1 }).limit(100).lean(),
+    Transaction.aggregate([
+      { $match: match },
+      { $group: {
+        _id: null,
+        total: { $sum: '$amount' },
+        thisMonth: { $sum: { $cond: [{ $gte: ['$createdAt', monthStart] }, '$amount', 0] } },
+      } },
+    ]),
+  ]);
+
+  return {
+    totalEarned: agg?.[0]?.total || 0,
+    thisMonth:   agg?.[0]?.thisMonth || 0,
+    items,
   };
 };
 
@@ -427,4 +472,5 @@ module.exports = {
   applyDriverReferralCode,
   rewardDriverReferral,
   getDriverReferralSummary,
+  getCustomerRewards,
 };

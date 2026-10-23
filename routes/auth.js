@@ -152,6 +152,15 @@ router.put('/emergency-contacts', protect, require('../controllers/authControlle
 // Refer & Earn
 router.get('/referral',        protect, require('../controllers/authController').getReferral);
 router.post('/referral/apply', protect, require('../controllers/authController').applyReferral);
+router.get('/rewards', protect, async (req, res) => {
+  try {
+    const { getCustomerRewards } = require('../utils/referral');
+    res.json({ success: true, data: await getCustomerRewards(req.user.id) });
+  } catch (err) {
+    console.error('customer rewards error:', err.message);
+    res.status(500).json({ success: false, message: 'Rewards laane mein error' });
+  }
+});
 router.put('/profile',  protect, validate(schemas.updateProfile), updateProfile);
 router.post('/profile/photo', protect, photoUpload.single('photo'), uploadProfilePhoto);
 
