@@ -20,8 +20,8 @@ const driverConf = (settings) => {
   const r = settings?.referral || {};
   return {
     enabled:        r.enabled !== false,
-    referrerReward: r.driverReferrerReward ?? 200,
-    refereeReward:  r.driverRefereeReward ?? 100,
+    referrerReward: r.driverReferrerReward ?? 50,
+    refereeReward:  r.driverRefereeReward ?? 50,
     ridesTarget:    Math.max(1, r.driverRidesTarget ?? 10),
     windowDays:     Math.max(1, r.driverWindowDays ?? 30),
   };

@@ -475,8 +475,8 @@ const SettingSchema = new mongoose.Schema({
     // Driver laaye to — naya driver itne din ke andar itni rides poori kare
     // tab bonus. Sirf register karne par nahi: fake/kabhi-na-chalne wale
     // driver se kharcha na ho.
-    driverReferrerReward: { type: Number, default: 200 }, // jis driver ne laaya
-    driverRefereeReward:  { type: Number, default: 100 }, // naya driver
+    driverReferrerReward: { type: Number, default: 50 }, // jis driver ne laaya
+    driverRefereeReward:  { type: Number, default: 50 }, // naya driver
     driverRidesTarget:    { type: Number, default: 10 },
     driverWindowDays:     { type: Number, default: 30 },
   },
