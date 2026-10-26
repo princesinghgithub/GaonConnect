@@ -139,6 +139,28 @@ router.post('/logout-all',
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
 router.get('/profile',  protect, getProfile);
+// User app launch pe '/auth/me' se token verify karti hai. Yeh route nahi tha,
+// toh 404 aata tha — aur client sirf 401 pe logout karta hai, isliye 404 chup-chaap
+// nigal liya jaata tha. Nateeja: launch pe token kabhi verify hi nahi hota tha
+// (blocked/deleted account bhi andar aa jaata). '/profile' ka alias.
+router.get('/me',       protect, getProfile);
+
+// Emergency contacts — SOS ke waqt inhe khabar jaati hai
+router.get('/emergency-contacts', protect, require('../controllers/authController').getEmergencyContacts);
+router.put('/emergency-contacts', protect, require('../controllers/authController').setEmergencyContacts);
+
+// Refer & Earn
+router.get('/referral',        protect, require('../controllers/authController').getReferral);
+router.post('/referral/apply', protect, require('../controllers/authController').applyReferral);
+router.get('/rewards', protect, async (req, res) => {
+  try {
+    const { getCustomerRewards } = require('../utils/referral');
+    res.json({ success: true, data: await getCustomerRewards(req.user.id) });
+  } catch (err) {
+    console.error('customer rewards error:', err.message);
+    res.status(500).json({ success: false, message: 'Rewards laane mein error' });
+  }
+});
 router.put('/profile',  protect, validate(schemas.updateProfile), updateProfile);
 router.post('/profile/photo', protect, photoUpload.single('photo'), uploadProfilePhoto);
 

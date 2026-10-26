@@ -391,7 +391,17 @@ Sab 4 endpoints `{ success: true, data: <updated driver> }` return karte hain.
 ### 2.9 Analytics
 - `GET /api/admin/analytics?period=today|week|month|year` — rides/users/drivers growth charts
 - `GET /api/admin/dashboard/metrics` — monthly revenue, active drivers, avg rating, completion rate
-- `GET /api/admin/reports/export?type=rides|payments|drivers|users&from_date=&to_date=` — CSV download
+
+### 2.9.1 CSV Exports
+Sabhi export endpoints apne list endpoint jaise hi filters lete hain, response `text/csv`
+(UTF-8 BOM ke saath — Excel mein Hindi naam sahi dikhein) aur `Content-Disposition: attachment`.
+Max 20,000 rows per export; usse zyada ho to `from`/`to` date range lagao.
+
+- `GET /api/admin/drivers/export?status=&isApproved=&isRejected=&isBlocked=&hasChangeRequest=&search=&from=&to=` — drivers CSV (naam, phone, vehicle, trips, earnings, bank details, KYC status)
+- `GET /api/admin/users/export?isBlocked=&isVerified=&search=&from=&to=` — users CSV (profile + total/completed/cancelled rides, total spent, last ride)
+- `GET /api/admin/rides/export?status=&driverId=&userId=&vehicleType=&paymentStatus=&from=&to=` — bookings CSV (customer, driver, route, fare, payment, rating, cancellation)
+- `GET /api/admin/reports/export?type=rides|earnings|drivers|users&from=&to=` — Reports page ka generic export
+  (`type=earnings` sirf completed rides deta hai; purane `type=payments` aur `from_date`/`to_date` naam bhi chalte hain)
 
 ### 2.10 Settings
 - `GET /api/admin/settings` — sab settings (commission, vehicleRates, surge, waiting, etc.)

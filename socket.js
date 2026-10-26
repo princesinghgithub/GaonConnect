@@ -2,11 +2,42 @@ const { Server } = require('socket.io');
 const jwt         = require('jsonwebtoken');
 const Provider     = require('./models/Provider');
 const Ride          = require('./models/Ride');
+const Message       = require('./models/Message');
+const User          = require('./models/User');
+const { recordDriverLocation, ADMIN_ROOM } = require('./utils/liveTracking');
 
 let io = null;
 
 // providerId → socketId mapping (sirf online drivers)
 const connectedDrivers = new Map();
+
+// Chat ka naya message — saamne wale ko uske personal room mein khabar aur
+// phone par notification (app band ho tab bhi). `notifications` yahan lazy
+// require — socket.js bahut jagah se pehle load hota hai.
+const notifyChatRecipient = async (ioRef, ride, fromCustomer, text) => {
+  const { notify } = require('./utils/notifications');
+  const User = require('./models/User');
+  const preview = text.length > 80 ? `${text.slice(0, 77)}…` : text;
+  const data = { type: 'CHAT_MESSAGE', rideId: String(ride._id) };
+
+  if (fromCustomer) {
+    if (!ride.provider) return;
+    ioRef.to(`driver_${ride.provider}`).emit('chat_notice', { rideId: String(ride._id), text: preview });
+    const [p, c] = await Promise.all([
+      Provider.findById(ride.provider).select('deviceInfo'),
+      User.findById(ride.customer).select('name'),
+    ]);
+    const fcm = p?.deviceInfo?.fcmToken;
+    if (fcm) await notify.custom(fcm, { title: `💬 ${c?.name || 'Customer'}`, body: preview, data });
+  } else {
+    ioRef.to(`user_${ride.customer}`).emit('chat_notice', { rideId: String(ride._id), text: preview });
+    const [c, p] = await Promise.all([
+      User.findById(ride.customer).select('fcmToken'),
+      Provider.findById(ride.provider).populate('user', 'name').select('user'),
+    ]);
+    if (c?.fcmToken) await notify.custom(c.fcmToken, { title: `💬 ${p?.user?.name || 'Driver'}`, body: preview, data });
+  }
+};
 
 function initSocket(server) {
   const isProd = process.env.NODE_ENV === 'production';
@@ -51,6 +82,13 @@ function initSocket(server) {
         socket.providerId = String(provider._id);
       }
 
+      // Admin token par bhi bharosa DB se — role badla ya block hua to
+      // purana token live tracking na dekh paaye (wahi jaisa protect+admin).
+      if (decoded.role === 'admin') {
+        const user = await User.findById(decoded.id).select('role isBlocked');
+        socket.isAdmin = Boolean(user && user.role === 'admin' && !user.isBlocked);
+      }
+
       next();
     } catch (err) {
       next(new Error('Authentication failed'));
@@ -93,6 +131,16 @@ function initSocket(server) {
       console.log(`👤 User joined: ${socket.userId}`);
     });
 
+    // ─── Admin Live Tracking ────────────────────────────────────────────────
+    // Dashboard ka Live Map / ride track — saare drivers ki location turant.
+    socket.on('admin_join_live', () => {
+      if (!socket.isAdmin) return;
+      socket.join(ADMIN_ROOM);
+      console.log(`🛰️  Admin live tracking joined: ${socket.userId}`);
+    });
+
+    socket.on('admin_leave_live', () => socket.leave(ADMIN_ROOM));
+
     // ─── User Joins Booking Room ────────────────────────────────────────────
     socket.on('join_booking', (bookingId) => joinBookingRoom(bookingId));
 
@@ -106,8 +154,65 @@ function initSocket(server) {
         const ride = await Ride.findById(bookingId).select('provider');
         if (!ride || !ride.provider || String(ride.provider) !== socket.providerId) return;
         io.to(`booking_${bookingId}`).emit('location_update', { driverId: socket.providerId, lat, lng });
+        // Admin tak bhi + ride ka trail + Provider.currentLocation taaza
+        recordDriverLocation({ providerId: socket.providerId, lat, lng, rideId: bookingId, saveToProvider: true })
+          .catch((e) => console.error('liveTracking error:', e.message));
       } catch (err) {
         console.error('driverLocation error:', err.message);
+      }
+    });
+
+    // ─── Chat: customer ↔ driver ────────────────────────────────────────────
+    // Ownership wahi check hai jo joinBookingRoom karta hai — client se aayi
+    // rideId pe bharosa nahi kiya jaata, warna koi bhi kisi ki bhi ride mein
+    // message bhej deta. Sender ki pehchaan token se aati hai, payload se nahi.
+    socket.on('chat_message', async ({ rideId, text } = {}, ack) => {
+      const done = typeof ack === 'function' ? ack : () => {};
+      try {
+        const body = String(text || '').trim().slice(0, 1000);
+        if (!rideId || !body) return done({ ok: false, error: 'empty' });
+
+        const ride = await Ride.findById(rideId).select('customer provider status');
+        if (!ride) return done({ ok: false, error: 'not_found' });
+
+        const isCustomer = String(ride.customer) === socket.userId;
+        const isDriver   = socket.providerId && ride.provider && String(ride.provider) === socket.providerId;
+        if (!isCustomer && !isDriver) return done({ ok: false, error: 'forbidden' });
+
+        // Ride khatam ho chuki hai to chat band — warna log ride ke hafton baad
+        // tak message bhejte rehte aur uska koi jawab dene wala nahi hota.
+        if (['completed', 'cancelled'].includes(ride.status)) {
+          return done({ ok: false, error: 'ride_over' });
+        }
+
+        const msg = await Message.create({
+          ride:       ride._id,
+          sender:     socket.userId,
+          senderRole: isCustomer ? 'customer' : 'driver',
+          text:       body,
+        });
+
+        const payload = {
+          _id:        String(msg._id),
+          rideId:     String(ride._id),
+          text:       msg.text,
+          senderRole: msg.senderRole,
+          createdAt:  msg.createdAt,
+        };
+
+        // Room mein bhejo — bhejne wale ko bhi, taaki dono taraf ek hi
+        // server-stamped id aur timestamp rahe.
+        io.to(`booking_${ride._id}`).emit('chat_message', payload);
+        done({ ok: true, message: payload });
+
+        // Saamne wala chat screen khole na baitha ho (pre-booking mein yahi
+        // aam hai — baat ghanton pehle hoti hai) to use pata chale: uske
+        // personal room mein khabar + phone par notification. Number dikhaye
+        // bina baat — customer aur driver dono ki privacy bachi rehti hai.
+        notifyChatRecipient(io, ride, isCustomer, msg.text).catch(() => {});
+      } catch (err) {
+        console.error('chat_message error:', err.message);
+        done({ ok: false, error: 'server' });
       }
     });
 

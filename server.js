@@ -7,6 +7,11 @@ const http       = require('http');
 const path       = require('path');
 const mongoose   = require('mongoose');
 
+// `.env.local` (sirf apne computer par, git mein nahi) pehle — wahan likhi
+// value `.env` se upar. Local test alag database / Redis prefix se chalta
+// hai taaki live data aur live server ka cache na chhue. Server par yeh file
+// hoti hi nahi.
+dotenv.config({ path: path.join(__dirname, '.env.local') });
 dotenv.config();
 
 // JWT_SECRET missing hone par har login/OTP-verify silently 500 dega, bina reason bataye —
@@ -76,6 +81,8 @@ app.use(cors({
   optionsSuccessStatus: 200,
   methods:              ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders:       ['Content-Type', 'Authorization'],
+  // CSV export ka filename browser tak pahunchane ke liye
+  exposedHeaders:       ['Content-Disposition'],
 }));
 
 // ─── Webhooks (raw body — mounted before JSON parser for signature verification)
@@ -100,6 +107,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+app.use('/api/auth/admin', require('./routes/adminAuth')); // admin dashboard: password + Google Authenticator
 app.use('/api/auth',     require('./routes/auth'));
 app.use('/api/user',     require('./routes/auth')); // user app calls /user/fcm-token
 app.use('/api/provider', require('./routes/provider'));
@@ -110,10 +118,19 @@ app.use('/api/wallet',   require('./routes/wallet'));
 app.use('/api/admin',    adminRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/ratings', require('./routes/rating'));
+// Dono apps '/api/notification' (singular) call karti hain. Pehle sirf plural
+// mount tha, isliye HAR notification call 404 hoti thi — list khaali, unread
+// badge gayab, mark-as-read dead — aur `catch {}` ki wajah se kisi ko pata nahi
+// chala. Alias rakhne se pehle se installed apps bhi turant theek ho jaati hain,
+// bina naye Play Store release ke.
 app.use('/api/notifications', require('./routes/notification'));
+app.use('/api/notification',  require('./routes/notification'));
 app.use('/api/sos',     require('./routes/sos'));
 app.use('/api/promo',   require('./routes/promo'));
 app.use('/api/agent',   require('./routes/agent'));
+app.use('/api/support', require('./routes/support'));
+app.use('/api/banner',  require('./routes/banner'));
+app.use('/api/app',     require('./routes/app')); // update chahiye ya nahi (public)
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/health', async (_req, res) => {

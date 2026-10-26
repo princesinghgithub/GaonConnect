@@ -88,6 +88,13 @@ const RideSchema = new mongoose.Schema(
       lowercase: true,
     },
 
+    // Car ke andar kaunsi category chuni (hatchback / sedan / suv) aur AC
+    // chahiye ya nahi. Label bhi saath rakhte hain — admin baad mein category
+    // ka naam badal de to purani ride pe wahi dikhe jo customer ne book kiya tha.
+    vehicleVariant:      { type: String, default: '', trim: true, lowercase: true },
+    vehicleVariantLabel: { type: String, default: '' },
+    ac:                  { type: Boolean, default: false },
+
     distance: {
       type: Number, // in km
       required: true,
@@ -111,9 +118,153 @@ const RideSchema = new mongoose.Schema(
       type: Number, // Can be different due to extra charges or discounts
     },
 
+    // Ride poori hone par jo hisaab laga, wahi yahan jam jaata hai. Baad mein
+    // admin commission badal de to purani rides ka hisaab nahi badalna
+    // chahiye — driver ne jo kamaya, wo kamaya.
+    // Acre/quintal wale kaam ki maatra. Ride complete hone par dobara hisaab
+    // lagta hai, tab bhi yahi value use hoti hai.
+    serviceQuantity:   { type: Number, default: 0 },
+    /** "Customer ki marzi" wali service mein usne kya chuna — hour ya acre. */
+    chosenUnit:        { type: String, default: '' },
+
+    // Wedding car ka chuna hua package.
+    packageId:         { type: String, default: '' },
+    packageName:       { type: String, default: '' },
+    decoration:        { type: Boolean, default: false },
+
+    // Customer ne kaunse extras maange the. Ride complete hone par dobara
+    // hisaab lagta hai, tab bhi yahi list dekhi jaati hai.
+    extras: {
+      loading:   { type: Boolean, default: false },
+      unloading: { type: Boolean, default: false },
+      helper:    { type: Boolean, default: false },
+    },
+
+    commissionPercent: { type: Number, default: 0 },
+    platformFee:       { type: Number, default: 0 },
+    driverEarning:     { type: Number, default: 0 },
+
+    // Promo se kitna kam hua. `fare` promo ke BAAD ka hai (customer itna deta
+    // hai); driver ki kamai fare + promoDiscount par banti hai — offer platform
+    // ka hai, driver ka nahi.
+    promoCode:     { type: String, default: '' },
+    promoDiscount: { type: Number, default: 0 },
+
+    // Customer ka pichhla baaki jo is ride ke kiraye mein juda hai. `fare`
+    // mein ye shaamil hai (customer itna hi deta hai), par driver ki kamai
+    // isme se nahi banti. Ride poori hone par ye "bhara hua" ho jaata hai.
+    dues: {
+      amount:  { type: Number, default: 0 },
+      txnIds:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'Transaction' }],
+      rideIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Ride' }],
+    },
+
+    // Raaste mein rukne ki jagah (pickup → stop → drop). Kiraya dono tukdon
+    // ki doori jod kar banta hai.
+    stops: [{
+      _id: false,
+      address:   String,
+      latitude:  Number,
+      longitude: Number,
+    }],
+
+    // Customer ne ride ke dauraan drop badalne ko kaha — driver ke haan/na
+    // kehne tak yahan rehta hai. Haan par ride ka drop, doori aur kiraya isi
+    // se badalte hain.
+    pendingDropChange: {
+      address:     String,
+      latitude:    Number,
+      longitude:   Number,
+      distance:    Number,
+      fare:        Number,
+      requestedAt: Date,
+    },
+
+    // Customer ne cancel karte waqt driver ki galti batayi ("driver ne cancel
+    // karne ko kaha") — admin ko jaanchna hai.
+    flaggedForReview: { type: Boolean, default: false },
+
+    // Kaam usi jagah hona hai jahan bulaya gaya (khet jotna, JCB se khudai) —
+    // is ride ka koi "drop" nahi hai. Model mein `drop` zaroori field hai,
+    // isliye usme pickup hi rakha jaata hai; par apps aur dashboard isi flag
+    // se jaante hain ki drop dikhana nahi hai.
+    workAtPickup: { type: Boolean, default: false },
+
+    // Extra charge (Rapido jaisa) — driver maangta hai, customer APNI app se
+    // haan/na kehta hai. `fareAdjustment` manzoor hue sab extra ka jod hai aur
+    // `fare` mein shaamil hai; list isliye ki baad mein pata chale kab, kitna,
+    // kyun aur kya hua. Pura niyam: controllers/rideController.js (adjustFare).
+    fareAdjustment: { type: Number, default: 0 },
+    fareAdjustments: [{
+      _id: false,
+      amount:   Number,
+      hours:    Number,
+      // config/fareAdjustmentTypes.js. `{ type: String }` likhna zaroori —
+      // seedha `type: String` Mongoose ko lagta hai poora object hi String hai.
+      type:     { type: String },
+      reason:   String,
+      approved: Boolean,  // purane records + reporting ke liye
+      // approved | declined | expired | withdrawn
+      status:   String,
+      requestedAt: Date,
+      at:       { type: Date, default: Date.now },
+    }],
+    // Ride ke baad customer ki tip — ek ride par ek hi. Pehle yahi pakka
+    // likha jaata hai (atomic), phir wallet se paisa — double-tap par do
+    // baar na kate.
+    tip: {
+      amount: Number,
+      at:     Date,
+    },
+
+    // Customer ke jawab ka intezaar karti request — ek waqt mein ek hi.
+    // expiresAt ke baad maanya nahi (driver dobara maang sakta hai).
+    pendingFareAdjustment: {
+      amount:      Number,
+      hours:       Number,
+      type:        { type: String },
+      reason:      String,
+      requestedAt: Date,
+      expiresAt:   Date,
+    },
+
+    // Kaam se pehle aur baad ki photo (tractor / JCB / saamaan) — jhagde ke
+    // waqt yahi saboot hota hai.
+    workProof: {
+      before: { url: String, at: Date },
+      after:  { url: String, at: Date },
+    },
+
+    // Ride complete hote waqt paisa kahan maana gaya:
+    //   'cash'     — driver ke haath mein
+    //   'platform' — platform ke paas (online / QR), driver ke wallet mein juda
+    // Cash ride baad mein QR se bhari jaaye to 'cash' → 'platform' hota hai,
+    // aur ye badlav ek hi baar ho sakta hai (dekho utils/walletOps.js).
+    walletSettled: { type: String, enum: ['', 'cash', 'platform'], default: '' },
+
+    // Accept ke waqt driver pickup se kitna door tha aur kitni der mein
+    // pahunchna tha. Isi se tay hota hai ki driver "der" kar raha hai ya nahi —
+    // der driver ki ho to customer se cancel ka charge nahi liya jaata.
+    pickupKmAtAccept: { type: Number, default: 0 },
+    pickupEtaMinutes: { type: Number, default: 0 },
+
     otp: {
       type: String,
       required: true,
+    },
+
+    // Trip share (Rapido/Uber jaisa) — family ko bheja link /track/:token.
+    // Customer "share" dabaye tabhi banta hai; bina login dekhne ke liye,
+    // isliye lamba random (ride id nahi — wo customer ke apne pages kholti).
+    shareToken: { type: String, index: { unique: true, sparse: true } },
+
+    // Admin live-tracking ke liye driver ka chala hua raasta (breadcrumb).
+    // utils/liveTracking.js likhta hai — har ~10s / 25m par ek point, aakhri
+    // 1500 tak. select:false — baaki saare ride responses mein ye bhaari
+    // array na jaaye; sirf admin track endpoint '+trail' se maangta hai.
+    trail: {
+      type: [{ _id: false, lat: Number, lng: Number, at: Date }],
+      select: false,
     },
 
     status: {
@@ -182,22 +333,74 @@ const RideSchema = new mongoose.Schema(
 // TRACTOR / JCB HOURLY BOOKING FIELDS
 // ═══════════════════════════════════════
 
-// Booking mode — distance ya hourly
+// Booking mode — distance, hourly ya package (wedding car)
 bookingMode: {
   type: String,
-  enum: ['distance', 'hourly'],
+  enum: ['distance', 'hourly', 'package'],
   default: 'distance'
 },
 
 // Service category — farming, transport, construction etc.
+// Pakki enum nahi: categories admin Rate Card se aati hain (post_harvest,
+// harvester ki harvesting, dashboard se jodi nayi category). Enum ke chalte
+// inki har booking "not a valid enum value" se 500 deti thi — app aur website
+// dono par. Sahi category hai ya nahi, createRide Rate Card se jaanchta hai.
 serviceCategory: {
   type: String,
-  enum: ['farming', 'transport', 'spraying', 'water', 'construction', 'custom', ''],
+  trim: true,
+  maxlength: 60,
   default: ''
 },
 
 // Sub-service — ploughing, rotavator, digging etc.
 serviceType: {
+  type: String,
+  default: ''
+},
+
+// Pre-booking — driver pehle se pakka. Status 'scheduled' hi rehta hai par
+// `provider` lag jaata hai; samay se pehle cron use 'accepted' (chalu) karta hai.
+scheduledAcceptedAt: {
+  type: Date,
+  default: null
+},
+// "Kal subah 7 baje" wala yaad-dihani — ek hi baar jaaye
+scheduleReminderAt: {
+  type: Date,
+  default: null
+},
+
+// Ghante wale kaam ki ghadi — server par, taaki driver aur customer dono ek
+// hi waqt dekhein. Chala hua waqt = abhi − workStartedAt − pausedSeconds
+// (aur abhi ruka ho to − (abhi − pausedAt)).
+pausedAt: {
+  type: Date,
+  default: null
+},
+pausedSeconds: {
+  type: Number,
+  default: 0
+},
+
+// Tractor/JCB booking mein customer ne kya maanga: kaunse upkaran (hal,
+// rotavator, breaker…), kam se kam kitne HP ka tractor, aur trolley kaisi.
+// Booking sirf usi driver ko jaati hai jiske paas ye sab ho, aur driver ko
+// pehle se dikhta hai ki kya leke aana hai.
+equipment: {
+  type: [String],
+  default: undefined
+},
+// Kaam ke liye zaroori auzaar (koi ek) — booking bante waqt admin ke Rate
+// Card niyam se likha jaata hai (utils/vehicleMatch.js requiredEquipment).
+serviceEquipment: {
+  type: [String],
+  default: undefined
+},
+minHorsepower: {
+  type: Number,
+  default: 0
+},
+trolleyType: {
   type: String,
   default: ''
 },
@@ -258,6 +461,16 @@ workNote: {
     completedAt: Date,
     cancelledAt: Date,
 
+    // Driver ke pickup pe pahunchne (arrivedAt) se ride start hone tak ka time.
+    // Settings.waiting ke free minutes ke upar jo bacha, uska charge lagta hai.
+    // Dono alag store hote hain taaki invoice mein saaf dikha sakein ki kitna
+    // wait hua aur uska kitna laga — warna user ko sirf badha hua fare dikhta.
+    waitMinutes:   { type: Number, default: 0 },
+    waitingCharge: { type: Number, default: 0 },
+
+    // Cancellation fee — free window ke baad cancel karne par lagti hai.
+    cancellationFee: { type: Number, default: 0 },
+
     createdAt: {
       type: Date,
       default: Date.now,
@@ -274,5 +487,9 @@ RideSchema.index({ provider: 1, createdAt: -1 });
 RideSchema.index({ status: 1 });
 // Cron sweep — "status searching + nextDispatchAt due" ko fast dhoondne ke liye
 RideSchema.index({ status: 1, nextDispatchAt: 1 });
+// Driver ka demand heatmap (GET /provider/demand) — har online driver har
+// minute "pichhle 60 minute ki bookings" maangta hai; bina index poori table
+// padhni padti
+RideSchema.index({ createdAt: -1, vehicleType: 1 });
 
 module.exports = mongoose.model("Ride", RideSchema);

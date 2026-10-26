@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { buildSupportPrompt } = require('../utils/supportKnowledge');
 
 // System prompts kept server-side so the client can only pick a mode key,
 // never inject its own system instructions.
@@ -44,5 +45,47 @@ exports.chat = async (req, res) => {
   } catch (error) {
     console.error('❌ Agent chat error:', error.response?.data || error.message);
     return res.status(502).json({ success: false, message: 'AI Agent abhi available nahi hai. Dobara try karo.' });
+  }
+};
+
+/**
+ * POST /api/agent/support
+ * Customer-facing chat. Admin wale /chat se do zaroori farak hain:
+ *   1. Mode client se NAHI aata — server hamesha customer-support prompt use
+ *      karta hai. Warna customer `mode: 'ops'` bhej kar operations wala agent
+ *      khol leta.
+ *   2. Jawab chhota rakha hai — customer ko paragraph nahi, seedha jawab chahiye.
+ */
+exports.supportChat = async (req, res) => {
+  const { message } = req.body;
+
+  if (!message || typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ success: false, message: 'Sawal likhna zaroori hai.' });
+  }
+
+  try {
+    const { data } = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        contents: [{ role: 'user', parts: [{ text: message.trim().slice(0, 1000) }] }],
+        systemInstruction: { parts: [{ text: await buildSupportPrompt() }] },
+        generationConfig: { maxOutputTokens: 400 },
+      },
+      {
+        params:  { key: process.env.GEMINI_API_KEY },
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 20000,
+      }
+    );
+
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text
+      || 'Mujhe samajh nahi aaya. Help screen se support ko message kar dijiye.';
+    return res.json({ success: true, reply });
+  } catch (error) {
+    console.error('Support chat error:', error.response?.data || error.message);
+    return res.status(502).json({
+      success: false,
+      message: 'Chat abhi kaam nahi kar raha. Help screen se support se baat karein.',
+    });
   }
 };

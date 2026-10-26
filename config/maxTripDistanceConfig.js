@@ -22,4 +22,8 @@ module.exports = {
   jcb:       60,
   ambulance: 150,
   wedding:   250,
+  thresher:  60,
+  harvester: 60,
+  goods:     200,
+  erickshaw: 30,
 };

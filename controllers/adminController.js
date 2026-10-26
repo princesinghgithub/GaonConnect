@@ -1724,6 +1724,7 @@ const Ride = require('../models/Ride');
 const Transaction = require('../models/Transaction');
 const Setting = require('../models/Setting');
 const Notification = require('../models/Notification');
+const { buildCsv, sendCsv, formatDate, formatDateTime, timestampedName } = require('../utils/csvExport');
 
 // ===== DASHBOARD CONTROLLERS =====
 
@@ -1966,9 +1967,11 @@ const getDashboardMetrics = async (req, res) => {
 
 // Service categories jaise dashboard pe dikhte hain â€” vehicleType ko inme group karte hain
 const VEHICLE_GROUPS = {
-  auto_cab:  ['auto', 'car', 'bike'],
-  tractor:   ['tractor'],
-  goods:     ['truck', 'tempo'],
+  auto_cab:  ['auto', 'car', 'bike', 'erickshaw'],
+  // Thresher/harvester bhi khet ka kaam hain — inki booking pehle kisi
+  // group mein nahi thi, to dashboard ki ginti se gaayab rehti.
+  tractor:   ['tractor', 'thresher', 'harvester'],
+  goods:     ['truck', 'tempo', 'goods'],
   jcb:       ['jcb'],
   ambulance: ['ambulance'],
   wedding:   ['wedding'],
@@ -1977,6 +1980,7 @@ const VEHICLE_GROUPS = {
 const SERVICE_LABELS = {
   auto: 'Auto', bike: 'Bike', car: 'Cab', tractor: 'Tractor',
   tempo: 'Tempo', truck: 'Goods', jcb: 'JCB', ambulance: 'Ambulance', wedding: 'Wedding',
+  goods: 'Goods', erickshaw: 'E-Rickshaw', thresher: 'Thresher', harvester: 'Harvester',
 };
 
 const ACTIVE_RIDE_STATUSES = ['accepted', 'arrived', 'started', 'working'];
@@ -2424,7 +2428,7 @@ const approveDriver = async (req, res) => {
         isRejected:  false,
       },
       { new: true }
-    ).populate('user', 'name');
+    ).populate('user', 'name phone');
 
     if (!driver) {
       return res.status(404).json({ success: false, message: 'Driver not found' });
@@ -2435,6 +2439,12 @@ const approveDriver = async (req, res) => {
     if (fcmToken) {
       const { notify } = require('../utils/notifications');
       notify.accountApproved(fcmToken, { driverName: driver.user?.name || 'Driver' }).catch(() => {});
+    }
+
+    // SMS bhi - driver ne app install/open na kiya ho to push kahin nahi pahunchta
+    if (driver.user?.phone) {
+      const { smsNotify } = require('../utils/sendSMS');
+      smsNotify.driverApproved(driver.user.phone, { name: driver.user?.name }).catch(() => {});
     }
 
     res.json({ success: true, message: 'Driver approved successfully', data: driver });
@@ -2457,7 +2467,7 @@ const rejectDriver = async (req, res) => {
         rejectedBy: req.user._id
       },
       { new: true }
-    ).populate('user', 'name').select('-password');
+    ).populate('user', 'name phone').select('-password');
 
     if (!driver) {
       return res.status(404).json({
@@ -2471,6 +2481,14 @@ const rejectDriver = async (req, res) => {
       const { notify } = require('../utils/notifications');
       notify.accountRejected(fcmToken, {
         driverName: driver.user?.name || 'Driver',
+        reason: reason || '',
+      }).catch(() => {});
+    }
+
+    if (driver.user?.phone) {
+      const { smsNotify } = require('../utils/sendSMS');
+      smsNotify.driverRejected(driver.user.phone, {
+        name: driver.user?.name,
         reason: reason || '',
       }).catch(() => {});
     }
@@ -2632,7 +2650,7 @@ const verifyDocument = async (req, res) => {
   try {
     const { documentType, status, reason } = req.body;
 
-    const VERIFIABLE_DOCS = ['aadhaar'];
+    const VERIFIABLE_DOCS = ['aadhaar', 'pan'];
     if (!VERIFIABLE_DOCS.includes(documentType)) {
       return res.status(400).json({
         success: false,
@@ -2785,7 +2803,7 @@ const uploadDriverDocumentAdmin = async (req, res) => {
     }
 
     const { documentType } = req.body;
-    const validTypes = ['aadhaar', 'photo'];
+    const validTypes = ['aadhaar', 'pan', 'photo'];
     if (!documentType || !validTypes.includes(documentType)) {
       return res.status(400).json({ success: false, message: `documentType ek inme se hona chahiye: ${validTypes.join(', ')}` });
     }
@@ -2850,7 +2868,7 @@ const addVehicleAdmin = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Driver not found' });
     }
 
-    const { vehicleType, vehicleNumber, vehicleModel, vehicleColor, registrationYear } = req.body;
+    const { vehicleType, vehicleNumber, vehicleModel, vehicleColor, registrationYear, vehicleVariant, hasAC } = req.body;
     if (!vehicleType || !vehicleNumber) {
       return res.status(400).json({ success: false, message: 'Vehicle type aur number required hai' });
     }
@@ -2867,6 +2885,8 @@ const addVehicleAdmin = async (req, res) => {
       model: vehicleModel || '',
       color: vehicleColor || '',
       registrationYear,
+      variant: vehicleVariant || '',
+      ...(typeof hasAC === 'boolean' ? { hasAC } : {}),
       isVerified: false,
       isActive: true,
     });
@@ -2997,7 +3017,7 @@ const verifyVehicleDocument = async (req, res) => {
 // Driver khud upload nahi kar pa raha to admin uski vehicle ke docs (license/rc/
 // insurance/etc) seedhe upload kar deta hai — providerController.uploadVehicleDocument
 // jaisa hi, bas provider-ownership check yahan nahi (admin kisi bhi vehicle pe kar sakta hai).
-const VEHICLE_DOC_TYPES_ADMIN = ['rc', 'insurance', 'license', 'permit', 'fitness', 'machineRegistration', 'operatorLicense'];
+const VEHICLE_DOC_TYPES_ADMIN = ['rc', 'insurance', 'license', 'puc', 'permit', 'fitness', 'machineRegistration', 'operatorLicense'];
 const uploadVehicleDocumentAdmin = async (req, res) => {
   try {
     const { documentType } = req.body;
@@ -3035,12 +3055,32 @@ const updateVehicleAdmin = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Vehicle not found' });
     }
 
-    const { type, number, model, color, registrationYear } = req.body;
+    const { type, number, model, color, registrationYear, variant, hasAC } = req.body;
     if (type !== undefined) vehicle.type = type;
     if (number !== undefined) vehicle.number = number.trim().toUpperCase();
     if (model !== undefined) vehicle.model = model;
     if (color !== undefined) vehicle.color = color;
     if (registrationYear !== undefined) vehicle.registrationYear = registrationYear;
+
+    // Car ki category aur AC — ride dispatch inhi se tay karta hai ki Sedan ya
+    // AC wali request is gaadi ko jaaye ya nahi. Type badal jaaye (car → auto)
+    // to purani category ka koi matlab nahi rehta.
+    if (variant !== undefined) vehicle.variant = variant || '';
+    else if (type !== undefined && vehicle.isModified('type')) vehicle.variant = '';
+    // null = "pata nahi" — tab is gaadi ko AC wali request bhi jaati hai.
+    if (hasAC !== undefined) vehicle.hasAC = typeof hasAC === 'boolean' ? hasAC : undefined;
+
+    // Auzaar (tractor/JCB), wedding (car), HP — driver phone par khud na kar
+    // paaye to admin uski taraf se. Booking inhi se milti hai.
+    const { sanitizeEquipment } = require('../utils/vehicleMatch');
+    const { getEquipmentCatalog } = require('../utils/dynamicFare');
+    const eqIds = (await getEquipmentCatalog(vehicle.type)).map((e) => e.id);
+    const eq = sanitizeEquipment(vehicle.type, req.body.equipment, eqIds);
+    if (eq !== undefined) vehicle.equipment = eq;
+    if (req.body.horsepower !== undefined) {
+      const hp = Math.round(Number(req.body.horsepower));
+      vehicle.horsepower = Number.isFinite(hp) && hp >= 10 && hp <= 150 ? hp : undefined;
+    }
 
     await vehicle.save();
 
@@ -3238,17 +3278,72 @@ const cancelRideAdmin = async (req, res) => {
       });
     }
 
-    ride.status = 'cancelled';
-    ride.cancellationReason = reason;
-    ride.cancelledBy = 'admin';
-    ride.cancelledAt = Date.now();
+    // Atomic — beech mein ride complete/cancel ho chuki ho to dobara nahi.
+    const statusBefore = ride.status;
+    const cancelled = await Ride.findOneAndUpdate(
+      { _id: ride._id, status: statusBefore },
+      {
+        $set: {
+          status: 'cancelled',
+          cancellationReason: reason,
+          cancelledBy: 'admin',
+          cancelledAt: new Date(),
+          nextDispatchAt: null,
+        },
+        // Adhuri extra charge request bhi khatam
+        $unset: { pendingFareAdjustment: 1 },
+      },
+      { new: true },
+    );
+    if (!cancelled) {
+      return res.status(409).json({ success: false, message: 'Ride is beech badal gayi — page refresh karein' });
+    }
 
-    await ride.save();
+    // Pehle yahan sirf status badalta tha: driver hamesha 'busy' reh jaata
+    // (use kabhi nayi ride nahi milti), dono apps ko pata hi nahi chalta, aur
+    // customer ka promo bina ride ke kharch ho jaata.
+    const { getIO } = require('../socket');
+    const { releasePromo } = require('./promoController');
+    const io = getIO();
+    const customerId = String(cancelled.customer);
+
+    if (cancelled.promoCode) await releasePromo(cancelled.promoCode, customerId);
+
+    if (cancelled.provider) {
+      // Pakki pre-booking (abhi chalu nahi) par driver kisi aur kaam par ho sakta hai
+      if (statusBefore !== 'scheduled') {
+        await Driver.updateOne({ _id: cancelled.provider, status: 'busy' }, { $set: { status: 'available' } });
+      }
+      io.to(`driver_${cancelled.provider}`).emit('rideCancelled', { rideId: cancelled._id, reason: 'Admin ne ride cancel ki' });
+      const driverDoc = await Driver.findById(cancelled.provider).select('deviceInfo');
+      if (driverDoc?.deviceInfo?.fcmToken) {
+        notify.custom(driverDoc.deviceInfo.fcmToken, {
+          title: '❌ Ride Cancel',
+          body:  'Admin ne yeh ride cancel kar di hai.',
+          data:  { type: 'RIDE_CANCELLED', rideId: String(cancelled._id) },
+        }).catch(() => {});
+      }
+    }
+    // Jin drivers ko request gayi thi unki screen se hatao
+    (cancelled.notifiedDrivers || []).forEach((driverId) => {
+      if (String(driverId) === String(cancelled.provider)) return;
+      io.to(`driver_${driverId}`).emit('rideNoLongerAvailable', { rideId: String(cancelled._id) });
+    });
+
+    io.to(`user_${customerId}`).emit('rideCancelled', { rideId: cancelled._id, reason: reason || 'Ride cancel ho gayi' });
+    const customerDoc = await User.findById(customerId).select('fcmToken');
+    if (customerDoc?.fcmToken) {
+      notify.custom(customerDoc.fcmToken, {
+        title: '❌ Ride Cancel Ho Gayi',
+        body:  reason ? `Aapki ride cancel ki gayi: ${reason}` : 'Aapki ride cancel ki gayi hai.',
+        data:  { type: 'RIDE_CANCELLED', rideId: String(cancelled._id) },
+      }).catch(() => {});
+    }
 
     res.json({
       success: true,
       message: 'Ride cancelled successfully',
-      data: ride
+      data: cancelled
     });
   } catch (error) {
     res.status(500).json({
@@ -3351,9 +3446,12 @@ const getOngoingRides = async (req, res) => {
 
 const trackRide = async (req, res) => {
   try {
+    // trail — driver ka chala hua raasta (utils/liveTracking.js); customer
+    // usi gaadi mein hai, isliye ride ka trail hi customer ka raasta hai.
     const ride = await Ride.findById(req.params.id)
-      .select('status pickup drop provider')
-      .populate({ path: 'provider', select: 'user activeVehicle currentLocation', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] });
+      .select('status pickup drop provider customer workAtPickup +trail')
+      .populate('customer', 'name phone')
+      .populate({ path: 'provider', select: 'user activeVehicle currentLocation locationUpdatedAt', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] });
 
     if (!ride) {
       return res.status(404).json({
@@ -3377,19 +3475,36 @@ const trackRide = async (req, res) => {
 
 const getActiveDriversLocation = async (req, res) => {
   try {
+    // Chalu rides pehle — jo driver ride par hai wo duty off kar de tab bhi
+    // map par dikhna chahiye (customer usi ke saath hai).
+    const activeRides = await Ride.find({ status: { $in: ACTIVE_RIDE_STATUSES }, provider: { $ne: null } })
+      .select('provider customer status pickup drop workAtPickup')
+      .populate('customer', 'name phone')
+      .lean();
+    const rideByProvider = new Map(activeRides.map((r) => [String(r.provider), r]));
+
     const activeDrivers = await Driver.find({
-      isOnline: true,
+      $or: [{ isOnline: true }, { _id: { $in: [...rideByProvider.keys()] } }],
       isApproved: true,
       isBlocked: { $ne: true }
     })
       .populate('user', 'name phone')
       .populate('activeVehicle')
-      .select('user activeVehicle currentLocation status');
+      .select('user activeVehicle currentLocation locationUpdatedAt status isOnline');
 
-    // Dashboard 'vehicle' (singular) expect karta hai â€” activeVehicle ko alias kar do
+    // Dashboard 'vehicle' (singular) expect karta hai — activeVehicle ko alias kar do
     const data = activeDrivers.map((d) => {
       const obj = d.toObject();
       obj.vehicle = obj.activeVehicle;
+      const ride = rideByProvider.get(String(d._id));
+      obj.activeRide = ride ? {
+        _id:          ride._id,
+        status:       ride.status,
+        customer:     ride.customer,
+        pickup:       ride.pickup,
+        drop:         ride.drop,
+        workAtPickup: ride.workAtPickup,
+      } : null;
       return obj;
     });
 
@@ -3503,10 +3618,21 @@ const getPaymentStats = async (req, res) => {
   }
 };
 
+// Driver ki withdrawal request — Transaction (type 'debit', status 'pending').
+// Sirf itna dekhna kaafi nahi tha: customer ka baaki cancel charge bhi
+// debit + pending hota hai (user wala, provider nahi). Wo is list mein aa kar
+// "completed" hone par bina wasool hue maaf ho jaata tha. Purani withdrawals
+// par category nahi lagti thi (default 'adjustment'), isliye wo bhi.
+const WITHDRAWAL_FILTER = {
+  type:     'debit',
+  status:   'pending',
+  provider: { $ne: null },
+  category: { $in: ['withdrawal', 'adjustment'] },
+};
+
 const getPendingWithdrawals = async (req, res) => {
   try {
-    // Driver withdrawal requests Transaction collection mein store hote hain (type:'debit')
-    const withdrawals = await Transaction.find({ type: 'debit', status: 'pending' })
+    const withdrawals = await Transaction.find(WITHDRAWAL_FILTER)
       .sort({ createdAt: -1 })
       .populate({
         path: 'provider',
@@ -3535,15 +3661,23 @@ const processWithdrawal = async (req, res) => {
       return res.status(400).json({ success: false, message: "Status 'completed' ya 'failed' hona chahiye" });
     }
 
-    const txn = await Transaction.findOne({ _id: req.params.id, type: 'debit', status: 'pending' });
+    // Atomic pending → completed/failed. Pehle padh kar save karte the — admin
+    // ka double-click (ya do tab) dono baar "pending" dekhta aur failed par
+    // paisa do baar wapas wallet mein jud jaata.
+    const txn = await Transaction.findOneAndUpdate(
+      { _id: req.params.id, ...WITHDRAWAL_FILTER },
+      {
+        $set: {
+          status,
+          processedAt: new Date(),
+          ...(status === 'failed' ? { failureReason: remarks } : {}),
+        },
+      },
+      { new: true },
+    );
     if (!txn) {
       return res.status(404).json({ success: false, message: 'Pending withdrawal request nahi mili' });
     }
-
-    txn.status = status;
-    txn.processedAt = new Date();
-    if (status === 'failed') txn.failureReason = remarks;
-    await txn.save();
 
     if (status === 'completed') {
       // Pending amount clear karo, total withdrawals mein add karo
@@ -3839,6 +3973,7 @@ const unblockUser = async (req, res) => {
 // ===== SETTINGS =====
 
 const { invalidateSettingsCache } = require('../utils/dynamicFare');
+const VEHICLE_VARIANT_DEFAULTS = require('../config/vehicleVariantDefaults');
 
 // GET /api/admin/settings
 const getSettings = async (req, res) => {
@@ -3858,6 +3993,36 @@ const getSettings = async (req, res) => {
 // Body: partial settings object â€” jo bhejo woh update hoga
 const updateSettings = async (req, res) => {
   try {
+    if (rejectNegatives(req.body, res)) return;
+
+    // Percent wale field 100 se upar nahi ja sakte.
+    const pctChecks = [
+      ['commission.percentage',            req.body.commission?.percentage],
+      ['fuelAdjustment.maxAdjustmentPercent', req.body.fuelAdjustment?.maxAdjustmentPercent],
+    ];
+    for (const [name, value] of pctChecks) {
+      if (value === undefined || value === null) continue;
+      const v = Number(value);
+      if (!Number.isFinite(v) || v > 100) {
+        return res.status(400).json({ success: false, message: `"${name}" 0 se 100 ke beech hona chahiye` });
+      }
+    }
+
+    // App version "1.2.0" jaisa hi — "1.2" ya galat likha to apps ki tulna
+    // ulti pad sakti hai (sabko zabardasti update screen).
+    for (const app of ['customer', 'driver']) {
+      const u = req.body.appUpdate?.[app];
+      if (!u) continue;
+      for (const key of ['minVersion', 'latestVersion']) {
+        const v = u[key];
+        if (v === undefined || v === '' || (key === 'minVersion' && v === '0.0.0')) continue;
+        if (!/^\d+\.\d+\.\d+$/.test(String(v).trim())) {
+          return res.status(400).json({ success: false, message: `${app} ka ${key} "1.2.0" jaisa likho` });
+        }
+        u[key] = String(v).trim();
+      }
+    }
+
     const settings = await Setting.findOneAndUpdate(
       {},
       { $set: req.body },
@@ -3878,6 +4043,8 @@ const updateSettings = async (req, res) => {
 // Ya surge update: { surge: { highDemand: { enabled: true, multiplier: 1.5, reason: "Festival" } } }
 const updatePricing = async (req, res) => {
   try {
+    if (rejectNegatives(req.body, res)) return;
+
     const { vehicleType, baseFare, perKmRate, minimumFare, surge, waiting, commission } = req.body;
 
     const updateObj = {};
@@ -3904,8 +4071,18 @@ const updatePricing = async (req, res) => {
     }
 
     // Commission update
+    // 0 se 100 ke bahar commission ka koi matlab nahi — 120% ka matlab hoga
+    // driver ulta paisa de. rejectNegatives minus rok deta hai, upar ki seema
+    // yahan.
     if (commission?.percentage !== undefined) {
-      updateObj['commission.percentage'] = commission.percentage;
+      const pct = Number(commission.percentage);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Commission 0 se 100 percent ke beech hona chahiye',
+        });
+      }
+      updateObj['commission.percentage'] = pct;
     }
 
     if (!Object.keys(updateObj).length) {
@@ -3936,7 +4113,10 @@ const getHourlyRates = async (req, res) => {
       settings = await Setting.create({});
       settings = settings.toObject();
     }
-    res.json({ success: true, data: settings.hourlyRates });
+    // Band sevaon ke kaam (alag "thresher" gaadi) Rate Card mein nahi
+    const RETIRED = require('../config/retiredVehicleTypes');
+    const data = Object.fromEntries(Object.entries(settings.hourlyRates || {}).filter(([id]) => !RETIRED.includes(id)));
+    res.json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Hourly rates fetch error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
   }
@@ -3946,7 +4126,14 @@ const getHourlyRates = async (req, res) => {
 // Body: { vehicleType: 'tractor', categoryId: 'farming', serviceId: 'ploughing', rate: 850, minimumHours: 1, label: '...' }
 const updateHourlyRate = async (req, res) => {
   try {
-    const { vehicleType, categoryId, serviceId, rate, minimumHours, label } = req.body;
+    if (rejectNegatives(req.body, res)) return;
+
+    const {
+      vehicleType, categoryId, serviceId,
+      rate, minimumHours, label,
+      unit, minimumQuantity, perAcreRate, isActive,
+      travelCharge, freeArrivalKm,
+    } = req.body;
 
     let settings = await Setting.findOne();
     if (!settings) settings = await Setting.create({});
@@ -3968,8 +4155,82 @@ const updateHourlyRate = async (req, res) => {
     }
 
     service.rate = Number(rate);
-    if (minimumHours !== undefined) service.minimumHours = Number(minimumHours);
+    // Minimum 0 ya usse kam rakhne ka matlab hoga "koi minimum nahi", jo
+    // ghante wale kaam mein driver ke liye nuksan hai — 5 minute ka kaam bhi
+    // 5 minute ka hi paisa dega.
+    if (minimumHours !== undefined) {
+      const mh = Number(minimumHours);
+      if (!Number.isFinite(mh) || mh <= 0) {
+        return res.status(400).json({ success: false, message: 'Kam se kam ghante 0 se zyada hone chahiye' });
+      }
+      service.minimumHours = mh;
+    }
     if (label) service.label = label;
+
+    // Thresher/Harvester ghante se nahi, acre/quintal se chalte hain — unit
+    // yahin se tay hota hai. Inke rate defaults mein 0 hain aur isActive false,
+    // kyunki har ilaake ka rate alag hai; admin apna rate bharke chaalu karta hai.
+    if (unit !== undefined) {
+      const ALLOWED = ['hour', 'acre', 'quintal', 'km', 'job', 'either'];
+      if (!ALLOWED.includes(unit)) {
+        return res.status(400).json({ success: false, message: `unit inme se hona chahiye: ${ALLOWED.join(', ')}` });
+      }
+      service.unit = unit;
+    }
+    if (minimumQuantity !== undefined) {
+      const mq = Number(minimumQuantity);
+      if (!Number.isFinite(mq) || mq <= 0) {
+        return res.status(400).json({ success: false, message: 'Kam se kam maatra 0 se zyada honi chahiye' });
+      }
+      service.minimumQuantity = mq;
+    }
+    if (perAcreRate     !== undefined) service.perAcreRate     = Number(perAcreRate);
+    if (isActive        !== undefined) service.isActive        = Boolean(isActive);
+    // Kaam ki photo (URL) aur zaroori auzaar — admin dashboard se
+    if (req.body.image !== undefined) service.image = String(req.body.image || '').slice(0, 500);
+    if (req.body.requiredEquipment !== undefined) {
+      service.requiredEquipment = await cleanEquipmentIds(vehicleType, req.body.requiredEquipment);
+    }
+
+    // Category-level: gaadi ko site tak laane ka charge.
+    if (travelCharge && typeof travelCharge === 'object') {
+      category.travelCharge = {
+        enabled: Boolean(travelCharge.enabled),
+        perKm:   Math.max(0, Number(travelCharge.perKm) || 0),
+        amount:  Math.max(0, Number(travelCharge.amount) || 0),
+      };
+    }
+    if (freeArrivalKm !== undefined) category.freeArrivalKm = Number(freeArrivalKm);
+
+    // Category-level rate card: minimum, waiting, raat aur commission.
+    const CATEGORY_NUMERIC = ['minimumFare', 'minimumKm', 'freeWaitingMinutes', 'waitingPerHour', 'nightChargePercent', 'billingStepMinutes'];
+    for (const key of CATEGORY_NUMERIC) {
+      if (req.body[key] === undefined) continue;
+      const v = Number(req.body[key]);
+      if (!Number.isFinite(v) || v < 0) {
+        return res.status(400).json({ success: false, message: `"${key}" ki value sahi nahi hai` });
+      }
+      if (key === 'nightChargePercent' && v > 100) {
+        return res.status(400).json({ success: false, message: 'Night charge 100% se zyada nahi ho sakta' });
+      }
+      if (key === 'billingStepMinutes' && v > 60) {
+        return res.status(400).json({ success: false, message: 'Bill ka tukda 60 minute se bada nahi ho sakta' });
+      }
+      category[key] = v;
+    }
+
+    if (req.body.commissionPercent !== undefined) {
+      const c = req.body.commissionPercent;
+      if (c === null || c === '') {
+        category.commissionPercent = null;   // global commission use hoga
+      } else {
+        const v = Number(c);
+        if (!Number.isFinite(v) || v < 0 || v > 100) {
+          return res.status(400).json({ success: false, message: 'Commission 0 se 100 ke beech hona chahiye' });
+        }
+        category.commissionPercent = v;
+      }
+    }
 
     // Mutating an array nested inside a Map value in place doesn't always
     // get picked up by Mongoose's dirty-tracking — mark the whole map dirty.
@@ -3985,6 +4246,251 @@ const updateHourlyRate = async (req, res) => {
   }
 };
 
+// ─── Dynamic services (Uber/Rapido jaisa — admin khud nayi seva jode) ────────
+// Pehle naya kaam (Mulcher, Paddy Transplanter) ya naya auzaar jodne ke liye
+// code badalna padta tha aur dono app ka naya build. Ab admin dashboard se.
+
+// "Paddy Transplanter" → "paddy_transplanter"
+const slugId = (s) => String(s || '').trim().toLowerCase()
+  .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+
+// Sirf us gaadi ke maujooda auzaar id (admin ke jode samet)
+const cleanEquipmentIds = async (vehicleType, raw) => {
+  const { getEquipmentCatalog } = require('../utils/dynamicFare');
+  const ids = new Set((await getEquipmentCatalog(vehicleType)).map((e) => e.id));
+  const list = Array.isArray(raw) ? raw : [];
+  return [...new Set(list.map((x) => String(x).trim().toLowerCase()).filter((x) => ids.has(x)))];
+};
+
+const SERVICE_UNITS = ['hour', 'acre', 'quintal', 'km', 'job', 'either'];
+const CATEGORY_PRICING = ['hourly', 'per_km', 'per_acre', 'per_quintal', 'fixed'];
+
+// POST /admin/hourly-rates/category  { vehicleType, label, pricingType, id? }
+const addServiceCategory = async (req, res) => {
+  try {
+    const { vehicleType, label, pricingType = 'hourly' } = req.body;
+    const id = slugId(req.body.id || label);
+    if (!vehicleType || !label || !id) {
+      return res.status(400).json({ success: false, message: 'Gaadi aur category ka naam dena zaroori hai' });
+    }
+    if (!CATEGORY_PRICING.includes(pricingType)) {
+      return res.status(400).json({ success: false, message: `pricingType inme se: ${CATEGORY_PRICING.join(', ')}` });
+    }
+    const settings = (await Setting.findOne()) || (await Setting.create({}));
+    if (!settings.vehicleRates.has(vehicleType)) {
+      return res.status(404).json({ success: false, message: 'Ye gaadi Rate Card mein nahi hai — pehle gaadi jodein' });
+    }
+    const cats = settings.hourlyRates.get(vehicleType) || [];
+    if (cats.some((c) => c.id === id)) {
+      return res.status(409).json({ success: false, message: `"${label}" category pehle se hai` });
+    }
+    cats.push({ id, label: String(label).trim(), emoji: '', pricingType, sub: [] });
+    settings.hourlyRates.set(vehicleType, cats);
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({ success: true, message: `Category "${label}" jud gayi — ab isme kaam jodein`, data: settings.hourlyRates.get(vehicleType) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /admin/hourly-rates/service
+// { vehicleType, categoryId, label, unit, rate, minimumHours, minimumQuantity, image, requiredEquipment, isActive }
+const addHourlyService = async (req, res) => {
+  try {
+    if (rejectNegatives(req.body, res)) return;
+    const { vehicleType, categoryId, label, unit = 'hour' } = req.body;
+    const id = slugId(req.body.id || label);
+    if (!vehicleType || !categoryId || !label || !id) {
+      return res.status(400).json({ success: false, message: 'Gaadi, category aur kaam ka naam dena zaroori hai' });
+    }
+    if (!SERVICE_UNITS.includes(unit)) {
+      return res.status(400).json({ success: false, message: `unit inme se: ${SERVICE_UNITS.join(', ')}` });
+    }
+    const settings = (await Setting.findOne()) || (await Setting.create({}));
+    const cats = settings.hourlyRates.get(vehicleType);
+    const cat = cats?.find((c) => c.id === categoryId);
+    if (!cat) return res.status(404).json({ success: false, message: 'Category nahi mili' });
+    // Ek gaadi mein kaam ka id har category mein alag hona chahiye — booking
+    // serviceType se hi pehchaani jaati hai
+    if (cats.some((c) => (c.sub || []).some((s) => s.id === id))) {
+      return res.status(409).json({ success: false, message: `"${label}" naam ka kaam pehle se hai` });
+    }
+    const rate = Number(req.body.rate) || 0;
+    cat.sub.push({
+      id,
+      label: String(label).trim(),
+      rate,
+      unit,
+      minimumHours:    Number(req.body.minimumHours) > 0 ? Number(req.body.minimumHours) : 1,
+      minimumQuantity: Number(req.body.minimumQuantity) > 0 ? Number(req.body.minimumQuantity) : 1,
+      perAcreRate:     Number(req.body.perAcreRate) || 0,
+      image:           String(req.body.image || '').slice(0, 500),
+      requiredEquipment: await cleanEquipmentIds(vehicleType, req.body.requiredEquipment),
+      // Rate 0 par chalu karne ka matlab muft booking — tab tak band
+      isActive:        rate > 0 && req.body.isActive !== false,
+    });
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({
+      success: true,
+      message: rate > 0 ? `"${label}" jud gaya — customer ko dikhne laga` : `"${label}" jud gaya — rate bharkar chalu karein`,
+      data: settings.hourlyRates.get(vehicleType),
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Kaam/category hatana — sirf tab jab koi chalti ya aane wali booking us par
+// na ho (driver ki screen aur bill usi kaam ke rate se chalte hain). Purani
+// poori hui bookings par asar nahi — unme naam/rate likha hua hai.
+const OPEN_RIDE_STATUSES = ['searching', 'scheduled', 'accepted', 'arrived', 'started', 'working'];
+
+// DELETE /admin/hourly-rates/service  { vehicleType, categoryId, serviceId }
+const deleteHourlyService = async (req, res) => {
+  try {
+    const { vehicleType, categoryId, serviceId } = req.body;
+    const settings = await Setting.findOne();
+    const cats = settings?.hourlyRates?.get(vehicleType);
+    const cat = cats?.find((c) => c.id === categoryId);
+    if (!cat || !(cat.sub || []).some((s) => s.id === serviceId)) {
+      return res.status(404).json({ success: false, message: 'Kaam nahi mila' });
+    }
+    const open = await Ride.countDocuments({ vehicleType, serviceType: serviceId, status: { $in: OPEN_RIDE_STATUSES } });
+    if (open) {
+      return res.status(400).json({ success: false, message: `Is kaam ki ${open} booking abhi chal rahi/aane wali hai — abhi "Customer ko dikhao" band karo, baad mein hatao` });
+    }
+    cat.sub = cat.sub.filter((s) => s.id !== serviceId);
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({ success: true, message: 'Kaam hata diya', data: settings.hourlyRates.get(vehicleType) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// DELETE /admin/hourly-rates/category  { vehicleType, categoryId }
+const deleteServiceCategory = async (req, res) => {
+  try {
+    const { vehicleType, categoryId } = req.body;
+    const settings = await Setting.findOne();
+    const cats = settings?.hourlyRates?.get(vehicleType);
+    if (!cats?.some((c) => c.id === categoryId)) {
+      return res.status(404).json({ success: false, message: 'Category nahi mili' });
+    }
+    const open = await Ride.countDocuments({ vehicleType, serviceCategory: categoryId, status: { $in: OPEN_RIDE_STATUSES } });
+    if (open) {
+      return res.status(400).json({ success: false, message: `Is category ki ${open} booking abhi chal rahi/aane wali hai — pehle uske kaam band karo` });
+    }
+    settings.hourlyRates.set(vehicleType, cats.filter((c) => c.id !== categoryId));
+    settings.markModified('hourlyRates');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({ success: true, message: 'Category hata di', data: settings.hourlyRates.get(vehicleType) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /admin/equipment — har gaadi ke auzaar (band wale bhi)
+const getEquipmentAdmin = async (req, res) => {
+  try {
+    const { getEquipmentCatalog, getEquipmentVehicleTypes } = require('../utils/dynamicFare');
+    const settings = (await Setting.findOne().lean()) || {};
+    // Jin gaadiyon ka kaam ghante/acre se hota hai unke liye bhi — admin
+    // nayi machine (drone) ke auzaar shuru se jod sake
+    const RETIRED = require('../config/retiredVehicleTypes');
+    const hourlyTypes = Object.keys(settings.hourlyRates || {}).filter((t) => !RETIRED.includes(t));
+    const types = [...new Set([...(await getEquipmentVehicleTypes()), ...hourlyTypes])].filter((t) => t !== 'car');
+    const data = {};
+    for (const t of types) data[t] = await getEquipmentCatalog(t);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// PUT /admin/equipment/:vehicleType  { items: [{ id?, label, labelHi, image, isActive }] }
+// Poori suchi save hoti hai. Auzaar hatate nahi, band karte hain — purani
+// gaadiyon aur bookings mein wo id likha hai.
+const saveEquipmentAdmin = async (req, res) => {
+  try {
+    const vehicleType = String(req.params.vehicleType || '').toLowerCase();
+    const items = Array.isArray(req.body.items) ? req.body.items : null;
+    if (!vehicleType || !items) return res.status(400).json({ success: false, message: 'items ki suchi chahiye' });
+
+    const seen = new Set();
+    const clean = [];
+    for (const it of items) {
+      const id = slugId(it.id || it.label);
+      if (!id || id === 'other' || seen.has(id)) continue;
+      if (!String(it.label || '').trim()) {
+        return res.status(400).json({ success: false, message: 'Har auzaar ka naam chahiye' });
+      }
+      seen.add(id);
+      clean.push({
+        id,
+        label:   String(it.label).trim().slice(0, 60),
+        labelHi: String(it.labelHi || '').trim().slice(0, 60),
+        image:   String(it.image || '').slice(0, 500),
+        isActive: it.isActive !== false,
+      });
+    }
+    // Code wala auzaar suchi se gayab ho to bhi "band" maano, mitao nahi
+    const { getEquipmentCatalog } = require('../utils/dynamicFare');
+    (await getEquipmentCatalog(vehicleType)).forEach((e) => {
+      if (!seen.has(e.id)) clean.push({ id: e.id, label: e.label, labelHi: e.labelHi || '', image: e.image || '', isActive: false });
+    });
+
+    const settings = (await Setting.findOne()) || (await Setting.create({}));
+    settings.equipmentCatalog.set(vehicleType, clean);
+    settings.markModified('equipmentCatalog');
+    await settings.save();
+    await invalidateSettingsCache();
+    return res.json({ success: true, message: 'Auzaar save ho gaye', data: await getEquipmentCatalog(vehicleType) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ─── Negative value guard ────────────────────────────────────────────────────
+// Rate card mein kahin bhi minus value nahi ja sakti — na rate, na percent, na
+// charge. Ek galat "-" fare ko ulta kar deta hai aur driver ko nuksan.
+// Settings mein koi aisa field nahi jo waajib taur pe negative ho (lat/lng
+// yahan nahi rehte), isliye poore object mein recursively check karte hain.
+const findNegative = (obj, path = '') => {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj === 'number') return obj < 0 ? (path || 'value') : null;
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i += 1) {
+      const hit = findNegative(obj[i], `${path}[${i}]`);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (typeof obj === 'object') {
+    for (const [k, v] of Object.entries(obj)) {
+      const hit = findNegative(v, path ? `${path}.${k}` : k);
+      if (hit) return hit;
+    }
+  }
+  return null;
+};
+
+const rejectNegatives = (body, res) => {
+  const bad = findNegative(body);
+  if (!bad) return false;
+  res.status(400).json({
+    success: false,
+    message: `"${bad}" negative nahi ho sakta — koi bhi rate ya charge minus mein set nahi kiya ja sakta`,
+  });
+  return true;
+};
+
 // GET /api/admin/vehicle-types
 // Puri vehicle-type catalog — pricing table admin dashboard isi se banata hai
 const getVehicleTypes = async (req, res) => {
@@ -3998,13 +4504,44 @@ const getVehicleTypes = async (req, res) => {
     const vehicleRates = settings.vehicleRates || {};
     const hourlyRates   = settings.hourlyRates  || {};
 
-    const types = Object.entries(vehicleRates).map(([id, r]) => ({
+    // Poora rate card bhejo — dashboard ka rate-card tab isi par bana hai.
+    // Pehle sirf baseFare/perKmRate/minimumFare jaate the, isliye waiting,
+    // night charge waghera admin ko dikhte hi nahi the.
+    // Band sevayein (truck, ambulance, wedding, thresher) Rate Card mein nahi —
+    // admin unhe "chalu" karta to bhi booking server rok deta, bas bhram hota.
+    // Thresher ab Tractor › Farming ka kaam hai.
+    const RETIRED = require('../config/retiredVehicleTypes');
+    const types = Object.entries(vehicleRates).filter(([id]) => !RETIRED.includes(id)).map(([id, r]) => ({
       id,
       label:        r.label || id,
-      icon:         r.icon || '',
-      baseFare:     r.baseFare,
-      perKmRate:    r.perKmRate,
+      icon:         r.icon  || '',
+      image:        r.image || '',
+      // Purane rate card mein pricingType nahi hota — tab wahi jo apps ko milta hai.
+      pricingType:  require('../utils/fareCalculator').pricingTypeOf(id, r, hourlyRates),
+      fuelType:     r.fuelType    || 'petrol',
+
       minimumFare:  r.minimumFare,
+      includedKm:   r.includedKm,
+      perKmRate:    r.perKmRate,
+      perMinuteRate: r.perMinuteRate,
+
+      freeWaitingMinutes: r.freeWaitingMinutes,
+      waitingPerMinute:   r.waitingPerMinute,
+      waitingPerHour:     r.waitingPerHour,
+
+      freePickupKm:       r.freePickupKm,
+      longPickupPerKm:    r.longPickupPerKm,
+
+      nightChargePercent: r.nightChargePercent,
+      cancellationFee:    r.cancellationFee,
+      commissionPercent:  r.commissionPercent ?? null,
+      // Sabse lambi trip — khaali = code ki had (dashboard placeholder mein dikhti hai)
+      maxTripKm:          r.maxTripKm ?? null,
+      defaultMaxTripKm:   (require('../config/maxTripDistanceConfig')[id] ?? require('../config/maxTripDistanceConfig').auto),
+
+      extras:       r.extras || {},
+      // Database mein na hon to wahi defaults dikhao jo fare mein lag rahe hain.
+      variants:     Array.isArray(r.variants) && r.variants.length ? r.variants : (VEHICLE_VARIANT_DEFAULTS[id] || []),
       isActive:     r.isActive !== false,
       supportsHourly: Array.isArray(hourlyRates[id]) && hourlyRates[id].length > 0,
     }));
@@ -4017,9 +4554,153 @@ const getVehicleTypes = async (req, res) => {
 
 // POST /api/admin/vehicle-types
 // Body: { id: 'pickup', label: 'Pickup Truck', icon: '', baseFare, perKmRate, minimumFare, hourlyCategories? }
+// ─── PUT /api/admin/vehicle-types/:id ────────────────────────────────────────
+// Maujooda vehicle type badlo — photo, label, emoji, rates, active/inactive.
+// Pehle sirf create aur delete the, isliye JCB jaisi pehle se bani type pe
+// asli photo lagane ka koi tareeka hi nahi tha (delete karke dobara banane se
+// uske hourly rates bhi chale jaate).
+const updateVehicleType = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const settings = await Setting.findOne();
+    if (!settings || !settings.vehicleRates.has(id)) {
+      return res.status(404).json({ success: false, message: `"${id}" vehicle type nahi mila` });
+    }
+
+    if (rejectNegatives(req.body, res)) return;
+
+    const raw     = settings.vehicleRates.get(id);
+    const current = raw && typeof raw.toObject === 'function' ? raw.toObject() : { ...raw };
+
+    // Purane version mein yahan ek naya object banake poori entry replace hoti
+    // thi, jisme sirf 7 fields the. Matlab admin sirf label badalta to bhi
+    // includedKm, waiting charge, night %, extras — sab uud jaate. Isliye ab
+    // current ke upar sirf bheje hue fields likhte hain.
+    const next = { ...current };
+
+    const NUMERIC = [
+      'baseFare', 'minimumFare', 'includedKm', 'perKmRate', 'perMinuteRate',
+      'freeWaitingMinutes', 'waitingPerMinute', 'waitingPerHour',
+      'freePickupKm', 'longPickupPerKm',
+      'nightChargePercent', 'cancellationFee',
+    ];
+    for (const key of NUMERIC) {
+      if (req.body[key] === undefined) continue;
+      const v = Number(req.body[key]);
+      if (!Number.isFinite(v) || v < 0) {
+        return res.status(400).json({ success: false, message: `"${key}" ki value sahi nahi hai` });
+      }
+      next[key] = v;
+    }
+
+    const TEXT = ['label', 'icon', 'image', 'pricingType', 'fuelType'];
+    for (const key of TEXT) {
+      if (req.body[key] !== undefined) next[key] = req.body[key];
+    }
+
+    if (req.body.isActive !== undefined) next.isActive = Boolean(req.body.isActive);
+
+    // Sabse lambi trip: khaali/null = code ki had; warna 1–1000 km
+    if (req.body.maxTripKm !== undefined) {
+      const m = req.body.maxTripKm;
+      if (m === null || m === '') {
+        next.maxTripKm = null;
+      } else {
+        const v = Number(m);
+        if (!Number.isFinite(v) || v < 1 || v > 1000) {
+          return res.status(400).json({ success: false, message: 'Sabse lambi trip 1 se 1000 km ke beech rakhein' });
+        }
+        next.maxTripKm = v;
+      }
+    }
+
+    // commissionPercent null rakhna maayne rakhta hai: "global commission use karo".
+    if (req.body.commissionPercent !== undefined) {
+      const c = req.body.commissionPercent;
+      if (c === null || c === '') {
+        next.commissionPercent = null;
+      } else {
+        const v = Number(c);
+        if (!Number.isFinite(v) || v < 0 || v > 100) {
+          return res.status(400).json({ success: false, message: 'Commission 0 se 100 ke beech hona chahiye' });
+        }
+        next.commissionPercent = v;
+      }
+    }
+
+    if (req.body.extras && typeof req.body.extras === 'object') {
+      next.extras = { ...(current.extras || {}) };
+      for (const key of ['loading', 'unloading', 'helper']) {
+        const e = req.body.extras[key];
+        if (!e) continue;
+        next.extras[key] = {
+          enabled: Boolean(e.enabled),
+          amount:  Math.max(0, Number(e.amount) || 0),
+        };
+      }
+    }
+
+    // Type ke andar ki categories (car → Mini / Sedan / SUV). Poori list ek
+    // saath aati hai aur purani ko replace karti hai.
+    if (Array.isArray(req.body.variants)) {
+      // Khaali chhoda hua rate null rehta hai — matlab "vehicle type ka apna rate".
+      const rateOrNull = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+      const cleaned = [];
+      for (const v of req.body.variants) {
+        const vid = String(v?.id || '').trim().toLowerCase();
+        if (!vid || !v.label) {
+          return res.status(400).json({ success: false, message: 'Har category ka id aur label zaroori hai' });
+        }
+        const minFare = rateOrNull(v.minimumFare);
+        const perKm   = rateOrNull(v.perKmRate);
+        const bad = (n) => n !== null && (!Number.isFinite(n) || n < 0);
+        if (bad(minFare) || bad(perKm)) {
+          return res.status(400).json({ success: false, message: `"${v.label}" ka rate sahi nahi hai` });
+        }
+        cleaned.push({
+          id:     vid,
+          label:  String(v.label),
+          models: String(v.models || ''),
+          seats:  Math.max(0, Number(v.seats) || 0),
+          minimumFare: minFare,
+          perKmRate:   perKm,
+          acAvailable:    v.acAvailable    !== false,
+          nonAcAvailable: v.nonAcAvailable !== false,
+          acPerKm:  Math.max(0, Number(v.acPerKm) || 0),
+          image:    String(v.image || ''),
+          isActive: v.isActive !== false,
+        });
+      }
+      next.variants = cleaned;
+    }
+
+    if (!Number.isFinite(Number(next.minimumFare)) || Number(next.minimumFare) < 0) {
+      return res.status(400).json({ success: false, message: 'Minimum fare sahi nahi hai' });
+    }
+
+    settings.vehicleRates.set(id, next);
+    settings.markModified('vehicleRates');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.json({ success: true, message: 'Vehicle type update ho gaya', data: { id, ...next } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 const createVehicleType = async (req, res) => {
   try {
-    const { id, label, icon = '', baseFare, perKmRate, minimumFare, hourlyCategories } = req.body;
+    if (rejectNegatives(req.body, res)) return;
+
+    const {
+      id, label, icon = '', image = '', baseFare = 0, perKmRate, minimumFare, hourlyCategories,
+      includedKm, perMinuteRate, pricingType, fuelType,
+      freeWaitingMinutes, waitingPerMinute, waitingPerHour,
+      freePickupKm, longPickupPerKm,
+      nightChargePercent, cancellationFee, commissionPercent, extras,
+    } = req.body;
 
     if (!id || !/^[a-z0-9_]+$/.test(id)) {
       return res.status(400).json({ success: false, message: 'id sirf lowercase letters, numbers, underscore mein dena hai (jaise "pickup")' });
@@ -4027,8 +4708,10 @@ const createVehicleType = async (req, res) => {
     if (!label) {
       return res.status(400).json({ success: false, message: 'Label dena zaroori hai' });
     }
-    if ([baseFare, perKmRate, minimumFare].some((v) => v === undefined || v === null || Number(v) < 0)) {
-      return res.status(400).json({ success: false, message: 'Valid baseFare, perKmRate, minimumFare dena zaroori hai' });
+    // baseFare ab fare formula mein use nahi hota (minimumFare + includedKm ne
+    // uski jagah le li), isliye wo required nahi rakha.
+    if ([perKmRate, minimumFare].some((v) => v === undefined || v === null || Number(v) < 0)) {
+      return res.status(400).json({ success: false, message: 'Valid perKmRate aur minimumFare dena zaroori hai' });
     }
 
     let settings = await Setting.findOne();
@@ -4037,18 +4720,56 @@ const createVehicleType = async (req, res) => {
     if (settings.vehicleRates.has(id)) {
       return res.status(409).json({ success: false, message: `"${id}" vehicle type pehle se maujood hai` });
     }
+    if (require('../config/retiredVehicleTypes').includes(id)) {
+      return res.status(400).json({ success: false, message: `"${id}" band ki gayi seva hai — doosra naam chuno (thresher Tractor › Farming mein hai)` });
+    }
+
+    // Naya vehicle bhi poore rate card ke saath bane — warna waiting/night charge
+    // jaise fields khaali reh jaate hain aur fare adha-adhoora banta hai.
+    const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
     settings.vehicleRates.set(id, {
-      baseFare:    Number(baseFare),
-      perKmRate:   Number(perKmRate),
-      minimumFare: Number(minimumFare),
-      isActive:    true,
       label,
       icon,
+      image,
+      pricingType: pricingType || 'distance',
+      fuelType:    fuelType    || 'petrol',
+
+      baseFare:    num(baseFare, 0),
+      minimumFare: Number(minimumFare),
+      includedKm:  num(includedKm, 2),
+      perKmRate:   Number(perKmRate),
+      // Default 0 — waqt ka charge tab tak band jab tak admin na chaahe.
+      perMinuteRate: num(perMinuteRate, 0),
+
+      freeWaitingMinutes: num(freeWaitingMinutes, 5),
+      waitingPerMinute:   num(waitingPerMinute, 1),
+      waitingPerHour:     num(waitingPerHour, 0),
+
+      freePickupKm:    num(freePickupKm, 3),
+      longPickupPerKm: num(longPickupPerKm, 0),
+
+      nightChargePercent: num(nightChargePercent, 10),
+      cancellationFee:    num(cancellationFee, 0),
+      // null = global commission use karo.
+      commissionPercent: (commissionPercent === undefined || commissionPercent === null || commissionPercent === '')
+        ? null : Number(commissionPercent),
+
+      extras: extras && typeof extras === 'object' ? extras : undefined,
+      isActive: true,
     });
 
     if (Array.isArray(hourlyCategories) && hourlyCategories.length > 0) {
       settings.hourlyRates.set(id, hourlyCategories);
+    } else if (['hourly', 'per_acre', 'per_quintal'].includes(pricingType)) {
+      // Kaam wali nayi machine (drone, mulcher…) — ek khaali category taaki
+      // admin turant "+ Naya Kaam" se kaam jod sake. Kaam na ho to customer
+      // ko machine dikhti hi nahi (dynamicFare bookable).
+      settings.hourlyRates.set(id, [{
+        id: 'work', label: 'Kaam', emoji: '',
+        pricingType: pricingType === 'hourly' ? 'hourly' : pricingType,
+        sub: [],
+      }]);
     }
 
     settings.markModified('vehicleRates');
@@ -4056,9 +4777,215 @@ const createVehicleType = async (req, res) => {
     await settings.save();
     await invalidateSettingsCache();
 
-    res.status(201).json({ success: true, message: 'Vehicle type add ho gaya! ðŸŽ‰', data: { id, label, icon, baseFare, perKmRate, minimumFare } });
+    res.status(201).json({ success: true, message: 'Vehicle type add ho gaya! ðŸŽ‰', data: { id, label, icon, image, baseFare, perKmRate, minimumFare } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Vehicle type create error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// Wedding Car Packages
+// Wedding car per-km nahi chalti — log "8 ghante / 80 km" jaisa package lete
+// hain. Isliye iske daam vehicleRates mein nahi, alag list mein rehte hain.
+// -----------------------------------------------------------------------------
+
+// GET /api/admin/wedding-packages
+const getWeddingPackages = async (req, res) => {
+  try {
+    let settings = await Setting.findOne().lean();
+    if (!settings) {
+      settings = await Setting.create({});
+      settings = settings.toObject();
+    }
+    return res.json({ success: true, data: settings.weddingPackages || [] });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /api/admin/wedding-packages
+// Body: { category, name, includedHours, includedKm, price, extraKmCharge, ... }
+const createWeddingPackage = async (req, res) => {
+  try {
+    if (rejectNegatives(req.body, res)) return;
+
+    const { category, name, price } = req.body;
+    if (!category || !name) {
+      return res.status(400).json({ success: false, message: 'Category aur package ka naam dena zaroori hai' });
+    }
+    if (price === undefined || price === null || !Number.isFinite(Number(price))) {
+      return res.status(400).json({ success: false, message: 'Package ka daam dena zaroori hai' });
+    }
+
+    let settings = await Setting.findOne();
+    if (!settings) settings = await Setting.create({});
+
+    const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+    const id  = req.body.id || `${category}_${Date.now()}`;
+
+    if ((settings.weddingPackages || []).some((p) => p.id === id)) {
+      return res.status(409).json({ success: false, message: 'Is id ka package pehle se hai' });
+    }
+
+    settings.weddingPackages.push({
+      id,
+      category,
+      name,
+      includedHours:      num(req.body.includedHours),
+      includedKm:         num(req.body.includedKm),
+      price:              num(price),
+      extraKmCharge:      num(req.body.extraKmCharge),
+      extraHourCharge:    num(req.body.extraHourCharge),
+      nightChargePercent: num(req.body.nightChargePercent),
+      decorationCharge: {
+        enabled: Boolean(req.body.decorationCharge?.enabled),
+        amount:  num(req.body.decorationCharge?.amount),
+      },
+      commissionPercent: (req.body.commissionPercent === undefined
+        || req.body.commissionPercent === null
+        || req.body.commissionPercent === '') ? null : num(req.body.commissionPercent),
+      isActive: req.body.isActive !== false,
+    });
+
+    settings.markModified('weddingPackages');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.status(201).json({ success: true, message: 'Package add ho gaya', data: settings.weddingPackages });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// PUT /api/admin/wedding-packages/:id
+const updateWeddingPackage = async (req, res) => {
+  try {
+    if (rejectNegatives(req.body, res)) return;
+
+    const settings = await Setting.findOne();
+    const pkg = settings?.weddingPackages?.find((p) => p.id === req.params.id);
+    if (!pkg) {
+      return res.status(404).json({ success: false, message: 'Package nahi mila' });
+    }
+
+    const NUMERIC = ['includedHours', 'includedKm', 'price', 'extraKmCharge', 'extraHourCharge', 'nightChargePercent'];
+    for (const key of NUMERIC) {
+      if (req.body[key] === undefined) continue;
+      const v = Number(req.body[key]);
+      if (!Number.isFinite(v) || v < 0) {
+        return res.status(400).json({ success: false, message: `"${key}" ki value sahi nahi hai` });
+      }
+      pkg[key] = v;
+    }
+    if (req.body.category !== undefined) pkg.category = req.body.category;
+    if (req.body.name     !== undefined) pkg.name     = req.body.name;
+    if (req.body.isActive !== undefined) pkg.isActive = Boolean(req.body.isActive);
+
+    if (req.body.decorationCharge) {
+      pkg.decorationCharge = {
+        enabled: Boolean(req.body.decorationCharge.enabled),
+        amount:  Math.max(0, Number(req.body.decorationCharge.amount) || 0),
+      };
+    }
+    if (req.body.commissionPercent !== undefined) {
+      const c = req.body.commissionPercent;
+      pkg.commissionPercent = (c === null || c === '') ? null : Number(c);
+    }
+
+    settings.markModified('weddingPackages');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.json({ success: true, message: 'Package update ho gaya', data: settings.weddingPackages });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// DELETE /api/admin/wedding-packages/:id
+const deleteWeddingPackage = async (req, res) => {
+  try {
+    const settings = await Setting.findOne();
+    if (!settings) return res.status(404).json({ success: false, message: 'Settings nahi mili' });
+
+    const before = settings.weddingPackages?.length || 0;
+    settings.weddingPackages = settings.weddingPackages.filter((p) => p.id !== req.params.id);
+    if (settings.weddingPackages.length === before) {
+      return res.status(404).json({ success: false, message: 'Package nahi mila' });
+    }
+
+    settings.markModified('weddingPackages');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.json({ success: true, message: 'Package hata diya', data: settings.weddingPackages });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// Fuel Adjustment
+// Diesel-petrol ka daam admin khud daalta hai. Jaan-bujhkar koi internet API
+// nahi lagayi — warna raat ko daam badle aur subah customer ko bina bataye
+// zyada kiraya dikhe. Yahan se badalne par turant sab jagah lagta hai.
+// -----------------------------------------------------------------------------
+
+// GET /api/admin/fuel-adjustment
+const getFuelAdjustment = async (req, res) => {
+  try {
+    let settings = await Setting.findOne().lean();
+    if (!settings) {
+      settings = await Setting.create({});
+      settings = settings.toObject();
+    }
+    return res.json({ success: true, data: settings.fuelAdjustment || {} });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// PUT /api/admin/fuel-adjustment
+const updateFuelAdjustment = async (req, res) => {
+  try {
+    if (rejectNegatives(req.body, res)) return;
+
+    let settings = await Setting.findOne();
+    if (!settings) settings = await Setting.create({});
+
+    const cur = settings.fuelAdjustment || {};
+    const NUMERIC = [
+      'petrolReferencePrice', 'dieselReferencePrice',
+      'currentPetrolPrice', 'currentDieselPrice', 'maxAdjustmentPercent',
+    ];
+    for (const key of NUMERIC) {
+      if (req.body[key] === undefined) continue;
+      const v = Number(req.body[key]);
+      if (!Number.isFinite(v) || v < 0) {
+        return res.status(400).json({ success: false, message: `"${key}" ki value sahi nahi hai` });
+      }
+      cur[key] = v;
+    }
+    if (req.body.enabled !== undefined) cur.enabled = Boolean(req.body.enabled);
+
+    // Cap 0 rakhne ka matlab hoga "adjustment on hai par asar kuch nahi" —
+    // aisi uljhan se bachne ke liye kam se kam 1% zaroori hai.
+    if (cur.enabled && !(Number(cur.maxAdjustmentPercent) > 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Fuel adjustment on karne ke liye maximum adjustment percent 0 se zyada rakho',
+      });
+    }
+
+    cur.effectiveDate = new Date();
+    settings.fuelAdjustment = cur;
+    settings.markModified('fuelAdjustment');
+    await settings.save();
+    await invalidateSettingsCache();
+
+    return res.json({ success: true, message: 'Fuel adjustment update ho gaya', data: settings.fuelAdjustment });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -4075,9 +5002,13 @@ const deleteVehicleType = async (req, res) => {
     // Registered vehicles use this type raw (no FK to Setting) — deleting the
     // catalog entry out from under them would silently fall back to 'auto'
     // pricing for their rides. Block until they're reassigned.
-    const inUse = await Vehicle.exists({ type: id });
+    const inUse = await Vehicle.countDocuments({ type: id });
     if (inUse) {
-      return res.status(400).json({ success: false, message: 'Is type ki vehicles registered hain, pehle unhe reassign karo' });
+      return res.status(400).json({ success: false, message: `Is seva ki ${inUse} gaadi registered hai — hatane ki jagah "Band" karo (customer ko nahi dikhegi, driver ka data bacha rahega)` });
+    }
+    const open = await Ride.countDocuments({ vehicleType: id, status: { $in: ['searching', 'scheduled', 'accepted', 'arrived', 'started', 'working'] } });
+    if (open) {
+      return res.status(400).json({ success: false, message: `Is seva ki ${open} booking chal rahi/aane wali hai — pehle Band karo` });
     }
 
     settings.vehicleRates.delete(id);
@@ -4208,75 +5139,317 @@ const getAnalytics = async (req, res) => {
   }
 };
 
+// ===== CSV EXPORTS =====
+// Drivers / Users / Bookings ka CSV. Har export list-endpoint jaise hi filters
+// leta hai (getAllDrivers / getAllUsers / getAllRides se same query params),
+// taaki dashboard pe jo filter laga ho wahi rows file mein aayein.
+
+// from/to (dashboard) aur from_date/to_date (purane report links) dono support.
+// 'to' din ka poora din include karo — warna us date ki bookings chhut jaati hain.
+const buildDateRange = (query) => {
+  const from = query.from || query.from_date || query.startDate;
+  const to = query.to || query.to_date || query.endDate;
+  if (!from && !to) return null;
+
+  const range = {};
+  if (from) {
+    const d = new Date(from);
+    if (!Number.isNaN(d.getTime())) range.$gte = d;
+  }
+  if (to) {
+    const d = new Date(to);
+    if (!Number.isNaN(d.getTime())) {
+      // Sirf date aayi ho (time ke bina) to us din ke end tak le jao
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(to).trim())) d.setHours(23, 59, 59, 999);
+      range.$lte = d;
+    }
+  }
+  return Object.keys(range).length ? range : null;
+};
+
+const EXPORT_LIMIT = 20000; // memory guard — isse zyada rows pe date filter lagao
+
+const driverStatusLabel = (d) => {
+  if (d.isBlocked) return 'Blocked';
+  if (d.isRejected) return 'Rejected';
+  if (!d.isApproved) return 'Pending Approval';
+  if (d.status === 'available') return 'Online';
+  if (d.status === 'busy') return 'On Trip';
+  return 'Offline';
+};
+
+const DRIVER_COLUMNS = [
+  { label: 'Driver ID', value: (d) => String(d._id) },
+  { label: 'Name', value: (d) => d.user?.name },
+  { label: 'Phone', value: (d) => d.user?.phone },
+  { label: 'Email', value: (d) => d.user?.email },
+  { label: 'City', value: (d) => d.user?.city },
+  { label: 'Status', value: driverStatusLabel },
+  { label: 'Approved', value: (d) => !!d.isApproved },
+  { label: 'Rejected', value: (d) => !!d.isRejected },
+  { label: 'Blocked', value: (d) => !!d.isBlocked },
+  { label: 'Vehicle Type', value: (d) => d.vehicle?.type },
+  { label: 'Vehicle Number', value: (d) => d.vehicle?.number },
+  { label: 'Vehicle Model', value: (d) => d.vehicle?.model },
+  { label: 'Vehicle Verified', value: (d) => !!d.vehicle?.isVerified },
+  { label: 'Total Vehicles', value: (d) => (d.vehicles || []).length },
+  { label: 'Total Trips', value: (d) => d.stats?.totalTrips || 0 },
+  { label: 'Completed Trips', value: (d) => d.stats?.completedTrips || 0 },
+  { label: 'Cancelled Trips', value: (d) => d.stats?.cancelledTrips || 0 },
+  { label: 'Rating', value: (d) => Number(d.rating?.average || 0).toFixed(1) },
+  { label: 'Rating Count', value: (d) => d.rating?.count || 0 },
+  { label: 'Total Earnings', value: (d) => d.stats?.totalEarnings || 0 },
+  { label: 'Month Earnings', value: (d) => d.stats?.monthEarnings || 0 },
+  { label: 'Today Earnings', value: (d) => d.stats?.todayEarnings || 0 },
+  { label: 'Wallet Balance', value: (d) => d.wallet?.balance || 0 },
+  { label: 'Bank Account Holder', value: (d) => d.bankDetails?.accountHolderName },
+  { label: 'Bank Name', value: (d) => d.bankDetails?.bankName },
+  { label: 'Account Number', value: (d) => d.bankDetails?.accountNumber },
+  { label: 'IFSC', value: (d) => d.bankDetails?.ifscCode },
+  { label: 'Bank Verified', value: (d) => !!d.bankDetails?.verified },
+  { label: 'Aadhaar Verified', value: (d) => !!d.documents?.aadhaar?.verified },
+  { label: 'Joined On', value: (d) => formatDate(d.createdAt) },
+];
+
+const USER_COLUMNS = [
+  { label: 'User ID', value: (u) => String(u._id) },
+  { label: 'Name', value: (u) => u.name },
+  { label: 'Phone', value: (u) => u.phone },
+  { label: 'Email', value: (u) => u.email },
+  { label: 'City', value: (u) => u.city },
+  { label: 'Verified', value: (u) => !!u.isVerified },
+  { label: 'Blocked', value: (u) => !!u.isBlocked },
+  { label: 'Wallet Balance', value: (u) => u.wallet || 0 },
+  { label: 'Total Rides', value: (u) => u.rideStats?.totalRides || 0 },
+  { label: 'Completed Rides', value: (u) => u.rideStats?.completedRides || 0 },
+  { label: 'Cancelled Rides', value: (u) => u.rideStats?.cancelledRides || 0 },
+  { label: 'Total Spent', value: (u) => u.rideStats?.totalSpent || 0 },
+  { label: 'Last Ride', value: (u) => formatDate(u.rideStats?.lastRideAt) },
+  { label: 'Joined On', value: (u) => formatDate(u.createdAt) },
+];
+
+const RIDE_COLUMNS = [
+  { label: 'Booking ID', value: (r) => String(r._id) },
+  { label: 'Booked On', value: (r) => formatDateTime(r.createdAt) },
+  { label: 'Status', value: (r) => r.status },
+  { label: 'Booking Type', value: (r) => r.bookingType },
+  { label: 'Booking Mode', value: (r) => r.bookingMode },
+  { label: 'Service', value: (r) => r.vehicleType },
+  { label: 'Service Category', value: (r) => r.serviceCategory },
+  { label: 'Service Type', value: (r) => r.serviceType },
+  { label: 'Customer Name', value: (r) => r.customer?.name },
+  { label: 'Customer Phone', value: (r) => r.customer?.phone },
+  { label: 'Driver Name', value: (r) => r.provider?.user?.name },
+  { label: 'Driver Phone', value: (r) => r.provider?.user?.phone },
+  { label: 'Vehicle Number', value: (r) => r.vehicle?.number },
+  { label: 'Pickup', value: (r) => r.pickup?.address },
+  { label: 'Drop', value: (r) => r.drop?.address },
+  { label: 'Distance (km)', value: (r) => r.distance || 0 },
+  { label: 'Est. Duration (min)', value: (r) => r.estimatedDuration || 0 },
+  { label: 'Actual Duration (min)', value: (r) => r.actualDuration || 0 },
+  { label: 'Est. Hours', value: (r) => r.estimatedHours || 0 },
+  { label: 'Actual Hours', value: (r) => r.actualHours || 0 },
+  { label: 'Hourly Rate', value: (r) => r.hourlyRate || 0 },
+  { label: 'Fare', value: (r) => r.fare || 0 },
+  { label: 'Final Fare', value: (r) => (r.finalFare != null ? r.finalFare : r.fare) || 0 },
+  { label: 'Payment Method', value: (r) => r.paymentMethod },
+  { label: 'Payment Status', value: (r) => r.paymentStatus },
+  { label: 'Customer Rating', value: (r) => r.rating?.customerRating || '' },
+  { label: 'Customer Feedback', value: (r) => r.rating?.customerFeedback },
+  { label: 'Scheduled At', value: (r) => formatDateTime(r.scheduledAt) },
+  { label: 'Accepted At', value: (r) => formatDateTime(r.acceptedAt) },
+  { label: 'Completed At', value: (r) => formatDateTime(r.completedAt) },
+  { label: 'Cancelled At', value: (r) => formatDateTime(r.cancelledAt) },
+  { label: 'Cancelled By', value: (r) => r.cancelledBy },
+  { label: 'Cancellation Reason', value: (r) => r.cancellationReason },
+];
+
+// getAllDrivers wale hi filters — bas pagination ke bajaye poora filtered set
+const fetchDriversForExport = async (query) => {
+  const { status, search, isApproved, isRejected, isBlocked, hasChangeRequest } = query;
+
+  const matchStage = {};
+  if (status === 'online') matchStage.status = { $in: ['available', 'busy'] };
+  else if (status) matchStage.status = status;
+  if (isApproved !== undefined) matchStage.isApproved = isApproved === 'true';
+  if (isRejected !== undefined) matchStage.isRejected = isRejected === 'true';
+  if (isBlocked !== undefined) matchStage.isBlocked = isBlocked === 'true';
+  if (isApproved === 'false' && isRejected === undefined && isBlocked === undefined) {
+    matchStage.isRejected = false;
+    matchStage.isBlocked = false;
+  }
+  const dateRange = buildDateRange(query);
+  if (dateRange) matchStage.createdAt = dateRange;
+
+  const pipeline = [
+    { $match: matchStage },
+    { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'user' } },
+    { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+    { $lookup: { from: 'vehicles', localField: '_id', foreignField: 'providerId', as: 'vehicles' } },
+    { $lookup: { from: 'vehicles', localField: 'activeVehicle', foreignField: '_id', as: 'vehicle' } },
+    { $unwind: { path: '$vehicle', preserveNullAndEmptyArrays: true } },
+  ];
+
+  if (hasChangeRequest === 'true') {
+    pipeline.push({ $match: { 'vehicles.changeRequest.status': 'pending' } });
+  }
+
+  if (search) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { 'user.name': { $regex: search, $options: 'i' } },
+          { 'user.email': { $regex: search, $options: 'i' } },
+          { 'user.phone': { $regex: search, $options: 'i' } },
+          { 'vehicles.number': { $regex: search, $options: 'i' } },
+        ],
+      },
+    });
+  }
+
+  pipeline.push(
+    { $project: { 'user.password': 0, 'user.otp': 0, 'user.fcmToken': 0 } },
+    { $sort: { createdAt: -1 } },
+    { $limit: EXPORT_LIMIT }
+  );
+
+  return Driver.aggregate(pipeline);
+};
+
+// getAllUsers wale hi filters + har user ke ride stats (ek hi aggregate mein)
+const fetchUsersForExport = async (query) => {
+  const { search, isBlocked, isVerified } = query;
+
+  const customerFilter = { $or: [{ role: 'customer' }, { roles: 'customer' }] };
+  const extra = {};
+  if (isBlocked !== undefined) extra.isBlocked = isBlocked === 'true';
+  if (isVerified !== undefined) extra.isVerified = isVerified === 'true';
+  const dateRange = buildDateRange(query);
+  if (dateRange) extra.createdAt = dateRange;
+
+  const mongoQuery = search
+    ? {
+        $and: [
+          customerFilter,
+          extra,
+          { $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+          ] },
+        ],
+      }
+    : { ...customerFilter, ...extra };
+
+  const users = await User.find(mongoQuery)
+    .sort({ createdAt: -1 })
+    .limit(EXPORT_LIMIT)
+    .select('-password -otp -otpExpiry -fcmToken')
+    .lean();
+
+  if (!users.length) return users;
+
+  const statsRows = await Ride.aggregate([
+    { $match: { customer: { $in: users.map((u) => u._id) } } },
+    {
+      $group: {
+        _id: '$customer',
+        totalRides: { $sum: 1 },
+        completedRides: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+        cancelledRides: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+        totalSpent: {
+          $sum: { $cond: [{ $eq: ['$status', 'completed'] }, { $ifNull: ['$finalFare', '$fare'] }, 0] },
+        },
+        lastRideAt: { $max: '$createdAt' },
+      },
+    },
+  ]);
+
+  const statsById = new Map(statsRows.map((s) => [String(s._id), s]));
+  return users.map((u) => ({ ...u, rideStats: statsById.get(String(u._id)) || null }));
+};
+
+// getAllRides wale hi filters
+const fetchRidesForExport = async (query) => {
+  const { status, driverId, userId, vehicleType, paymentStatus } = query;
+
+  const mongoQuery = {};
+  if (status) mongoQuery.status = status;
+  if (driverId) mongoQuery.provider = driverId;
+  if (userId) mongoQuery.customer = userId;
+  if (vehicleType) mongoQuery.vehicleType = vehicleType;
+  if (paymentStatus) mongoQuery.paymentStatus = paymentStatus;
+  const dateRange = buildDateRange(query);
+  if (dateRange) mongoQuery.createdAt = dateRange;
+
+  return Ride.find(mongoQuery)
+    .sort({ createdAt: -1 })
+    .limit(EXPORT_LIMIT)
+    .populate('customer', 'name email phone city')
+    .populate('vehicle', 'type number model')
+    .populate({ path: 'provider', select: 'user', populate: { path: 'user', select: 'name phone' } })
+    .lean();
+};
+
+const exportDrivers = async (req, res) => {
+  try {
+    const drivers = await fetchDriversForExport(req.query);
+    return sendCsv(res, timestampedName('gaonconnect_drivers'), buildCsv(DRIVER_COLUMNS, drivers));
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Export nahi ho paya', error: error.message });
+  }
+};
+
+const exportUsers = async (req, res) => {
+  try {
+    const users = await fetchUsersForExport(req.query);
+    return sendCsv(res, timestampedName('gaonconnect_users'), buildCsv(USER_COLUMNS, users));
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Export nahi ho paya', error: error.message });
+  }
+};
+
+const exportRides = async (req, res) => {
+  try {
+    const rides = await fetchRidesForExport(req.query);
+    return sendCsv(res, timestampedName('gaonconnect_bookings'), buildCsv(RIDE_COLUMNS, rides));
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Export nahi ho paya', error: error.message });
+  }
+};
+
+// Reports page ka generic export — type ke hisaab se upar wale hi builders use karta hai
 const exportReport = async (req, res) => {
   try {
-    const { type, from_date, to_date } = req.query;
+    const type = String(req.query.type || '').toLowerCase();
 
-    const query = {};
-    if (from_date || to_date) {
-      query.createdAt = {};
-      if (from_date) query.createdAt.$gte = new Date(from_date);
-      if (to_date) query.createdAt.$lte = new Date(to_date);
-    }
-
-    let data;
-    let filename;
-
-    switch(type) {
+    switch (type) {
       case 'rides':
-        data = await Ride.find(query)
-          .populate('customer', 'name email phone')
-          .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
-          .lean();
-        filename = 'rides-report.csv';
-        break;
-
-      case 'payments':
-        data = await Ride.find({ ...query, status: 'completed' })
-          .populate('customer', 'name email phone')
-          .populate({ path: 'provider', select: 'user activeVehicle', populate: [{ path: 'user', select: 'name phone' }, { path: 'activeVehicle' }] })
-          .select('customer provider vehicleType fare finalFare paymentMethod paymentStatus createdAt')
-          .lean();
-        filename = 'payments-report.csv';
-        break;
+      case 'bookings':
+        return exportRides(req, res);
 
       case 'drivers':
-        data = await Driver.find()
-          .select('-password')
-          .lean();
-        filename = 'drivers-report.csv';
-        break;
+        return exportDrivers(req, res);
 
       case 'users':
-        data = await User.find({ $or: [{ role: 'customer' }, { roles: 'customer' }] })
-          .select('-password')
-          .lean();
-        filename = 'users-report.csv';
-        break;
-        
+      case 'customers':
+        return exportUsers(req, res);
+
+      // Earnings report = sirf completed rides (paisa wali rows)
+      case 'earnings':
+      case 'payments': {
+        const rides = await fetchRidesForExport({ ...req.query, status: 'completed' });
+        return sendCsv(res, timestampedName('gaonconnect_earnings'), buildCsv(RIDE_COLUMNS, rides));
+      }
+
       default:
         return res.status(400).json({
           success: false,
-          message: 'Invalid report type'
+          message: `Invalid report type: "${req.query.type || ''}". Valid: rides, earnings, drivers, users`,
         });
     }
-
-    // Simple CSV conversion
-    const fields = Object.keys(data[0] || {});
-    const csv = [
-      fields.join(','),
-      ...data.map(row => fields.map(field => JSON.stringify(row[field] || '')).join(','))
-    ].join('\n');
-
-    res.header('Content-Type', 'text/csv');
-    res.header('Content-Disposition', `attachment; filename="${filename}"`);
-    res.send(csv);
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Export nahi ho paya', error: error.message });
   }
 };
 
@@ -4423,8 +5596,10 @@ const sendNotification = async (req, res) => {
 // Body: { recipientType ('all'|'providers'|'customers'), title, body }
 const sendBulkNotification = async (req, res) => {
   try {
-    const { recipientType, title, body, message } = req.body;
+    const { recipientType, target, title, body, message } = req.body;
     const notifBody = body || message;
+    // frontend 'target', backend legacy 'recipientType' — dono accept karo
+    const audience = target || recipientType || 'all';
 
     if (!title || !notifBody) {
       return res.status(400).json({ success: false, message: 'title aur body required hai' });
@@ -4432,15 +5607,17 @@ const sendBulkNotification = async (req, res) => {
 
     let tokens = [];
 
-    if (recipientType === 'providers' || recipientType === 'all') {
-      const providers = await Provider.find({ 'deviceInfo.fcmToken': { $exists: true, $ne: null } })
+    const sendToDrivers = audience === 'all' || audience === 'drivers' || audience === 'providers';
+    const sendToUsers   = audience === 'all' || audience === 'users'   || audience === 'customers';
+
+    if (sendToDrivers) {
+      const providers = await Driver.find({ 'deviceInfo.fcmToken': { $exists: true, $ne: null } })
         .select('deviceInfo');
       const providerTokens = providers.map((p) => p.deviceInfo?.fcmToken).filter(Boolean);
       tokens.push(...providerTokens);
     }
 
-    if (recipientType === 'customers' || recipientType === 'all') {
-      // Future: User model mein fcmToken field add karo
+    if (sendToUsers) {
       const users = await User.find({ fcmToken: { $exists: true, $ne: null } }).select('fcmToken');
       const userTokens = users.map((u) => u.fcmToken).filter(Boolean);
       tokens.push(...userTokens);
@@ -4459,7 +5636,7 @@ const sendBulkNotification = async (req, res) => {
     });
   } catch (error) {
     console.error('sendBulkNotification Error:', error);
-    res.status(500).json({ success: false, message: 'Server error', ...(process.env.NODE_ENV !== 'production' && { error: error.message }) });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
 
@@ -4471,18 +5648,117 @@ const assignDriverToRide = async (req, res) => {
 
     const ride = await Ride.findById(req.params.id).populate('customer', 'name phone');
     if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
-    if (ride.status !== 'searching') return res.status(400).json({ success: false, message: `Ride abhi "${ride.status}" status mein hai — assign nahi ho sakti` });
+    // Pre-booking jiska driver abhi tay nahi — admin bhi driver pakka kar sakta hai
+    const isAdvance = ride.status === 'scheduled' && !ride.provider;
+    if (ride.status !== 'searching' && !isAdvance) return res.status(400).json({ success: false, message: `Ride abhi "${ride.status}" status mein hai — assign nahi ho sakti` });
 
-    const driver = await Driver.findById(driverId).populate('user', 'name phone');
+    const driver = await Driver.findById(driverId).populate('user', 'name phone').populate('activeVehicle');
     if (!driver) return res.status(404).json({ success: false, message: 'Driver nahi mila' });
     if (!driver.isApproved) return res.status(400).json({ success: false, message: 'Driver approved nahi hai' });
     if (driver.isBlocked) return res.status(400).json({ success: false, message: 'Driver blocked hai' });
 
-    ride.provider = driverId;
-    ride.status = 'accepted';
-    await ride.save();
+    // Galat gaadi na jaaye — thresher ka kaam bina thresher wale tractor ko,
+    // ya tractor ki booking auto wale ko. Wahi niyam jo dispatch mein lagta hai.
+    // Admin upar wali category de sakta hai (Mini ki booking Sedan ko) —
+    // jab tak driver ne "choti category" band na ki ho
+    const { vehicleFitsRide } = require('../utils/vehicleMatch');
+    const { getVariantOrder } = require('../utils/dynamicFare');
+    const variantOrder = ride.vehicleVariant ? await getVariantOrder(ride.vehicleType) : [];
+    if (driver.activeVehicle && !vehicleFitsRide(driver.activeVehicle, ride, { variantOrder })) {
+      return res.status(400).json({ success: false, message: `Is driver ki gaadi (${driver.activeVehicle.type}) is booking (${ride.vehicleType}${ride.equipment?.length ? ' + ' + ride.equipment.join(', ') : ''}) se match nahi karti` });
+    }
 
-    res.json({ success: true, message: `${driver.user?.name || 'Driver'} ko ride assign kar diya!`, data: { driverName: driver.user?.name, driverPhone: driver.user?.phone } });
+    if (isAdvance) {
+      // Ek hi samay par do pre-bookings nahi — rideController.acceptRide jaisa
+      const at = new Date(ride.scheduledAt).getTime();
+      const spanMs = (Math.max(1, Number(ride.estimatedHours) || 1) + 1) * 3_600_000;
+      const clash = await Ride.findOne({
+        _id: { $ne: ride._id },
+        provider: driver._id,
+        status: { $in: ['scheduled', 'accepted', 'arrived', 'started', 'working'] },
+        scheduledAt: { $gte: new Date(at - spanMs), $lte: new Date(at + spanMs) },
+      }).select('_id');
+      if (clash) return res.status(400).json({ success: false, message: 'Is driver ki is samay pehle se ek booking hai' });
+
+      // Status 'scheduled' hi rehta hai — samay se pehle cron ise chalu karega
+      // (jobs/scheduledRideJob.js), bilkul driver ke khud accept karne jaisa.
+      const booked = await Ride.findOneAndUpdate(
+        { _id: ride._id, status: 'scheduled', provider: null },
+        { provider: driver._id, vehicle: driver.activeVehicle?._id || null, scheduledAcceptedAt: new Date(), nextDispatchAt: null },
+        { new: true },
+      );
+      if (!booked) return res.status(409).json({ success: false, message: 'Is beech kisi driver ne ye pre-booking le li' });
+
+      const { getIO } = require('../socket');
+      const { scheduleLabel } = require('./rideController');
+      const io = getIO();
+      (booked.notifiedDrivers || []).forEach((id) => {
+        if (String(id) !== String(driver._id)) io.to(`driver_${id}`).emit('rideNoLongerAvailable', { rideId: String(booked._id) });
+      });
+
+      const when = scheduleLabel(booked.scheduledAt);
+      const driverName = driver.user?.name || 'Driver';
+      const vehicleNo = driver.activeVehicle?.number || '';
+      if (driver.deviceInfo?.fcmToken) {
+        notify.custom(driver.deviceInfo.fcmToken, {
+          title: '📅 Aapko Pre-Booking Di Gayi',
+          body:  `${ride.customer?.name || 'Customer'} — ${when}. ${ride.pickup?.address || ''}`,
+          data:  { type: 'SCHEDULED_REMINDER', rideId: String(booked._id) },
+        }).catch(() => {});
+      }
+      io.to(`user_${booked.customer}`).emit('scheduledDriverAssigned', { rideId: booked._id, driverName });
+      const customer = await User.findById(booked.customer).select('fcmToken');
+      if (customer?.fcmToken) {
+        notify.custom(customer.fcmToken, {
+          title: '✅ Pre-Booking Pakki!',
+          body:  `${driverName} (${vehicleNo}) ${when} ko aayenge. App mein call kar sakte hain.`,
+          data:  { type: 'SCHEDULED_DRIVER_ASSIGNED', rideId: String(booked._id) },
+        }).catch(() => {});
+      }
+
+      return res.json({ success: true, message: `${driverName} ko pre-booking (${when}) de di — dono ko bata diya`, data: { driverName, driverPhone: driver.user?.phone, scheduled: true } });
+    }
+
+    // Turant wali ride — driver kisi aur ride par na ho
+    const onTrip = await Ride.exists({ provider: driver._id, status: { $in: ['accepted', 'arrived', 'started', 'working'] } });
+    if (onTrip) return res.status(400).json({ success: false, message: 'Ye driver abhi doosri ride par hai' });
+
+    // Atomic — is beech kisi driver ne khud accept kar li ho to dobara nahi
+    const assigned = await Ride.findOneAndUpdate(
+      { _id: ride._id, status: 'searching' },
+      { provider: driver._id, vehicle: driver.activeVehicle?._id || null, status: 'accepted', acceptedAt: new Date(), nextDispatchAt: null },
+      { new: true },
+    );
+    if (!assigned) return res.status(409).json({ success: false, message: 'Is beech kisi driver ne ride le li' });
+
+    driver.status = 'busy';
+    await driver.save();
+
+    // Pehle sirf DB badalta tha — na driver ko pata chalta, na customer ko.
+    // Ab wahi sab jo driver ke khud accept karne par hota hai.
+    const { getIO } = require('../socket');
+    const io = getIO();
+    (assigned.notifiedDrivers || []).forEach((id) => {
+      if (String(id) !== String(driver._id)) io.to(`driver_${id}`).emit('rideNoLongerAvailable', { rideId: String(assigned._id) });
+    });
+    // Driver app is event par current ride khol deti hai (openCurrentRide)
+    io.to(`driver_${driver._id}`).emit('scheduledRideActivated', { rideId: String(assigned._id) });
+    if (driver.deviceInfo?.fcmToken) {
+      notify.custom(driver.deviceInfo.fcmToken, {
+        title: '🚗 Admin ne aapko ride di',
+        body:  `${ride.customer?.name || 'Customer'} — ${ride.pickup?.address || ''}`,
+        data:  { type: 'SCHEDULED_RIDE_ACTIVATED', rideId: String(assigned._id) },
+      }).catch(() => {});
+    }
+    io.to(`user_${assigned.customer}`).emit('rideAccepted', { rideId: assigned._id, driverId: driver._id, otp: assigned.otp });
+    const customer = await User.findById(assigned.customer).select('fcmToken');
+    if (customer?.fcmToken) {
+      notify.rideAccepted(customer.fcmToken, {
+        driverName: driver.user?.name || 'Driver', vehicleType: driver.activeVehicle?.type, otp: assigned.otp,
+      }).catch(() => {});
+    }
+
+    res.json({ success: true, message: `${driver.user?.name || 'Driver'} ko ride assign kar diya — dono ko bata diya`, data: { driverName: driver.user?.name, driverPhone: driver.user?.phone } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -4600,7 +5876,7 @@ const getAlerts = async (req, res) => {
       Driver.countDocuments({ createdAt: { $gte: todayStart } }),
       User.countDocuments({ createdAt: { $gte: todayStart }, role: 'customer' }),
       Driver.countDocuments({ isApproved: false, isRejected: false, isBlocked: false }),
-      Transaction.countDocuments({ type: 'debit', status: 'pending' }),
+      Transaction.countDocuments(WITHDRAWAL_FILTER),
       Complaint.countDocuments({ status: { $in: ['open', 'investigating'] } }),
     ]);
 
@@ -4761,12 +6037,28 @@ module.exports = {
   updatePricing,
   getHourlyRates,
   updateHourlyRate,
+  addServiceCategory,
+  addHourlyService,
+  deleteHourlyService,
+  deleteServiceCategory,
+  getEquipmentAdmin,
+  saveEquipmentAdmin,
   getVehicleTypes,
   createVehicleType,
+  updateVehicleType,
   deleteVehicleType,
+  getWeddingPackages,
+  createWeddingPackage,
+  updateWeddingPackage,
+  deleteWeddingPackage,
+  getFuelAdjustment,
+  updateFuelAdjustment,
   getSystemConfig,
   getAnalytics,
   exportReport,
+  exportDrivers,
+  exportUsers,
+  exportRides,
   getDriverPerformance,
   sendNotification,
   sendBulkNotification,

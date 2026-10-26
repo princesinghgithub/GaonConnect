@@ -34,7 +34,7 @@ const express = require('express');
 const router = express.Router();
 const { protect, admin } = require('../middleware/auth');
 const adminController = require('../controllers/adminController');
-const { docUpload } = require('../middleware/upload');
+const { docUpload, adminAssetUpload } = require('../middleware/upload');
 
 // All routes are protected and admin-only
 router.use(protect);
@@ -53,6 +53,8 @@ router.get('/alerts', adminController.getAlerts);
 router.post('/drivers', adminController.createDriver);
 router.get('/drivers', adminController.getAllDrivers);
 router.get('/drivers/live-locations', adminController.getActiveDriversLocation);
+// '/drivers/:id' se pehle rakhna zaroori hai, warna 'export' ek id ban jaata hai
+router.get('/drivers/export', adminController.exportDrivers);
 router.get('/drivers/:id', adminController.getDriverById);
 router.get('/drivers/:id/stats', adminController.getDriverStats);
 router.get('/drivers/:id/performance', adminController.getDriverPerformance);
@@ -85,6 +87,7 @@ router.delete('/vehicles/:id', adminController.deleteVehicleAdmin);
 router.get('/rides', adminController.getAllRides);
 router.get('/rides/stats', adminController.getRideStats);
 router.get('/rides/ongoing', adminController.getOngoingRides);
+router.get('/rides/export', adminController.exportRides);
 router.get('/rides/:id', adminController.getRideDetails);
 router.get('/rides/:id/track', adminController.trackRide);
 router.post('/rides/:id/cancel', adminController.cancelRideAdmin);
@@ -99,6 +102,7 @@ router.put('/payments/withdrawal/:id', adminController.processWithdrawal);
 // ===== USERS/CUSTOMERS =====
 router.post('/users', adminController.createUser);
 router.get('/users', adminController.getAllUsers);
+router.get('/users/export', adminController.exportUsers);
 router.get('/users/:id', adminController.getUserDetails);
 router.put('/users/:id/block', adminController.blockUser);
 router.put('/users/:id/unblock', adminController.unblockUser);
@@ -110,9 +114,36 @@ router.put('/settings', adminController.updateSettings);
 router.put('/pricing', adminController.updatePricing);
 router.get('/hourly-rates', adminController.getHourlyRates);
 router.put('/hourly-rates', adminController.updateHourlyRate);
+// Dynamic seva — naya kaam / nayi category / auzaar, bina app update ke
+router.post('/hourly-rates/category', adminController.addServiceCategory);
+router.post('/hourly-rates/service', adminController.addHourlyService);
+router.delete('/hourly-rates/service', adminController.deleteHourlyService);
+router.delete('/hourly-rates/category', adminController.deleteServiceCategory);
+router.get('/equipment', adminController.getEquipmentAdmin);
+router.put('/equipment/:vehicleType', adminController.saveEquipmentAdmin);
 router.get('/vehicle-types', adminController.getVehicleTypes);
 router.post('/vehicle-types', adminController.createVehicleType);
+router.put('/vehicle-types/:id', adminController.updateVehicleType);
+
+// Vehicle photo / banner image upload. URL wapas milta hai, jise vehicle-type
+// ya banner pe set kar do.
+router.post('/upload/image', adminAssetUpload.single('image'), (req, res) => {
+  if (!req.file?.path) {
+    return res.status(400).json({ success: false, message: 'Image nahi mili' });
+  }
+  return res.json({ success: true, data: { url: req.file.path } });
+});
 router.delete('/vehicle-types/:id', adminController.deleteVehicleType);
+
+// Wedding car packages — per-km nahi, package ke daam.
+router.get('/wedding-packages',        adminController.getWeddingPackages);
+router.post('/wedding-packages',       adminController.createWeddingPackage);
+router.put('/wedding-packages/:id',    adminController.updateWeddingPackage);
+router.delete('/wedding-packages/:id', adminController.deleteWeddingPackage);
+
+// Diesel/petrol ka aaj ka daam — admin khud update karta hai, koi auto API nahi.
+router.get('/fuel-adjustment', adminController.getFuelAdjustment);
+router.put('/fuel-adjustment', adminController.updateFuelAdjustment);
 
 // ===== REPORTS & ANALYTICS =====
 router.get('/analytics', adminController.getAnalytics);

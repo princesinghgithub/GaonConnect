@@ -97,6 +97,31 @@ exports.applyPromoToRide = async (code, userId, fare, vehicleType, rideId) => {
   return { discount: result.discount, finalFare: result.finalFare };
 };
 
+// ─── Ride cancel ho gayi — promo wapas do ────────────────────────────────────
+// Promo booking ke waqt hi "use ho chuka" likh diya jaata hai. Ride cancel ho
+// jaaye (driver mila hi nahi, ya kisi ne bhi cancel ki) to customer ka promo
+// bina kisi ride ke kharch ho jaata tha — "pehli ride par chhoot" wala code
+// ek baar driver na milne par hi khatam. Ab cancel par wapas mil jaata hai.
+//
+// Sirf ek entry hatti hai (sabse nayi) — jis code ko ek customer kai baar use
+// kar sakta hai, uske baaki sahi istemaal bane rehte hain.
+exports.releasePromo = async (code, userId) => {
+  if (!code || !userId) return;
+  try {
+    const promo = await PromoCode.findOne({ code: String(code).toUpperCase().trim() });
+    if (!promo) return;
+
+    const idx = (promo.usedBy || []).map((u) => String(u.user)).lastIndexOf(String(userId));
+    if (idx === -1) return;
+
+    promo.usedBy.splice(idx, 1);
+    promo.usedCount = Math.max(0, (promo.usedCount || 0) - 1);
+    await promo.save();
+  } catch (err) {
+    console.error('releasePromo error:', err.message);
+  }
+};
+
 // ─── GET /api/promo/available ─────────────────────────────────────────────────
 exports.getAvailablePromos = async (req, res) => {
   try {

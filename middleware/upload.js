@@ -11,8 +11,14 @@ const sanitizeSegment = (value) => String(value || 'misc').replace(/[^a-zA-Z0-9_
 const REGISTER_FIELD_TO_DOC_TYPE = {
   profilePhoto: 'photo',
   aadhaarPhoto: 'aadhaar',
+  aadhaarBackPhoto: 'aadhaar',
+  panPhoto:     'pan',
+  insurancePhoto: 'insurance',
   licensePhoto: 'license',
+  licenseBackPhoto: 'license',
   rcPhoto:      'rc',
+  rcBackPhoto:  'rc',
+  vehiclePhoto: 'vehicle',
 };
 
 const documentStorage = new CloudinaryStorage({
@@ -65,4 +71,25 @@ const createPhotoUpload = (folderPrefix) => multer({
   },
 });
 
-module.exports = { docUpload, createPhotoUpload };
+// ─── Admin Asset Upload (Cloudinary, image-only) ──────────────────────────────
+// Vehicle-type ki photo aur home-screen banners ke liye. Yeh user-specific nahi
+// hai (isliye createPhotoUpload nahi chalta) — ek shared folder hai jisme admin
+// panel se assets jaati hain. PNG bhi allowed hai kyunki vehicle photos
+// transparent background ke saath hi theek dikhti hain.
+const adminAssetUpload = multer({
+  storage: new CloudinaryStorage({
+    cloudinary,
+    params: (req) => ({
+      folder:          `gaonconnect/assets/${sanitizeSegment(req.query?.kind || 'misc')}`,
+      resource_type:   'image',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    }),
+  }),
+  limits:     { fileSize: 3 * 1024 * 1024 }, // 3 MB — banners/icons itne bade nahi hone chahiye
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Sirf image files allowed hain (JPG/PNG/WEBP)'));
+  },
+});
+
+module.exports = { docUpload, createPhotoUpload, adminAssetUpload };

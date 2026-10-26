@@ -31,6 +31,10 @@ const promoCreateSchema = Joi.object({
 // User routes
 router.post('/validate',  protect, validate(promoValidateSchema), validatePromo);
 router.get('/available',  protect, getAvailablePromos);
+// User app Offers tab aur home ka promo banner '/api/promo' (bina suffix) hit
+// karte hain. Yeh route missing tha, isliye dono 404 pa rahe the aur Offers
+// hamesha khaali dikhti thi. '/available' ka hi alias hai.
+router.get('/',           protect, getAvailablePromos);
 
 // Admin routes
 router.post('/create',    protect, admin, validate(promoCreateSchema), createPromo);

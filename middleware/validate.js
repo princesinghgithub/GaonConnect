@@ -95,7 +95,21 @@ const schemas = {
     // Vehicle types are admin-managed (Setting.vehicleRates), not a fixed
     // list — fareCalculator falls back to 'auto' pricing for unknown types.
     vehicleType:        Joi.string().lowercase().required(),
-    distance:           Joi.number().min(0).required(),
+    // Car ki category (hatchback / sedan / suv) aur AC. Daam yahan se nahi
+    // aata — client sirf "kya chahiye" bhejta hai, rate settings se lagta hai.
+    vehicleVariant:     Joi.string().lowercase().max(40).optional().allow(''),
+    ac:                 Joi.boolean().optional(),
+    // App ne customer ko pichhla baaki dikha diya hai aur wo kiraye mein jude.
+    includeDues:        Joi.boolean().optional(),
+    // Raaste mein ek jagah rukna hai (pickup → stop → drop).
+    stop: Joi.object({
+      address:   Joi.string().required(),
+      latitude:  Joi.number().min(-90).max(90).required(),
+      longitude: Joi.number().min(-180).max(180).required(),
+    }).optional(),
+    // Negative doori ka koi matlab nahi, aur 2000 km se lambi ride is app ka
+    // kaam nahi — dono taraf seema.
+    distance:           Joi.number().min(0).max(2000).required(),
     estimatedDuration:  Joi.number().min(0).required(),
     fare:               Joi.number().min(0).optional(),
     estimatedFare:      Joi.number().min(0).optional(),
@@ -103,14 +117,40 @@ const schemas = {
     bookingType:        Joi.string().valid('instant', 'scheduled').default('instant'),
     scheduledAt:        Joi.date().iso().optional().allow(null),
     scheduledNote:      Joi.string().max(500).optional().allow(''),
-    bookingMode:        Joi.string().valid('distance', 'hourly').default('distance'),
+    bookingMode:        Joi.string().valid('distance', 'hourly', 'package').default('distance'),
+    // Wedding car package-based hai — kaunsa package chuna, aur sajawat chahiye ya nahi.
+    packageId:          Joi.string().max(100).optional().allow(''),
+    decoration:         Joi.boolean().optional(),
+    packageHours:       Joi.number().min(0).max(48).optional(),
     serviceCategory:    Joi.string().optional().allow(''),
     serviceType:        Joi.string().optional().allow(''),
-    estimatedHours:     Joi.number().min(0).optional(),
+    estimatedHours:     Joi.number().min(0).max(24).optional(),
+    // Katai acre se hoti hai, gehun nikalna quintal se — sirf ghante se kaam
+    // nahi chalta. Kitne acre/quintal ka kaam hai, wo yahan aata hai.
+    serviceQuantity:    Joi.number().min(0).max(10000).optional(),
+    // Jab admin ne service ko "customer ki marzi" pe rakha ho.
+    chosenUnit:         Joi.string().valid('hour', 'acre').optional(),
+    // Goods/Tempo ke extras jo customer ne chune. Daam admin ki setting se
+    // aata hai — client sirf "chahiye/nahi chahiye" bhejta hai.
+    extras: Joi.object({
+      loading:   Joi.boolean().optional(),
+      unloading: Joi.boolean().optional(),
+      helper:    Joi.boolean().optional(),
+    }).optional(),
     hourlyRate:         Joi.number().min(0).optional(),
     workNote:           Joi.string().max(500).optional().allow(''),
     promoCode:          Joi.string().optional().allow(null, ''),
-  }).or('drop', 'dropoff'),
+    // Tractor/JCB booking mein customer ne kya maanga — booking sirf usi
+    // driver ko jaati hai jiske paas ye sab ho (utils/vehicleMatch.js).
+    equipment:          Joi.array().items(Joi.string().lowercase().max(40)).max(12).optional(),
+    minHorsepower:      Joi.number().min(0).max(150).optional(),
+    trolleyType:        Joi.string().max(40).optional().allow(''),
+  }),
+  // Pehle yahan `.or('drop', 'dropoff')` tha — yaani drop HAMESHA zaroori.
+  // Par khet/site ka kaam (jutai, khudai) wahin hota hai jahan bulaya, uska
+  // drop hota hi nahi, aur app use bhejta bhi nahi — har aisi booking yahin
+  // 400 se gir jaati thi. Drop ki jaanch ab createRide karta hai: service
+  // booking mein pickup hi kaam ki jagah hai, baaki sab mein drop zaroori.
 
   // Wallet
   requestWithdrawal: Joi.object({
@@ -119,11 +159,31 @@ const schemas = {
   }),
 
   // Fare estimate query params
+  // `stripUnknown: true` ke chalte jo field yahan nahi likhi, wo request se ud
+  // jaati hai. vehicleType pehle missing tha, isliye route ka single-vehicle
+  // breakdown wala branch kabhi chalta hi nahi tha.
   fareEstimate: Joi.object({
     pickupLat: Joi.number().min(-90).max(90).required(),
     pickupLng: Joi.number().min(-180).max(180).required(),
     dropLat:   Joi.number().min(-90).max(90).required(),
     dropLng:   Joi.number().min(-180).max(180).required(),
+
+    // Raaste ka stop (optional) — doori dono tukdon ki judti hai.
+    stopLat:   Joi.number().min(-90).max(90).optional(),
+    stopLng:   Joi.number().min(-180).max(180).optional(),
+
+    vehicleType: Joi.string().max(40).optional().allow(''),
+    variant:     Joi.string().lowercase().max(40).optional().allow(''),
+    ac:          Joi.boolean().truthy('true').falsy('false').optional(),
+
+    // Driver customer se kitni door hai — long pickup charge iske hisaab se.
+    pickupKm:    Joi.number().min(0).max(500).optional(),
+    waitMinutes: Joi.number().min(0).max(600).optional(),
+
+    // Goods/Tempo ke extras — customer chunta hai, admin ne enable kiya ho tabhi lagte hain.
+    loading:   Joi.boolean().truthy('true').falsy('false').optional(),
+    unloading: Joi.boolean().truthy('true').falsy('false').optional(),
+    helper:    Joi.boolean().truthy('true').falsy('false').optional(),
   }),
 };
 

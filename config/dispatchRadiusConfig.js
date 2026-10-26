@@ -36,4 +36,10 @@ module.exports = {
   jcb:       [5000, 10000, 20000, 35000],
   ambulance: [3000, 6000,  12000, 20000],
   wedding:   [8000, 15000, 25000, 40000],
+  // Ye pehle yahan nahi the, to auto ka chhota (8 km) daayra lagta tha —
+  // gaon mein thresher/harvester 8 km ke andar milna mushkil hai.
+  thresher:  [5000, 10000, 20000, 35000],
+  harvester: [10000, 20000, 35000, 50000],
+  goods:     [5000, 10000, 20000, 35000],
+  erickshaw: [2000, 4000,  6000,  8000],
 };

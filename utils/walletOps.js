@@ -1,0 +1,106 @@
+// utils/walletOps.js
+// ─────────────────────────────────────────────────────────────────────────────
+// Driver ke wallet mein paisa jodna / ghatana — ledger entry ke saath.
+// Hisaab utils/settlement.js mein hai; yahan sirf database ka kaam.
+// ─────────────────────────────────────────────────────────────────────────────
+const Provider    = require('../models/Provider');
+const Ride        = require('../models/Ride');
+const Transaction = require('../models/Transaction');
+
+/**
+ * Wallet badlo aur ledger mein likho. `amount` plus ho to credit, minus to debit.
+ * Atomic $inc — do request ek saath aayein to bhi balance nahi bigadta.
+ */
+const adjustProviderWallet = async ({ providerId, rideId, amount, category, description, earning = 0 }) => {
+  if (!providerId || !amount) return null;
+
+  const updated = await Provider.findByIdAndUpdate(
+    providerId,
+    {
+      $inc: {
+        'wallet.balance': amount,
+        ...(earning ? { 'stats.totalEarnings': earning, 'stats.todayEarnings': earning } : {}),
+      },
+    },
+    { new: true },
+  ).select('wallet');
+
+  await Transaction.create({
+    provider:     providerId,
+    ride:         rideId,
+    type:         amount > 0 ? 'credit' : 'debit',
+    category,
+    amount:       Math.abs(amount),
+    description,
+    status:       'completed',
+    balanceAfter: updated?.wallet?.balance,
+  });
+
+  return updated;
+};
+
+/**
+ * Cash ride ka paisa baad mein platform ke paas aa gaya (driver ne QR dikhaya,
+ * customer ne UPI se bhara). Ride complete hote waqt maana gaya tha ki paisa
+ * driver ke haath mein hai — ab wo platform ke paas hai, to driver ko dena hai.
+ *
+ * `walletSettled: 'cash' → 'platform'` ka badlav atomic hai, isliye webhook
+ * dobara aaye (Razorpay retry karta hai) to paisa do baar nahi judta.
+ */
+const creditPlatformCollection = async (rideId) => {
+  const ride = await Ride.findOneAndUpdate(
+    { _id: rideId, walletSettled: 'cash' },
+    { $set: { walletSettled: 'platform' } },
+    { new: true },
+  );
+  if (!ride || !ride.provider) return null;
+
+  const amount = Number(ride.finalFare || ride.fare) || 0;
+  return adjustProviderWallet({
+    providerId:  ride.provider,
+    rideId:      ride._id,
+    amount,
+    category:    'ride_payment',
+    description: `Customer ne ₹${amount} QR/UPI se bhare — aapke wallet mein`,
+  });
+};
+
+/**
+ * Customer ka wallet top-up pakka karo — signature (app ka verify) ya Razorpay
+ * webhook se paisa aane ki pushti ho chuki ho, tabhi bulao.
+ *
+ * Pending → completed ka badlav atomic hai, aur paisa usi ke baad judta hai.
+ * Pehle status padh kar alag se jodte the: app ka verify aur doosra tap (ya
+ * webhook) ek saath aaye to dono "pending" dekh kar do baar paisa jod dete.
+ *
+ * Lautata hai { credited, txn, balance } — credited false matlab pehle hi ho chuka.
+ */
+const completeTopup = async ({ orderId, paymentId, userId }) => {
+  const User = require('../models/User');
+  const txn = await Transaction.findOneAndUpdate(
+    {
+      transactionId: orderId,
+      category:      'topup',
+      status:        { $in: ['pending', 'failed'] },
+      ...(userId ? { user: userId } : {}),
+    },
+    { $set: { status: 'completed', processedAt: new Date() }, $unset: { failureReason: 1 } },
+    { new: true },
+  );
+  if (!txn) return { credited: false, txn: null, balance: null };
+
+  const updated = await User.findByIdAndUpdate(
+    txn.user,
+    { $inc: { wallet: txn.amount } },
+    { new: true },
+  ).select('wallet');
+
+  await Transaction.updateOne(
+    { _id: txn._id },
+    { $set: { balanceAfter: updated?.wallet, ...(paymentId ? { description: `Wallet top-up (${paymentId})` } : {}) } },
+  );
+
+  return { credited: true, txn, balance: updated?.wallet ?? null };
+};
+
+module.exports = { adjustProviderWallet, creditPlatformCollection, completeTopup };

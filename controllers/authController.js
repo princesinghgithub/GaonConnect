@@ -326,3 +326,69 @@ exports.uploadProfilePhoto = async (req, res) => {
     res.status(500).json({ success: false, message: 'Photo upload mein error', ...(isDev && { error: error.message }) });
   }
 };
+
+// ─── REFER & EARN ─────────────────────────────────────────────────────────────
+const { applyReferralCode, getReferralSummary } = require('../utils/referral');
+
+// GET /api/auth/referral — mera code + stats
+exports.getReferral = async (req, res) => {
+  try {
+    const summary = await getReferralSummary(req.user.id);
+    return res.json({ success: true, data: summary });
+  } catch (error) {
+    console.error('getReferral Error:', error.message);
+    return res.status(500).json({ success: false, message: 'Referral info laane mein error' });
+  }
+};
+
+// POST /api/auth/referral/apply — kisi ka code lagao
+exports.applyReferral = async (req, res) => {
+  try {
+    const result = await applyReferralCode(req.user.id, req.body?.code);
+    if (!result.ok) return res.status(400).json({ success: false, message: result.message });
+    return res.json({ success: true, message: result.message });
+  } catch (error) {
+    console.error('applyReferral Error:', error.message);
+    return res.status(500).json({ success: false, message: 'Referral code lagane mein error' });
+  }
+};
+
+// ─── EMERGENCY CONTACTS ───────────────────────────────────────────────────────
+const PHONE_RE = /^[6-9][0-9]{9}$/;
+
+// GET /api/auth/emergency-contacts
+exports.getEmergencyContacts = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('emergencyContacts');
+    return res.json({ success: true, data: user?.emergencyContacts || [] });
+  } catch (error) {
+    console.error('getEmergencyContacts Error:', error.message);
+    return res.status(500).json({ success: false, message: 'Contacts laane mein error' });
+  }
+};
+
+// PUT /api/auth/emergency-contacts — poori list replace karta hai (app list bhejti hai)
+exports.setEmergencyContacts = async (req, res) => {
+  try {
+    const raw = Array.isArray(req.body?.contacts) ? req.body.contacts : null;
+    if (!raw) return res.status(400).json({ success: false, message: 'contacts list bhejein' });
+    if (raw.length > 3) return res.status(400).json({ success: false, message: 'Zyada se zyada 3 contacts' });
+
+    const contacts = [];
+    for (const c of raw) {
+      const name  = String(c?.name  || '').trim();
+      const phone = String(c?.phone || '').replace(/\D/g, '').slice(-10);
+
+      if (!name)               return res.status(400).json({ success: false, message: 'Har contact ka naam zaroori hai' });
+      if (!PHONE_RE.test(phone)) return res.status(400).json({ success: false, message: `${name} ka number sahi nahi hai` });
+
+      contacts.push({ name, phone, relation: String(c?.relation || '').trim() });
+    }
+
+    await User.findByIdAndUpdate(req.user.id, { $set: { emergencyContacts: contacts } });
+    return res.json({ success: true, message: 'Emergency contacts save ho gaye', data: contacts });
+  } catch (error) {
+    console.error('setEmergencyContacts Error:', error.message);
+    return res.status(500).json({ success: false, message: 'Contacts save karne mein error' });
+  }
+};
