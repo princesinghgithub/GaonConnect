@@ -411,6 +411,15 @@ export const rideAPI = {
 
   getRideById: (id) => api.get(`/ride/${id}`),
 
+  // Extra charge (Rapido jaisa) — driver maangta hai, customer haan/na kehta
+  // hai; kiraya customer ki haan par hi badhta hai.
+  getFareAdjustment: (rideId) => api.get(`/ride/${rideId}/fare-adjustment`),
+  requestFareAdjustment: (data) => api.put("/ride/fare-adjustment", data),
+  respondFareAdjustment: (rideId, accepted) =>
+    api.post(`/ride/${rideId}/fare-adjustment/respond`, { accepted }),
+  withdrawFareAdjustment: (rideId) =>
+    api.post(`/ride/${rideId}/fare-adjustment/withdraw`),
+
   // Cancel karne par kitni fee lagegi — confirm se pehle customer ko dikhane ke liye
   getCancelPreview: (id) => api.get(`/ride/${id}/cancel-preview`),
 

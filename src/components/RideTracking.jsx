@@ -17,6 +17,7 @@ import { ArrowLeft, Car, CheckCircle2, Loader2, MapPin, Phone, Share2, ShieldChe
 import { rideAPI, ratingAPI } from '../services/api';
 import config from '../config/config';
 import Map from '../tabs/Map';
+import FareAdjustmentModal from './FareAdjustmentModal';
 
 const SOCKET_URL = config.apiUrl.replace(/\/api\/?$/, '');
 const ACTIVE = ['searching', 'scheduled', 'accepted', 'arrived', 'started', 'working'];
@@ -64,6 +65,9 @@ const RideTracking = () => {
   const [liveEta, setLiveEta] = useState(null);
   const routeFor = useRef('');
   const statusRef = useRef(null);
+  // Extra charge ki request — jawab de diya / samay khatam to dobara mat kholo
+  const [adjustBusy, setAdjustBusy] = useState(false);
+  const [answeredAdjust, setAnsweredAdjust] = useState('');
 
   const fetchRide = useCallback(async () => {
     try {
@@ -116,7 +120,7 @@ const RideTracking = () => {
       if (Number.isFinite(lat) && Number.isFinite(lng)) setLiveDriver({ lat, lng });
     });
     const refresh = (data) => { if (!data?.rideId || String(data.rideId) === String(rideId)) fetchRide(); };
-    ['rideStatusUpdate', 'rideAccepted', 'rideCancelled', 'scheduledDriverAssigned', 'scheduledRideActivated'].forEach((ev) => sock.on(ev, refresh));
+    ['rideStatusUpdate', 'rideAccepted', 'rideCancelled', 'scheduledDriverAssigned', 'scheduledRideActivated', 'fareAdjustmentRequested'].forEach((ev) => sock.on(ev, refresh));
     return () => sock.disconnect();
   }, [rideId, isActive, fetchRide]);
 
@@ -254,6 +258,36 @@ const RideTracking = () => {
     }
   };
 
+  // ── Extra charge: haan / na ──────────────────────────────────────────────
+  const answerAdjust = async (accepted) => {
+    const pending = ride?.pendingFareAdjustment;
+    if (!pending) return;
+    if (!accepted && !window.confirm(`Extra charge mana karein? Kiraya ₹${ride.fare} hi rahega. Driver zyada paise par ade to support se baat karein.`)) return;
+    setAdjustBusy(true);
+    try {
+      const res = await rideAPI.respondFareAdjustment(rideId, accepted);
+      const d = res.data?.data;
+      setAnsweredAdjust(String(pending.requestedAt || ''));
+      if (d?.accepted) toast.success(`₹${pending.amount} jud gaye. Naya kiraya ₹${d.fare}`);
+      else if (accepted) toast(res.data?.message || 'Extra nahi juda');
+      else toast(`Aapne mana kiya — kiraya ₹${d?.fare ?? ride.fare} hi rahega`);
+      fetchRide();
+    } catch (error) {
+      setAnsweredAdjust(String(pending.requestedAt || ''));
+      toast.error(error.response?.status === 410
+        ? 'Request ka samay khatam ho gaya'
+        : (error.response?.data?.message || 'Jawab nahi bhej paaye'));
+      fetchRide();
+    } finally {
+      setAdjustBusy(false);
+    }
+  };
+
+  // Samay khatam — modal hatao (server bhi ise khatam maanta hai)
+  const expireAdjust = useCallback(() => {
+    setAnsweredAdjust(String(ride?.pendingFareAdjustment?.requestedAt || ''));
+  }, [ride]);
+
   const handleSubmitRating = async () => {
     if (!stars) return;
     setSubmittingRating(true);
@@ -288,6 +322,7 @@ const RideTracking = () => {
   }
 
   const status = ride.status;
+  const pendingAdjust = ride.pendingFareAdjustment?.amount ? ride.pendingFareAdjustment : null;
   const drv = ride.provider;
   const drvUser = drv?.user || {};
   const vehicle = ride.vehicle || {};
@@ -416,6 +451,11 @@ const RideTracking = () => {
             <span className="text-gray-500"><span className="capitalize">{vehicleLabel}</span>{ride.distance ? ` · ${Number(ride.distance).toFixed(1)} km` : ''}</span>
             <span className="text-lg font-black text-gray-900">₹{ride.fare}</span>
           </div>
+          {Number(ride.fareAdjustment) > 0 && (
+            <p className="-mt-1 text-right text-xs font-semibold text-gray-500">
+              Isme ₹{ride.fareAdjustment} extra shaamil hai — aapki manzoori se
+            </p>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-500">Bhugtaan</span>
             <span className="font-semibold text-gray-800">
@@ -490,6 +530,21 @@ const RideTracking = () => {
           <ShieldCheck size={14} /> Safar ke dauran madad: <a href="tel:112" className="font-semibold">112</a>
         </p>
       </div>
+
+      <FareAdjustmentModal
+        request={
+          pendingAdjust
+          && new Date(pendingAdjust.expiresAt).getTime() > Date.now()
+          && answeredAdjust !== String(pendingAdjust.requestedAt || '')
+            ? pendingAdjust
+            : null
+        }
+        currentFare={ride.fare}
+        busy={adjustBusy}
+        onAccept={() => answerAdjust(true)}
+        onDecline={() => answerAdjust(false)}
+        onExpire={expireAdjust}
+      />
     </div>
   );
 };

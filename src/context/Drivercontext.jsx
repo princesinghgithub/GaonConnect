@@ -382,8 +382,11 @@ export const DriverProvider = ({ children }) => {
   const acceptRide = async (rideId) => {
     ringRef.current.pause();
     ringRef.current.currentTime = 0;
-    const res = await rideAPI.acceptRide(rideId);
-    setCurrentRide(res.data.ride);
+    await rideAPI.acceptRide(rideId);
+    // Backend ride `data` mein bhejta hai, `ride` mein nahi — pehle yahan
+    // `res.data.ride` (undefined) set hota tha aur screen 5 second tak
+    // "No active ride" dikhati thi. Ab poori (customer samet) ride dobara.
+    await loadCurrentRide(true);
   };
 
   const rejectRide = async (rideId, reason) => {
@@ -395,8 +398,8 @@ export const DriverProvider = ({ children }) => {
 
   /* ---------------- UPDATE STATUS ---------------- */
   const updateRideStatus = async (rideId, status) => {
-    const res = await rideAPI.updateRideStatus(rideId, status);
-    setCurrentRide(res.data.ride);
+    await rideAPI.updateRideStatus(rideId, status);
+    await loadCurrentRide(true);
 
     if (status === "completed") {
       const s = await providerAPI.getStats();
@@ -408,8 +411,8 @@ export const DriverProvider = ({ children }) => {
   };
 
   const verifyOTP = async (rideId, otp) => {
-    const res = await rideAPI.verifyOTP(rideId, otp);
-    setCurrentRide(res.data.ride);
+    await rideAPI.verifyOTP(rideId, otp);
+    await loadCurrentRide(true);
   };
 
   return (

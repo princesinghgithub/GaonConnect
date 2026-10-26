@@ -437,6 +437,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useDriver } from "../context/Drivercontext";
+import DriverExtraCharge from "../components/DriverExtraCharge";
 
 /* ---------------- STEPS ---------------- */
 const rideSteps = [
@@ -583,25 +584,37 @@ const CurrentRideTab = () => {
       🚖 PHASE 2 : ACCEPTED → COMPLETED
      ==================================================== */
 
+  // Server ki galti (galat OTP, bahut koshish, ride badal gayi) driver ko
+  // dikhni chahiye — pehle error chupchaap kho jaata tha.
   const handleNext = async () => {
-    if (step === 1) {
-      await updateRideStatus(_id, "arrived");
-    }
+    try {
+      if (step === 1) {
+        await updateRideStatus(_id, "arrived");
+      }
 
-    if (step === 2) {
-      setShowOTP(true);
-      return;
-    }
+      if (step === 2) {
+        setShowOTP(true);
+        return;
+      }
 
-    if (step === 3) {
-      await updateRideStatus(_id, "completed");
+      if (step === 3) {
+        await updateRideStatus(_id, "completed");
+        toast.success("Ride poori hui");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Status update nahi ho paaya");
     }
   };
 
   const handleVerifyOtp = async () => {
-    await verifyOTP(_id, otp);
-    setOtp("");
-    setShowOTP(false);
+    try {
+      await verifyOTP(_id, otp);
+      setOtp("");
+      setShowOTP(false);
+      toast.success("Ride shuru ho gayi");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "OTP verify nahi ho paaya");
+    }
   };
 
   return (
@@ -727,6 +740,11 @@ const CurrentRideTab = () => {
           </div>
         </div>
       </div>
+
+      {/* EXTRA CHARGE — chalti ride mein (customer ki haan par hi judta hai) */}
+      {["started", "working"].includes(status) && (
+        <DriverExtraCharge rideId={_id} onFareChange={() => loadCurrentRide(true)} />
+      )}
 
       {/* ACTION BUTTON */}
       {status !== "completed" && (
