@@ -207,6 +207,8 @@ const servicePages = [
   },
   {
     slug: 'wedding-car-booking',
+    // App.jsx isse /car-booking par bhejta hai; prerender isliye ise chhod deta hai
+    redirectTo: 'car-booking',
     emoji: '🏛️',
     title: 'Wedding Car Booking — Shaadi Ki Gaadi Booking | GaonConnect',
     metaDescription: 'Wedding car booking aur shaadi ki gadi booking GaonConnect se karein — vivah, baraat aur function ke liye decorated gaadi turant book karein.',

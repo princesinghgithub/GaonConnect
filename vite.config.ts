@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { seoPrerender } from './scripts/seoPrerender.js'
 
 export default defineConfig({
   build: {
@@ -42,6 +43,10 @@ export default defineConfig({
       workbox: {
         cleanupOutdatedCaches: true,
         sourcemap: true,
+        // Per-route SEO copies of index.html (scripts/seoPrerender.js) are for
+        // crawlers; the app itself navigates from the root index.html, so
+        // don't make every installed PWA download all of them.
+        globIgnores: ['**/node_modules/**/*', '*/index.html', '*/*/index.html'],
         
         // API aur assets ko cache karne ke liye strategies
         runtimeCaching: [
@@ -141,6 +146,8 @@ export default defineConfig({
 
       // ✅ Additional files jo cache mein include karni hain
       includeAssets: ['gaonconnect-icon.png', 'gaonconnect-logo.png', 'pwa-192x192.png', 'robots.txt']
-    })
+    }),
+
+    seoPrerender(),
   ]
 })

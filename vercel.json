@@ -1,4 +1,10 @@
 {
+  "trailingSlash": false,
+  "redirects": [
+    { "source": "/wedding-car-booking", "destination": "/car-booking", "permanent": true },
+    { "source": "/login", "destination": "/auth", "permanent": true },
+    { "source": "/register", "destination": "/auth", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
