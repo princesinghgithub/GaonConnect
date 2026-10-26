@@ -1287,13 +1287,8 @@ exports.updateRideStatus = async (req, res) => {
       });
     }
 
-    if (status === 'started') {
-      if (customerFcm) notify.rideStarted(customerFcm, { driverName, destination: ride.drop.address }).catch(() => {});
-      notifyCustomerInApp(ride.customer?._id, {
-        title: '🚀 Ride Shuru Ho Gayi!', message: `Aap ${ride.drop.address} ja rahe hain. Safe journey!`,
-        type: 'info', data: { rideId: ride._id.toString(), event: 'RIDE_STARTED' },
-      });
-    }
+    // 'started' yahan nahi aata — safar sirf OTP se shuru hota hai, uski
+    // khabar verifyOTPAndStart bhejta hai.
 
     if (status === 'completed') {
       // Customer ko — ride complete
@@ -1506,6 +1501,12 @@ exports.verifyOTPAndStart = async (req, res) => {
     if (customerFcm) {
       notify.rideStarted(customerFcm, { driverName: provider.user?.name || 'Driver', destination: started.drop.address }).catch(() => {});
     }
+    // App ki notification list mein bhi — pehle ye sirf PUT /status wale
+    // raaste mein thi, jisse ride kabhi shuru hoti hi nahi thi.
+    notifyCustomerInApp(started.customer?._id, {
+      title: '🚀 Ride Shuru Ho Gayi!', message: `Aap ${started.drop.address} ja rahe hain. Safe journey!`,
+      type: 'info', data: { rideId: started._id.toString(), event: 'RIDE_STARTED' },
+    }).catch(() => {});
 
     return res.status(200).json({ success: true, message: 'Ride shuru ho gayi!', data: started });
   } catch (error) {
