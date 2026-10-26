@@ -155,7 +155,9 @@ exports.getRideRatings = async (req, res) => {
 // Un rides ki list jo complete hain par rate nahi ki
 exports.getPendingRatings = async (req, res) => {
   try {
-    const isDriver = req.user.role === 'provider';
+    // Token ka role (kaunsi app) — User.role nahi; customer se driver bane
+    // bande ka User.role 'customer' hi rehta hai.
+    const isDriver = req.activeRole === 'provider';
     let completedRides;
 
     if (isDriver) {
@@ -168,7 +170,7 @@ exports.getPendingRatings = async (req, res) => {
         .limit(50);
     } else {
       completedRides = await Ride.find({ customer: req.user.id, status: 'completed' })
-        .populate({ path: 'provider', populate: { path: 'user', select: 'name profilePhoto' } })
+        .populate({ path: 'provider', select: 'user rating', populate: { path: 'user', select: 'name profilePhoto' } })
         .sort({ completedAt: -1 })
         .limit(50);
     }

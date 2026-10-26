@@ -63,7 +63,8 @@ router.post('/register', docUpload.fields([
 ]), registerProvider);
 
 // Available providers near location
-router.get('/available', getAvailableProviders);
+// Login zaroori — bina login ke koi bhi online drivers ki jagah scrape kar sakta tha
+router.get('/available', protect, getAvailableProviders);
 
 // ─── PROTECTED ROUTES — token required ───────────────────────────────────────
 
@@ -305,6 +306,6 @@ router.post('/vehicles/:vehicleId/documents',  protect, docUpload.single('docume
 router.post('/vehicles/:vehicleId/request-change', protect, requestVehicleChange);
 
 // ⚠️  Dynamic :id route MUST be last — warna /me, /stats, /vehicles sab catch ho jaate hain
-router.get('/:id', getProviderById);
+router.get('/:id', protect, getProviderById);
 
 module.exports = router;

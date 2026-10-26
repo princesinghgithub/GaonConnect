@@ -33,6 +33,9 @@ const {
   getPaymentQrStatus,
   getCancelPreview,
   adjustFare,
+  getFareAdjustment,
+  respondFareAdjustment,
+  withdrawFareAdjustment,
   uploadWorkProof,
   requestDropChange,
   respondDropChange,
@@ -394,6 +397,12 @@ router.get('/:id/cancel-preview', protect, getCancelPreview);
 
 // ─── Ride ke dauraan drop badalna (customer) ─────────────────────────────────
 router.post('/:id/drop-change-request', protect, requestDropChange);
+
+// ─── Extra charge: customer haan/na, driver wapas le ─────────────────────────
+// (Request bhejna: PUT /fare-adjustment — driver)
+router.get('/:id/fare-adjustment',           protect, getFareAdjustment);
+router.post('/:id/fare-adjustment/respond',  protect, respondFareAdjustment);
+router.post('/:id/fare-adjustment/withdraw', protect, withdrawFareAdjustment);
 
 // ─── Invoice ──────────────────────────────────────────────────────────────────
 router.get('/:id/invoice', protect, getRideInvoice);

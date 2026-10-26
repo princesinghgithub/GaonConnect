@@ -37,8 +37,8 @@ router.get('/search',            searchLimiter, searchLocation);
 router.get('/details/:placeId',  searchLimiter, getPlaceDetails);
 router.get('/reverse',           searchLimiter, reverseGeocode);
 
-// Sirf local calculation hai (Haversine), koi external call nahi — ise
-// search budget se bandhne ki zarurat nahi.
-router.post('/distance', calculateDistance);
+// Ab ye sadak ka raasta bahar se mangata hai (OSRM, ya GOOGLE_ROUTES_API_KEY
+// ho to Google — paid) — isliye isi search limit ke andar.
+router.post('/distance', searchLimiter, calculateDistance);
 
 module.exports = router;

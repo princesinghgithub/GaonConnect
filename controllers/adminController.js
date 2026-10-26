@@ -3278,17 +3278,72 @@ const cancelRideAdmin = async (req, res) => {
       });
     }
 
-    ride.status = 'cancelled';
-    ride.cancellationReason = reason;
-    ride.cancelledBy = 'admin';
-    ride.cancelledAt = Date.now();
+    // Atomic — beech mein ride complete/cancel ho chuki ho to dobara nahi.
+    const statusBefore = ride.status;
+    const cancelled = await Ride.findOneAndUpdate(
+      { _id: ride._id, status: statusBefore },
+      {
+        $set: {
+          status: 'cancelled',
+          cancellationReason: reason,
+          cancelledBy: 'admin',
+          cancelledAt: new Date(),
+          nextDispatchAt: null,
+        },
+        // Adhuri extra charge request bhi khatam
+        $unset: { pendingFareAdjustment: 1 },
+      },
+      { new: true },
+    );
+    if (!cancelled) {
+      return res.status(409).json({ success: false, message: 'Ride is beech badal gayi — page refresh karein' });
+    }
 
-    await ride.save();
+    // Pehle yahan sirf status badalta tha: driver hamesha 'busy' reh jaata
+    // (use kabhi nayi ride nahi milti), dono apps ko pata hi nahi chalta, aur
+    // customer ka promo bina ride ke kharch ho jaata.
+    const { getIO } = require('../socket');
+    const { releasePromo } = require('./promoController');
+    const io = getIO();
+    const customerId = String(cancelled.customer);
+
+    if (cancelled.promoCode) await releasePromo(cancelled.promoCode, customerId);
+
+    if (cancelled.provider) {
+      // Pakki pre-booking (abhi chalu nahi) par driver kisi aur kaam par ho sakta hai
+      if (statusBefore !== 'scheduled') {
+        await Driver.updateOne({ _id: cancelled.provider, status: 'busy' }, { $set: { status: 'available' } });
+      }
+      io.to(`driver_${cancelled.provider}`).emit('rideCancelled', { rideId: cancelled._id, reason: 'Admin ne ride cancel ki' });
+      const driverDoc = await Driver.findById(cancelled.provider).select('deviceInfo');
+      if (driverDoc?.deviceInfo?.fcmToken) {
+        notify.custom(driverDoc.deviceInfo.fcmToken, {
+          title: '❌ Ride Cancel',
+          body:  'Admin ne yeh ride cancel kar di hai.',
+          data:  { type: 'RIDE_CANCELLED', rideId: String(cancelled._id) },
+        }).catch(() => {});
+      }
+    }
+    // Jin drivers ko request gayi thi unki screen se hatao
+    (cancelled.notifiedDrivers || []).forEach((driverId) => {
+      if (String(driverId) === String(cancelled.provider)) return;
+      io.to(`driver_${driverId}`).emit('rideNoLongerAvailable', { rideId: String(cancelled._id) });
+    });
+
+    io.to(`user_${customerId}`).emit('rideCancelled', { rideId: cancelled._id, reason: reason || 'Ride cancel ho gayi' });
+    const customerDoc = await User.findById(customerId).select('fcmToken');
+    if (customerDoc?.fcmToken) {
+      notify.custom(customerDoc.fcmToken, {
+        title: '❌ Ride Cancel Ho Gayi',
+        body:  reason ? `Aapki ride cancel ki gayi: ${reason}` : 'Aapki ride cancel ki gayi hai.',
+        data:  { type: 'RIDE_CANCELLED', rideId: String(cancelled._id) },
+      }).catch(() => {});
+    }
 
     res.json({
       success: true,
       message: 'Ride cancelled successfully',
-      data: ride
+      data: cancelled
     });
   } catch (error) {
     res.status(500).json({
@@ -3563,10 +3618,21 @@ const getPaymentStats = async (req, res) => {
   }
 };
 
+// Driver ki withdrawal request — Transaction (type 'debit', status 'pending').
+// Sirf itna dekhna kaafi nahi tha: customer ka baaki cancel charge bhi
+// debit + pending hota hai (user wala, provider nahi). Wo is list mein aa kar
+// "completed" hone par bina wasool hue maaf ho jaata tha. Purani withdrawals
+// par category nahi lagti thi (default 'adjustment'), isliye wo bhi.
+const WITHDRAWAL_FILTER = {
+  type:     'debit',
+  status:   'pending',
+  provider: { $ne: null },
+  category: { $in: ['withdrawal', 'adjustment'] },
+};
+
 const getPendingWithdrawals = async (req, res) => {
   try {
-    // Driver withdrawal requests Transaction collection mein store hote hain (type:'debit')
-    const withdrawals = await Transaction.find({ type: 'debit', status: 'pending' })
+    const withdrawals = await Transaction.find(WITHDRAWAL_FILTER)
       .sort({ createdAt: -1 })
       .populate({
         path: 'provider',
@@ -3595,15 +3661,23 @@ const processWithdrawal = async (req, res) => {
       return res.status(400).json({ success: false, message: "Status 'completed' ya 'failed' hona chahiye" });
     }
 
-    const txn = await Transaction.findOne({ _id: req.params.id, type: 'debit', status: 'pending' });
+    // Atomic pending → completed/failed. Pehle padh kar save karte the — admin
+    // ka double-click (ya do tab) dono baar "pending" dekhta aur failed par
+    // paisa do baar wapas wallet mein jud jaata.
+    const txn = await Transaction.findOneAndUpdate(
+      { _id: req.params.id, ...WITHDRAWAL_FILTER },
+      {
+        $set: {
+          status,
+          processedAt: new Date(),
+          ...(status === 'failed' ? { failureReason: remarks } : {}),
+        },
+      },
+      { new: true },
+    );
     if (!txn) {
       return res.status(404).json({ success: false, message: 'Pending withdrawal request nahi mili' });
     }
-
-    txn.status = status;
-    txn.processedAt = new Date();
-    if (status === 'failed') txn.failureReason = remarks;
-    await txn.save();
 
     if (status === 'completed') {
       // Pending amount clear karo, total withdrawals mein add karo
@@ -5802,7 +5876,7 @@ const getAlerts = async (req, res) => {
       Driver.countDocuments({ createdAt: { $gte: todayStart } }),
       User.countDocuments({ createdAt: { $gte: todayStart }, role: 'customer' }),
       Driver.countDocuments({ isApproved: false, isRejected: false, isBlocked: false }),
-      Transaction.countDocuments({ type: 'debit', status: 'pending' }),
+      Transaction.countDocuments(WITHDRAWAL_FILTER),
       Complaint.countDocuments({ status: { $in: ['open', 'investigating'] } }),
     ]);
 

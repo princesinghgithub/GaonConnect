@@ -136,7 +136,18 @@ const applyReferralCode = async (userId, rawCode) => {
     return { ok: false, message: 'Apna hi code nahi laga sakte' };
   }
 
-  await User.findByIdAndUpdate(userId, { $set: { referredBy: referrer._id } });
+  // Naye customer ke liye hai. Pehle ye jaanch thi hi nahi — 50 ride kar
+  // chuka customer bhi dost ka code laga deta aur agli ride par dono ko bonus
+  // mil jaata (code badal-badal kar paisa).
+  const done = await Ride().countDocuments({ customer: userId, status: 'completed' });
+  if (done > 0) return { ok: false, message: 'Referral code sirf pehli ride se pehle lag sakta hai' };
+
+  // Atomic — do request ek saath aayein to bhi ek hi code
+  const set = await User.findOneAndUpdate(
+    { _id: userId, referredBy: null }, // null ya field hi nahi — dono
+    { $set: { referredBy: referrer._id } },
+  );
+  if (!set) return { ok: false, message: 'Aap pehle hi ek referral code laga chuke hain' };
 
   const reward = settings?.referral?.refereeReward ?? 50;
   return {
@@ -160,6 +171,10 @@ const rewardReferralIfFirstRide = async (userId) => {
 
     const user = await User.findById(userId).select('referredBy referralRewarded');
     if (!user?.referredBy || user.referralRewarded) return;
+
+    // Sach mein PEHLI ride ho — purane data mein code baad mein laga ho to bhi
+    const done = await Ride().countDocuments({ customer: userId, status: 'completed' });
+    if (done !== 1) return;
 
     const referrerReward = conf.referrerReward ?? 50;
     const refereeReward  = conf.refereeReward  ?? 50;

@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const Ride   = require('../models/Ride');
 const { getIO } = require('../socket');
-const { creditPlatformCollection } = require('../utils/walletOps');
+const { creditPlatformCollection, completeTopup } = require('../utils/walletOps');
 
 // ─── RAZORPAY WEBHOOK ──────────────────────────────────────────────────────────
 // Razorpay dashboard se seedha server-to-server call aata hai (payment.captured /
@@ -42,10 +42,24 @@ exports.razorpayWebhook = async (req, res) => {
 
       const ride = await Ride.findOne({ razorpayOrderId: orderId });
       if (ride) {
-        ride.paymentStatus = event.event === 'payment.captured' ? 'paid' : 'failed';
-        if (event.event === 'payment.captured') ride.razorpayPaymentId = payment.id;
+        // Ek order par kai koshishein ho sakti hain, aur webhook kram se nahi
+        // aate. Pehli fail koshish ka event safal payment ke BAAD aaya to
+        // pehle ride 'failed' ho jaati — phir wo customer ke "baaki" mein jud
+        // kar dobara wasool hoti. Bhari hui ride kabhi failed nahi hoti.
+        if (event.event === 'payment.captured') {
+          ride.paymentStatus = 'paid';
+          ride.razorpayPaymentId = payment.id;
+        } else if (ride.paymentStatus !== 'paid') {
+          ride.paymentStatus = 'failed';
+        }
         await ride.save();
         console.log(`Razorpay webhook: ride ${ride._id} → ${ride.paymentStatus}`);
+      } else if (event.event === 'payment.captured') {
+        // Ride ka order nahi — shayad wallet top-up. App payment ke beech band
+        // ho jaaye to verify call aati hi nahi; tab paisa yahin se judta hai.
+        // completeTopup atomic hai, app ka verify bhi aaye to ek hi baar.
+        const { credited, txn } = await completeTopup({ orderId, paymentId: payment.id });
+        if (credited) console.log(`Razorpay webhook: top-up ${txn._id} ₹${txn.amount} credited`);
       }
     }
 

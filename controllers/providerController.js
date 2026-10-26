@@ -1377,10 +1377,13 @@ exports.getAvailableProviders = async (req, res) => {
       baseQuery.activeVehicle = { $in: matchingVehicles.map((v) => v._id) };
     }
 
+    // Sirf wahi jo naksha/suchi dikhane ko chahiye. Pehle yahan '-documents.aadhaar'
+    // ke alawa SAB jaata tha — phone, bank account + IFSC, PAN, wallet, DOB,
+    // emergency contact, FCM token — aur ye route bina login ke khula tha.
     let query = Provider.find(baseQuery)
-      .populate('user', 'name phone city profilePhoto')
-      .populate('activeVehicle', 'type number model color')
-      .select('-documents.aadhaar')
+      .populate('user', 'name profilePhoto')
+      .populate('activeVehicle', 'type model color')
+      .select('user activeVehicle rating currentLocation')
       .lean();
 
     if (!isNaN(lat) && !isNaN(lng)) {
@@ -1391,7 +1394,17 @@ exports.getAvailableProviders = async (req, res) => {
       });
     }
 
-    const providers = await query.limit(20);
+    const rough = (n) => Math.round(Number(n) * 1000) / 1000; // ~100 m — ghar ka pata na dikhe
+    const providers = (await query.limit(20)).map((p) => ({
+      _id:      p._id,
+      name:     p.user?.name || 'Driver',
+      profilePhoto: p.user?.profilePhoto || '',
+      rating:   { average: p.rating?.average || 0, count: p.rating?.count || 0 },
+      vehicle:  p.activeVehicle ? { type: p.activeVehicle.type, model: p.activeVehicle.model, color: p.activeVehicle.color } : null,
+      location: Array.isArray(p.currentLocation?.coordinates)
+        ? { lat: rough(p.currentLocation.coordinates[1]), lng: rough(p.currentLocation.coordinates[0]) }
+        : null,
+    }));
 
     res.json({ success: true, count: providers.length, providers });
 
@@ -1404,15 +1417,29 @@ exports.getAvailableProviders = async (req, res) => {
 // GET provider by ID
 exports.getProviderById = async (req, res) => {
   try {
+    // Sirf public profile — pehle phone, PAN, DOB, emergency contact, wallet,
+    // live location aur FCM token bhi jaate the, bina login ke.
     const provider = await Provider.findById(req.params.id)
-      .populate('user', 'name phone city profilePhoto')
-      .populate('activeVehicle')
-      .select('-documents.aadhaar -bankDetails');
+      .populate('user', 'name profilePhoto')
+      .populate('activeVehicle', 'type model color number')
+      .select('user activeVehicle rating stats.completedTrips createdAt')
+      .lean();
 
     if (!provider)
       return res.status(404).json({ success: false, message: 'Provider not found' });
 
-    res.json({ success: true, provider });
+    res.json({
+      success: true,
+      provider: {
+        _id:            provider._id,
+        name:           provider.user?.name || 'Driver',
+        profilePhoto:   provider.user?.profilePhoto || '',
+        rating:         { average: provider.rating?.average || 0, count: provider.rating?.count || 0 },
+        completedTrips: provider.stats?.completedTrips || 0,
+        vehicle:        provider.activeVehicle || null,
+        memberSince:    provider.createdAt,
+      },
+    });
 
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -1958,16 +1985,17 @@ exports.getTodayEarnings = async (req, res) => {
     const provider = await Provider.findOne({ user: req.user.id });
     if (!provider) return res.status(404).json({ success: false });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { istDayRange } = require('../utils/incentive');
+    const { rideEarning, EARNING_FIELDS } = require('../utils/earning');
 
+    // "Aaj" IST se — server UTC par hai, wahan aadhi raat subah 5:30 IST hoti.
     const rides = await Ride.find({
       provider: provider._id,
       status: 'completed',
-      completedAt: { $gte: today }
-    });
+      completedAt: { $gte: istDayRange().start }
+    }).select(EARNING_FIELDS).lean();
 
-    const total = rides.reduce((s, r) => s + (r.fare || 0), 0);
+    const total = rides.reduce((s, r) => s + rideEarning(r), 0);
 
     res.json({
       success: true,
@@ -1989,13 +2017,15 @@ exports.getWeeklyEarnings = async (req, res) => {
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
+    const { rideEarning, EARNING_FIELDS } = require('../utils/earning');
+
     const rides = await Ride.find({
       provider: provider._id,
       status: 'completed',
       completedAt: { $gte: weekAgo }
-    });
+    }).select(EARNING_FIELDS).lean();
 
-    const total = rides.reduce((s, r) => s + (r.fare || 0), 0);
+    const total = rides.reduce((s, r) => s + rideEarning(r), 0);
 
     res.json({
       success: true,
@@ -2019,6 +2049,7 @@ exports.getDailyEarnings = async (req, res) => {
     if (!provider) return res.status(404).json({ success: false, message: 'Driver nahi mila' });
 
     const { istDayRange } = require('../utils/incentive');
+    const { rideEarning, EARNING_FIELDS } = require('../utils/earning');
 
     // Aaj se peeche 7 din. Din IST se naapa jaata hai — UTC pe "aaj" subah
     // 5:30 baje badalta, jo driver ke liye bilkul galat hai.
@@ -2033,13 +2064,13 @@ exports.getDailyEarnings = async (req, res) => {
       provider:    provider._id,
       status:      'completed',
       completedAt: { $gte: days[0].start, $lt: days[days.length - 1].end },
-    }).select('fare completedAt').lean();
+    }).select(EARNING_FIELDS).lean();
 
     const result = days.map((d) => {
       const dayRides = rides.filter((r) => r.completedAt >= d.start && r.completedAt < d.end);
       return {
         date:     d.key,
-        earnings: dayRides.reduce((sum, r) => sum + (r.fare || 0), 0),
+        earnings: dayRides.reduce((sum, r) => sum + rideEarning(r), 0),
         rides:    dayRides.length,
       };
     });

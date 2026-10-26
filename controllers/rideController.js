@@ -31,7 +31,34 @@ const { buildInvoiceHTML, sendInvoice } = require('../utils/invoiceGenerator');
 const DISPATCH_RADIUS_STAGES = require('../config/dispatchRadiusConfig');
 const MAX_TRIP_DISTANCE_KM   = require('../config/maxTripDistanceConfig');
 
+const redis = require('../config/redis');
+
+// Customer ko driver ke record mein se sirf itna — naam/phone user se aate
+// hain. Pehle poora Provider jaata tha: bank account + IFSC, PAN, wallet,
+// DOB, emergency contact, FCM token sab customer ki app tak.
+const PUBLIC_PROVIDER_FIELDS = 'user rating currentLocation locationUpdatedAt activeVehicle';
+
 const isDev = process.env.NODE_ENV !== 'production';
+
+// Safar ka OTP 4 ank ka hai — bina had ke koi bhi 9000 baar try karke tod
+// sakta tha. Ek ride par itni galat koshish ke baad thodi der ke liye band.
+const RIDE_OTP_MAX_ATTEMPTS = 5;
+const RIDE_OTP_LOCK_SEC     = 10 * 60;
+const rideOtpAttemptsKey = (rideId) => `ride_otp_attempts:${rideId}`;
+
+// Driver pickup par pahuncha (arrivedAt) aur safar shuru hua — beech ka
+// intezaar aur uska charge. Us gaadi ke rate card se, wahi jo customer ko fare
+// screen par dikha tha. Charge abhi sirf ride par likha jaata hai; kiraye mein
+// completion par judta hai, taaki hourly ka dobara hisaab use mita na de.
+const waitFieldsAtStart = async (ride, startedAt) => {
+  if (!ride.arrivedAt) return {};
+  const waitMins = Math.max(0, Math.floor((startedAt - new Date(ride.arrivedAt)) / 60000));
+  const settings = await getSettings();
+  const charge   = calculateRideWaitingCharge(
+    waitMins, settings?.vehicleRates?.[ride.vehicleType], settings?.waiting,
+  );
+  return { waitMinutes: waitMins, waitingCharge: charge };
+};
 
 const razorpay = new Razorpay({
   key_id:     process.env.RAZORPAY_KEY,
@@ -714,7 +741,7 @@ exports.getRideById = async (req, res) => {
     // plate milaane ke liye. Uber/Rapido dono yeh hamesha dikhate hain.
     const ride = await Ride.findById(req.params.id)
       .populate('customer', 'name phone profilePhoto')
-      .populate({ path: 'provider', populate: { path: 'user', select: 'name phone profilePhoto' } })
+      .populate({ path: 'provider', select: PUBLIC_PROVIDER_FIELDS, populate: { path: 'user', select: 'name phone profilePhoto' } })
       .populate('vehicle', 'number model color type');
 
     if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
@@ -747,7 +774,7 @@ exports.getCurrentRideCustomer = async (req, res) => {
       // customer ke liye ride "gayab" ho jaati thi.
       status:   { $in: ['searching', 'accepted', 'arrived', 'started', 'working'] },
     })
-      .populate({ path: 'provider', populate: { path: 'user', select: 'name phone profilePhoto' } })
+      .populate({ path: 'provider', select: PUBLIC_PROVIDER_FIELDS, populate: { path: 'user', select: 'name phone profilePhoto' } })
       .populate('vehicle', 'number model color type')
       .sort({ createdAt: -1 });
 
@@ -886,6 +913,17 @@ exports.acceptRide = async (req, res) => {
       }).catch(() => {});
 
       return res.json({ success: true, message: 'Pre-booking pakki', data: { ride: booked, scheduled: true, when } });
+    }
+
+    // Ek driver, ek chalti ride. Pehle ye jaanch nahi thi — do request ek saath
+    // aayi hon to driver dono accept kar leta, aur doosra customer us driver ka
+    // intezaar karta reh jaata jo pehle se kisi aur ki ride par hai.
+    const busyWith = await Ride.findOne({
+      provider: provider._id,
+      status:   { $in: ['accepted', 'arrived', 'started', 'working'] },
+    }).select('_id');
+    if (busyWith) {
+      return res.status(409).json({ success: false, message: 'Pehle chalti ride poori karein, phir nayi ride le sakte hain' });
     }
 
     // Atomic check-and-set — jab ek saath kai drivers (jaise scheduled
@@ -1081,14 +1119,20 @@ exports.updateRideStatus = async (req, res) => {
       });
     }
 
+    // arrived → started yahan se nahi — safar sirf customer ke OTP se shuru
+    // hota hai (POST /ride/verify-otp). Pehle yahan seedha 'started' bhej kar
+    // OTP ke bina ride shuru ho jaati thi.
     const allowedTransitions = {
       searching: ['accepted', 'cancelled'],
       accepted:  ['arrived', 'cancelled'],
-      arrived:   ['started', 'cancelled'],
+      arrived:   ['cancelled'],
       started:   ['completed', 'working'],
       working:   ['completed'],
     };
 
+    if (ride.status === 'arrived' && status === 'started') {
+      return res.status(400).json({ success: false, message: 'Ride shuru karne ke liye customer ka OTP daalein' });
+    }
     if (!allowedTransitions[ride.status]?.includes(status)) {
       return res.status(400).json({ success: false, message: `${ride.status} → ${status} allowed nahi` });
     }
@@ -1110,26 +1154,6 @@ exports.updateRideStatus = async (req, res) => {
     // credit) se bach jaate hain.
     const updateFields = { status };
     if (status === 'arrived') updateFields.arrivedAt    = new Date();
-    if (status === 'started') updateFields.startedAt    = new Date();
-
-    // ─── Waiting charge ──────────────────────────────────────────────────────
-    // calculateWaitingCharge() pehle se likha tha par waitMinutes kabhi
-    // calculate hi nahi hota tha — hamesha 0 jaata tha, isliye driver ko wait
-    // ka ek rupaya nahi milta tha. arrivedAt se start tak ka time yahan naapa
-    // jaata hai. Charge abhi sirf store hota hai; fare mein completion pe joda
-    // jaata hai, taaki hourly recalculation use mita na de.
-    if (status === 'started' && ride.arrivedAt) {
-      const waitedMs  = updateFields.startedAt - new Date(ride.arrivedAt);
-      const waitMins  = Math.max(0, Math.floor(waitedMs / 60000));
-      const settings  = await getSettings();
-      // Us gaadi ke rate card se — wahi jo customer ko fare screen par dikha tha.
-      const charge    = calculateRideWaitingCharge(
-        waitMins, settings?.vehicleRates?.[ride.vehicleType], settings?.waiting,
-      );
-
-      updateFields.waitMinutes   = waitMins;
-      updateFields.waitingCharge = charge;
-    }
 
     if (status === 'working') {
       updateFields.workStartedAt = new Date();
@@ -1216,9 +1240,16 @@ exports.updateRideStatus = async (req, res) => {
     }
 
     const previousStatus = ride.status;
+    const statusUpdate = { $set: updateFields };
+    // Ride poori — jawab ka intezaar karti extra charge request ab maanya nahi
+    // (customer ride ke baad "haan" daba kar bill na badle).
+    if (status === 'completed' && hasPendingAdjust(ride)) {
+      statusUpdate.$unset = { pendingFareAdjustment: 1 };
+      statusUpdate.$push  = { fareAdjustments: adjustHistoryEntry(ride.pendingFareAdjustment, 'expired') };
+    }
     const updatedRide = await Ride.findOneAndUpdate(
       { _id: ride._id, status: previousStatus },
-      { $set: updateFields },
+      statusUpdate,
       { new: true },
     ).populate('customer', 'name phone');
 
@@ -1238,7 +1269,10 @@ exports.updateRideStatus = async (req, res) => {
 
     // Socket
     const io = getIO();
-    io.to(`user_${ride.customer}`).emit('rideStatusUpdate', { rideId: ride._id, status });
+    // ride.customer yahan populate hua object hai — seedha string banane par
+    // room "user_{ name: … }" banta tha, aur arrived/completed ki khabar
+    // customer tak kabhi nahi pahunchti thi (app ka 5s poll use chhupa deta).
+    io.to(`user_${ride.customer?._id || ride.customer}`).emit('rideStatusUpdate', { rideId: ride._id, status });
 
     // ─── Per-status notifications ─────────────────────────────────────────────
     const customerFcm  = await getCustomerFcm(ride.customer?._id);
@@ -1414,32 +1448,66 @@ exports.verifyOTPAndStart = async (req, res) => {
     const { rideId, otp } = req.body;
     if (!rideId || !otp) return res.status(400).json({ success: false, message: 'rideId aur OTP required hai' });
 
+    // Sirf isi ride ka driver — pehle koi bhi logged-in user kisi ki bhi ride
+    // ka OTP try kar sakta tha.
+    const provider = await Provider.findOne({ user: req.user.id }).select('_id user').populate('user', 'name');
+    if (!provider) return res.status(403).json({ success: false, message: 'Unauthorized driver' });
+
     const ride = await Ride.findById(rideId).populate('customer', 'name phone');
     if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
+
+    if (!ride.provider || ride.provider.toString() !== provider._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized driver for this ride' });
+    }
 
     if (ride.status !== 'arrived') {
       return res.status(400).json({ success: false, message: "Pehle 'Pickup Pe Pahunch Gaya' dabao" });
     }
 
+    const attemptsKey = rideOtpAttemptsKey(ride._id);
+    const attempts = parseInt((await redis.get(attemptsKey).catch(() => null)) || '0', 10);
+    if (attempts >= RIDE_OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({
+        success: false,
+        message: 'Bahut baar galat OTP daala gaya. 10 minute baad koshish karein ya support se baat karein.',
+      });
+    }
+
     if (ride.otp !== String(otp)) {
+      await redis.pipeline()
+        .incr(attemptsKey)
+        .expire(attemptsKey, RIDE_OTP_LOCK_SEC)
+        .exec()
+        .catch(() => {});
       return res.status(401).json({ success: false, message: 'OTP galat hai' });
     }
 
-    ride.status    = 'started';
-    ride.startedAt = new Date();
-    await ride.save();
+    // Atomic — do request ek saath aayein (double tap) to bhi ek hi baar shuru.
+    // Intezaar ka charge bhi yahin naapa jaata hai: driver app ride isi raaste
+    // se shuru karti hai, aur pehle yahan ye hisaab hota hi nahi tha — driver
+    // ke intezaar ka paisa hamesha 0 jaata tha.
+    const startedAt = new Date();
+    const started = await Ride.findOneAndUpdate(
+      { _id: ride._id, status: 'arrived' },
+      { $set: { status: 'started', startedAt, ...(await waitFieldsAtStart(ride, startedAt)) } },
+      { new: true },
+    ).populate('customer', 'name phone');
+    if (!started) {
+      return res.status(409).json({ success: false, message: 'Ride status already updated by another request' });
+    }
+    redis.del(attemptsKey).catch(() => {});
 
     // Socket
     const io = getIO();
-    io.to(`user_${ride.customer?._id}`).emit('rideStatusUpdate', { rideId: ride._id, status: 'started' });
+    io.to(`user_${started.customer?._id}`).emit('rideStatusUpdate', { rideId: started._id, status: 'started' });
 
     // Push notification
-    const customerFcm = await getCustomerFcm(ride.customer?._id);
+    const customerFcm = await getCustomerFcm(started.customer?._id);
     if (customerFcm) {
-      notify.rideStarted(customerFcm, { driverName: 'Driver', destination: ride.drop.address }).catch(() => {});
+      notify.rideStarted(customerFcm, { driverName: provider.user?.name || 'Driver', destination: started.drop.address }).catch(() => {});
     }
 
-    return res.status(200).json({ success: true, message: 'Ride shuru ho gayi!', data: ride });
+    return res.status(200).json({ success: true, message: 'Ride shuru ho gayi!', data: started });
   } catch (error) {
     console.error('Verify OTP Error:', error);
     return res.status(500).json({ success: false, message: 'OTP verify karne mein error' });
@@ -1530,6 +1598,12 @@ exports.cancelRide = async (req, res) => {
     const canRequeue = terms.requeue;
     const noShow     = terms.code === 'customer_no_show';
 
+    // Adhuri extra charge request — ride cancel/requeue ke baad maanya nahi
+    if (hasPendingAdjust(ride)) {
+      ride.fareAdjustments.push(adjustHistoryEntry(ride.pendingFareAdjustment, 'expired'));
+      ride.pendingFareAdjustment = undefined;
+    }
+
     if (canRequeue) {
       ride.status             = 'searching';
       ride.provider           = null;
@@ -1539,6 +1613,11 @@ exports.cancelRide = async (req, res) => {
       // stale maan kar band kar deta.
       ride.searchingSince     = new Date();
       ride.dispatchStageIndex = 0;
+      // Chhodne wale driver ka manzoor extra naye driver ki ride par nahi
+      if (Number(ride.fareAdjustment) > 0) {
+        ride.fare           = Math.max(0, (Number(ride.fare) || 0) - Number(ride.fareAdjustment));
+        ride.fareAdjustment = 0;
+      }
       ride.cancellationReason = reason || 'Driver cancelled';
       ride.cancellationFee    = cancellationFee;
       await ride.save();
@@ -1681,105 +1760,396 @@ exports.cancelRide = async (req, res) => {
   }
 };
 
-// ─── Kaam tay se zyada nikla: extra raashi ───────────────────────────────────
-// PUT /api/ride/fare-adjustment  { rideId, extraAmount, extraHours, reason, approved }
+// ─── Extra charge (Rapido jaisa) ─────────────────────────────────────────────
+// Driver maangta hai, customer APNI app se haan/na kehta hai:
+//   1. PUT  /api/ride/fare-adjustment               (driver)   — request bhejo
+//      { rideId, type, extraAmount, extraHours, reason }
+//   2. POST /api/ride/:id/fare-adjustment/respond   (customer) — { accepted }
+//   3. POST /api/ride/:id/fare-adjustment/withdraw  (driver)   — request wapas
 //
-// Tractor/JCB ke kaam mein roz hota hai: ek ghante ka bola tha, do lag gaye.
-// Driver naya hisaab banata hai, phone customer ko dikhata hai, aur customer
-// ke haan kehne par "approved" bhejta hai. Mana kare to bhi record rehta hai.
+// Pehle "customer ne haan kahi" bhi driver hi apne phone se bhejta tha — yaani
+// driver bina pooche kiraya dugna tak badha sakta tha. Ab kiraya tabhi badhta
+// hai jab customer khud apni app mein "Haan" dabaye.
 //
 // Customer ki suraksha:
-//   • use turant app mein aur push se nayi rakam aur wajah dikhti hai
-//   • ek ride par zyada se zyada 3 baar
-//   • extra kul mila kar ride ke asal kiraye ke dugne se zyada nahi
+//   • ek waqt mein ek hi request, 5 minute tak — jawab na aaye to khatam
+//   • ek ride par zyada se zyada 3 extra manzoor, aur kul 6 request
+//   • extra kul mila kar asal kiraye ke dugne se zyada nahi
+//   • ghante ke hisaab wale kaam par "zyada samay" nahi maang sakte — wahan
+//     asli chala hua samay bill mein apne aap judta hai (dohra charge hota)
+const FARE_ADJUST_TYPES        = require('../config/fareAdjustmentTypes');
+const FARE_ADJUST_TTL_MS       = 5 * 60 * 1000;
+const FARE_ADJUST_MAX_APPROVED = 3;
+const FARE_ADJUST_MAX_REQUESTS = 6;
+const FARE_ADJUST_STATUSES     = ['arrived', 'started', 'working'];
+
+const hasPendingAdjust = (ride) => !!ride?.pendingFareAdjustment?.amount;
+const isAdjustExpired  = (pending, now = Date.now()) =>
+  !pending?.expiresAt || new Date(pending.expiresAt).getTime() <= now;
+
+// Pending request jab khatam ho (haan / na / samay khatam / wapas) — itihaas ki entry
+const adjustHistoryEntry = (pending, status) => ({
+  amount:      pending.amount,
+  hours:       pending.hours || 0,
+  type:        pending.type || 'other',
+  reason:      pending.reason || '',
+  approved:    status === 'approved',
+  status,
+  requestedAt: pending.requestedAt,
+  at:          new Date(),
+});
+
+// Asal kiraya = abhi ka kiraya − pehle ke manzoor extra − pichhla baaki
+const originalFareOf = (ride) => Math.max(
+  0,
+  (Number(ride.fare) || 0) - (Number(ride.fareAdjustment) || 0) - (Number(ride.dues?.amount) || 0),
+);
+
+// Is kaam ka bill asli chale hue ghanton se banta hai? Wahi niyam jo ride
+// complete hote waqt lagta hai (updateRideStatus).
+const isBilledByTime = async (ride) => {
+  const isHourlyJob = !!(ride.serviceCategory && ride.serviceType)
+    && (ride.bookingMode === 'hourly' || Number(ride.estimatedHours) > 0);
+  if (!isHourlyJob) return false;
+  try {
+    const r = await getDynamicHourlyFare(
+      ride.vehicleType, ride.serviceCategory, ride.serviceType,
+      Number(ride.estimatedHours) || 1, ride.distance,
+      { quantity: ride.serviceQuantity || 0, chosenUnit: ride.chosenUnit || null },
+    );
+    return (r.unit || 'hour') === 'hour';
+  } catch {
+    return true; // pata na chale to dohre charge se bachao
+  }
+};
+
+// Apps ko jo chahiye — abhi ka kiraya aur koi request baaki hai to wo
+const adjustPayload = (ride) => ({
+  fare:                  ride.fare,
+  fareAdjustment:        ride.fareAdjustment || 0,
+  pendingFareAdjustment: hasPendingAdjust(ride) ? ride.pendingFareAdjustment : null,
+});
+
+// Samay khatam ho chuki request ko hata kar itihaas mein daalo (atomic).
+const clearExpiredAdjust = async (ride) => {
+  if (!hasPendingAdjust(ride) || !isAdjustExpired(ride.pendingFareAdjustment)) return ride;
+  const pending = ride.pendingFareAdjustment;
+  const updated = await Ride.findOneAndUpdate(
+    { _id: ride._id, 'pendingFareAdjustment.requestedAt': pending.requestedAt },
+    { $unset: { pendingFareAdjustment: 1 }, $push: { fareAdjustments: adjustHistoryEntry(pending, 'expired') } },
+    { new: true },
+  );
+  return updated || Ride.findById(ride._id);
+};
+
 exports.adjustFare = async (req, res) => {
   try {
     const provider = await Provider.findOne({ user: req.user.id }).populate('user', 'name');
     if (!provider) return res.status(403).json({ success: false, message: 'Unauthorized driver' });
 
-    const { rideId, reason, approved } = req.body;
+    const { rideId } = req.body;
     const extraAmount = Math.round(Number(req.body.extraAmount));
-    const extraHours  = Number(req.body.extraHours) || 0;
+    const extraHours  = Math.max(0, Number(req.body.extraHours) || 0);
+    // Purani app type nahi bhejti — uski likhi wajah "anya" mein jaati hai
+    const type   = Object.prototype.hasOwnProperty.call(FARE_ADJUST_TYPES, req.body.type) ? req.body.type : 'other';
+    const conf   = FARE_ADJUST_TYPES[type];
+    const reason = String(req.body.reason || '').trim().slice(0, 300);
 
     if (!Number.isFinite(extraAmount) || extraAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Extra raashi sahi nahi hai' });
     }
-    if (!String(reason || '').trim()) {
+    if (conf.needsReason && !reason) {
       return res.status(400).json({ success: false, message: 'Wajah likhna zaroori hai' });
     }
+    if (conf.needsHours && !(extraHours > 0)) {
+      return res.status(400).json({ success: false, message: 'Kitne ghante zyada lage, wo chunein' });
+    }
 
-    const ride = await Ride.findById(rideId);
+    let ride = await Ride.findById(rideId);
     if (!ride) return res.status(404).json({ success: false, message: 'Ride not found' });
     if (!ride.provider || ride.provider.toString() !== provider._id.toString()) {
       return res.status(403).json({ success: false, message: 'Unauthorized driver for this ride' });
     }
-    if (!['arrived', 'started', 'working'].includes(ride.status)) {
-      return res.status(400).json({ success: false, message: 'Kiraya sirf chalte kaam ke dauraan badla ja sakta hai' });
+    if (!FARE_ADJUST_STATUSES.includes(ride.status)) {
+      return res.status(400).json({ success: false, message: 'Extra charge sirf chalte kaam ke dauraan maanga ja sakta hai' });
     }
 
-    const entry = { amount: extraAmount, hours: extraHours, reason: String(reason).trim().slice(0, 300), approved: approved === true, at: new Date() };
-
-    // Customer ne mana kiya — sirf record, kiraya wahi.
-    if (!entry.approved) {
-      await Ride.updateOne({ _id: ride._id }, { $push: { fareAdjustments: entry } });
-      return res.json({ success: true, message: 'Customer ne mana kiya — kiraya wahi rahega', data: { fare: ride.fare, fareAdjustment: ride.fareAdjustment || 0 } });
+    // Purani driver app: "customer ne mana kiya" driver ke phone se — sirf
+    // record. ("Haan" ab driver ke phone se nahi maani jaati — neeche request
+    // banti hai aur customer apni app se jawab deta hai.)
+    if (req.body.approved === false) {
+      const now = new Date();
+      await Ride.updateOne({ _id: ride._id }, {
+        $push: { fareAdjustments: { amount: extraAmount, hours: extraHours, type, reason, approved: false, status: 'declined', requestedAt: now, at: now } },
+      });
+      return res.json({ success: true, message: 'Customer ne mana kiya — kiraya wahi rahega', data: adjustPayload(ride) });
     }
 
-    const already  = Number(ride.fareAdjustment) || 0;
-    const approvedCount = (ride.fareAdjustments || []).filter((a) => a.approved).length;
-    // Asal kiraya = abhi ka kiraya − pehle ke extra − pichhla baaki.
-    const original = Math.max(0, (Number(ride.fare) || 0) - already - (Number(ride.dues?.amount) || 0));
-
-    if (approvedCount >= 3) {
-      return res.status(400).json({ success: false, message: 'Ek kaam mein kiraya 3 baar se zyada nahi badla ja sakta' });
+    if (conf.timeBased && await isBilledByTime(ride)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Is kaam ka bill asli chale hue ghanton se banta hai — zyada samay apne aap jud jaayega. Koi aur wajah ho to wo chunein.',
+      });
     }
-    if (already + extraAmount > original * 2) {
+
+    ride = await clearExpiredAdjust(ride);
+    if (hasPendingAdjust(ride)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Pichhli request par customer ka jawab abhi baaki hai',
+        data: adjustPayload(ride),
+      });
+    }
+
+    const history = ride.fareAdjustments || [];
+    if (history.filter((a) => a.approved).length >= FARE_ADJUST_MAX_APPROVED) {
+      return res.status(400).json({ success: false, message: `Ek ride mein ${FARE_ADJUST_MAX_APPROVED} baar se zyada extra nahi jud sakta` });
+    }
+    if (history.length >= FARE_ADJUST_MAX_REQUESTS) {
+      return res.status(400).json({ success: false, message: 'Is ride par aur extra charge nahi maang sakte. Zaroorat ho to support se baat karein.' });
+    }
+    const original = originalFareOf(ride);
+    if ((Number(ride.fareAdjustment) || 0) + extraAmount > original * 2) {
       return res.status(400).json({
         success: false,
         message: `Extra raashi asal kiraye (₹${original}) ke dugne se zyada nahi ho sakti. Zyada ka maamla ho to support se baat karein.`,
       });
     }
 
-    // Atomic — filter mein purana fareAdjustment, taaki do request ek saath
-    // aayein to extra do baar na jud jaaye.
+    const now = new Date();
+    const pending = {
+      amount:      extraAmount,
+      hours:       conf.needsHours ? extraHours : 0,
+      type,
+      reason:      reason || conf.label,
+      requestedAt: now,
+      expiresAt:   new Date(now.getTime() + FARE_ADJUST_TTL_MS),
+    };
+
+    // Atomic — do request ek saath aayein to bhi ek hi pending banti hai
     const updated = await Ride.findOneAndUpdate(
-      { _id: ride._id, status: ride.status, fareAdjustment: ride.fareAdjustment || 0 },
       {
-        $inc:  { fare: extraAmount, fareAdjustment: extraAmount },
-        $push: { fareAdjustments: entry },
+        _id: ride._id,
+        status: { $in: FARE_ADJUST_STATUSES },
+        'pendingFareAdjustment.amount': { $exists: false },
       },
+      { $set: { pendingFareAdjustment: pending } },
       { new: true },
     );
     if (!updated) {
       return res.status(409).json({ success: false, message: 'Ride is beech badal gayi — dobara koshish karein' });
     }
 
-    // Customer ko turant batao — uske phone par bhi nayi rakam dikhe.
-    getIO().to(`user_${updated.customer}`).emit('rideStatusUpdate', { rideId: updated._id, status: updated.status });
-    notifyCustomerInApp(updated.customer, {
-      title: '💰 Kiraya Badha',
-      message: `Driver ne ₹${extraAmount} extra joda: ${entry.reason}. Naya kiraya ₹${updated.fare}. Aapne haan nahi kahi thi to turant support ko batayein.`,
-      type: 'warning', data: { rideId: updated._id.toString(), event: 'FARE_ADJUSTED' },
+    // Customer ko — app khuli ho to turant sheet, band ho to push
+    const driverName = provider.user?.name || 'Driver';
+    const io = getIO();
+    io.to(`user_${updated.customer}`).emit('fareAdjustmentRequested', {
+      rideId:     String(updated._id),
+      ...pending,
+      currentFare: updated.fare,
+      newFare:     updated.fare + extraAmount,
+      driverName,
     });
+    io.to(`user_${updated.customer}`).emit('rideStatusUpdate', { rideId: updated._id, status: updated.status });
+
+    const body = `${driverName} ne ₹${extraAmount} extra maange — ${pending.reason}. Naya kiraya ₹${updated.fare + extraAmount}. App kholkar haan ya na kahein.`;
     const customerFcm = await getCustomerFcm(updated.customer);
     if (customerFcm) {
       notify.custom(customerFcm, {
-        title: '💰 Kiraya Badha',
-        body:  `₹${extraAmount} extra — ${entry.reason}. Naya kiraya ₹${updated.fare}.`,
-        data:  { type: 'FARE_ADJUSTED', rideId: String(updated._id) },
+        title: '💰 Extra charge ki request',
+        body,
+        data:  { type: 'FARE_ADJUSTMENT_REQUEST', rideId: String(updated._id) },
+      }).catch(() => {});
+    }
+    notifyCustomerInApp(updated.customer, {
+      title: '💰 Extra charge ki request', message: body, type: 'warning',
+      data: { rideId: updated._id.toString(), event: 'FARE_ADJUSTMENT_REQUEST' },
+    }).catch(() => {});
+
+    return res.json({
+      success: true,
+      pending: true,
+      message: 'Customer ki app mein bheja gaya — unki haan par hi kiraya badhega',
+      data: adjustPayload(updated),
+    });
+  } catch (err) {
+    console.error('adjustFare Error:', err);
+    return res.status(500).json({ success: false, message: 'Extra charge bhejne mein error' });
+  }
+};
+
+// POST /api/ride/:id/fare-adjustment/respond  { accepted }   (customer)
+exports.respondFareAdjustment = async (req, res) => {
+  try {
+    const ride = await Ride.findById(req.params.id);
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
+    if (ride.customer.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Yeh ride aapki nahi hai' });
+    }
+
+    const pending = ride.pendingFareAdjustment;
+    if (!hasPendingAdjust(ride)) {
+      return res.status(400).json({ success: false, message: 'Koi extra charge request nahi hai', data: adjustPayload(ride) });
+    }
+    if (!FARE_ADJUST_STATUSES.includes(ride.status) || isAdjustExpired(pending)) {
+      const cleared = await clearExpiredAdjust(ride);
+      return res.status(410).json({
+        success: false,
+        message: 'Is request ka samay khatam ho gaya. Driver dobara bhej sakta hai.',
+        data: adjustPayload(cleared || ride),
+      });
+    }
+
+    let accepted = req.body.accepted === true;
+    // Beech mein doosra extra jud gaya ho to had dobara jaancho
+    const overCap = accepted
+      && (Number(ride.fareAdjustment) || 0) + pending.amount > originalFareOf(ride) * 2;
+    if (overCap) accepted = false;
+
+    const updated = await Ride.findOneAndUpdate(
+      {
+        _id: ride._id,
+        status: { $in: FARE_ADJUST_STATUSES },
+        'pendingFareAdjustment.requestedAt': pending.requestedAt,
+      },
+      {
+        ...(accepted ? { $inc: { fare: pending.amount, fareAdjustment: pending.amount } } : {}),
+        $unset: { pendingFareAdjustment: 1 },
+        $push:  { fareAdjustments: adjustHistoryEntry(pending, accepted ? 'approved' : 'declined') },
+      },
+      { new: true },
+    );
+    if (!updated) {
+      return res.status(409).json({ success: false, message: 'Request is beech badal gayi — dobara dekhein' });
+    }
+
+    // Driver ko turant — uski screen intezaar kar rahi hai
+    const io = getIO();
+    io.to(`driver_${updated.provider}`).emit('fareAdjustmentResponded', {
+      rideId:   String(updated._id),
+      accepted,
+      amount:   pending.amount,
+      fare:     updated.fare,
+    });
+    io.to(`user_${updated.customer}`).emit('rideStatusUpdate', { rideId: updated._id, status: updated.status });
+
+    const driverFcm = await getProviderFcm(updated.provider);
+    if (driverFcm) {
+      notify.custom(driverFcm, {
+        title: accepted ? '✅ Customer ne haan kahi' : '❌ Customer ne mana kiya',
+        body:  accepted
+          ? `₹${pending.amount} extra jud gaya. Naya kiraya ₹${updated.fare}.`
+          : `₹${pending.amount} extra nahi juda. Kiraya ₹${updated.fare} hi rahega.`,
+        data:  { type: 'FARE_ADJUSTMENT_RESPONSE', rideId: String(updated._id), accepted: String(accepted) },
       }).catch(() => {});
     }
 
     return res.json({
       success: true,
-      message: `Naya kiraya ₹${updated.fare}`,
-      data: { fare: updated.fare, fareAdjustment: updated.fareAdjustment },
+      message: overCap
+        ? 'Extra ki had poori ho chuki hai, isliye ye nahi juda'
+        : accepted
+          ? `₹${pending.amount} jud gaye. Naya kiraya ₹${updated.fare}`
+          : 'Aapne mana kar diya — kiraya wahi rahega',
+      data: { accepted, ...adjustPayload(updated) },
     });
   } catch (err) {
-    console.error('adjustFare Error:', err);
-    return res.status(500).json({ success: false, message: 'Kiraya badalne mein error' });
+    console.error('respondFareAdjustment Error:', err);
+    return res.status(500).json({ success: false, message: 'Jawab bhejne mein error' });
   }
 };
+
+// POST /api/ride/:id/fare-adjustment/withdraw   (driver)
+// Galat rakam daal di, ya customer se baat ho gayi — request wapas.
+exports.withdrawFareAdjustment = async (req, res) => {
+  try {
+    const provider = await Provider.findOne({ user: req.user.id }).select('_id');
+    if (!provider) return res.status(403).json({ success: false, message: 'Unauthorized driver' });
+
+    const ride = await Ride.findById(req.params.id);
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride not found' });
+    if (!ride.provider || ride.provider.toString() !== provider._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized driver for this ride' });
+    }
+    if (!hasPendingAdjust(ride)) {
+      return res.json({ success: true, message: 'Koi request baaki nahi thi', data: adjustPayload(ride) });
+    }
+
+    const pending = ride.pendingFareAdjustment;
+    const updated = await Ride.findOneAndUpdate(
+      { _id: ride._id, 'pendingFareAdjustment.requestedAt': pending.requestedAt },
+      { $unset: { pendingFareAdjustment: 1 }, $push: { fareAdjustments: adjustHistoryEntry(pending, 'withdrawn') } },
+      { new: true },
+    );
+    if (!updated) {
+      // Isi beech customer ne jawab de diya
+      const now = await Ride.findById(ride._id);
+      return res.status(409).json({ success: false, message: 'Customer ne isi beech jawab de diya', data: adjustPayload(now) });
+    }
+
+    getIO().to(`user_${updated.customer}`).emit('rideStatusUpdate', { rideId: updated._id, status: updated.status });
+    return res.json({ success: true, message: 'Request wapas le li', data: adjustPayload(updated) });
+  } catch (err) {
+    console.error('withdrawFareAdjustment Error:', err);
+    return res.status(500).json({ success: false, message: 'Request wapas lene mein error' });
+  }
+};
+
+// GET /api/ride/:id/fare-adjustment   (driver ya customer)
+// Driver ki "extra charge" screen ke liye sab kuch ek saath: abhi ka kiraya,
+// koi request baaki hai, kaunsi wajah is ride par chalegi, aur kitna tak
+// maang sakta hai — taaki galat request bhejne se pehle hi pata ho.
+exports.getFareAdjustment = async (req, res) => {
+  try {
+    let ride = await Ride.findById(req.params.id);
+    if (!ride) return res.status(404).json({ success: false, message: 'Ride nahi mili' });
+
+    const isCustomer = ride.customer?.toString() === req.user.id;
+    let isDriver = false;
+    if (!isCustomer && ride.provider) {
+      const provider = await Provider.findById(ride.provider).select('user');
+      isDriver = provider?.user?.toString() === req.user.id;
+    }
+    if (!isCustomer && !isDriver) return res.status(403).json({ success: false, message: 'Yeh ride aapki nahi hai' });
+
+    ride = await clearExpiredAdjust(ride);
+
+    const history       = ride.fareAdjustments || [];
+    const approvedCount = history.filter((a) => a.approved).length;
+    const timeBilled    = await isBilledByTime(ride);
+    const maxExtra      = Math.max(0, originalFareOf(ride) * 2 - (Number(ride.fareAdjustment) || 0));
+    const open          = FARE_ADJUST_STATUSES.includes(ride.status)
+      && approvedCount < FARE_ADJUST_MAX_APPROVED
+      && history.length < FARE_ADJUST_MAX_REQUESTS
+      && maxExtra > 0;
+
+    return res.json({
+      success: true,
+      data: {
+        ...adjustPayload(ride),
+        status:   ride.status,
+        canRequest: open && !hasPendingAdjust(ride),
+        maxExtra,
+        approvedLeft: Math.max(0, FARE_ADJUST_MAX_APPROVED - approvedCount),
+        types: Object.entries(FARE_ADJUST_TYPES).map(([id, c]) => ({
+          id,
+          needsHours:  !!c.needsHours,
+          needsReason: !!c.needsReason,
+          allowed:     !(c.timeBased && timeBilled),
+        })),
+        history: history.slice(-10).map((a) => ({
+          amount: a.amount, type: a.type || 'other', reason: a.reason, status: a.status || (a.approved ? 'approved' : 'declined'), at: a.at,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error('getFareAdjustment Error:', err);
+    return res.status(500).json({ success: false, message: 'Jaankari nahi mil paayi' });
+  }
+};
+
+exports.hasPendingAdjust   = hasPendingAdjust;
+exports.adjustHistoryEntry = adjustHistoryEntry;
 
 // ─── Ride ke dauraan drop badalna ────────────────────────────────────────────
 // Gaon mein ye aam hai: "bhaiya mandi nahi, ghar chalo". Pehle app ko iski
@@ -2234,7 +2604,7 @@ exports.getRideHistoryCustomer = async (req, res) => {
 
     const [rides, count] = await Promise.all([
       Ride.find(query)
-        .populate({ path: 'provider', populate: { path: 'user', select: 'name phone' } })
+        .populate({ path: 'provider', select: PUBLIC_PROVIDER_FIELDS, populate: { path: 'user', select: 'name phone' } })
         // Pakki pre-booking mein customer ko gaadi ka number bhi dikhna chahiye
         .populate('vehicle', 'number model color type')
         .sort({ createdAt: -1 })
@@ -2314,7 +2684,9 @@ exports.getRideInvoice = async (req, res) => {
 // ─── SEARCHING RIDES ──────────────────────────────────────────────────────────
 exports.getSearchingRides = async (req, res) => {
   try {
-    if (req.user.role !== 'provider') {
+    // Token ka role (kaunsi app) — User.role nahi: pehle customer raha banda
+    // driver banne par bhi User.role 'customer' hi rehta hai.
+    if (req.activeRole !== 'provider') {
       return res.status(403).json({ success: false, message: 'Only drivers allowed' });
     }
 
@@ -2441,8 +2813,12 @@ exports.verifyRazorpayPayment = async (req, res) => {
       .digest('hex');
 
     if (generatedSignature !== razorpaySignature) {
-      ride.paymentStatus = 'failed';
-      await ride.save();
+      // Bhari ja chuki ride ko galat/purani request 'failed' na kar de — warna
+      // wo customer ke "baaki" mein jud kar dobara wasool hoti.
+      if (ride.paymentStatus !== 'paid') {
+        ride.paymentStatus = 'failed';
+        await ride.save();
+      }
       return res.status(400).json({ success: false, message: 'Payment verification failed' });
     }
 

@@ -190,18 +190,43 @@ const RideSchema = new mongoose.Schema(
     // se jaante hain ki drop dikhana nahi hai.
     workAtPickup: { type: Boolean, default: false },
 
-    // Kaam tay se zyada nikla — driver ne mauke par extra raashi jodi aur
-    // customer ne haan kahi. `fareAdjustment` un sab ka jod hai aur `fare` mein
-    // shaamil hai; list isliye ki baad mein pata chale kab, kitna aur kyun.
+    // Extra charge (Rapido jaisa) — driver maangta hai, customer APNI app se
+    // haan/na kehta hai. `fareAdjustment` manzoor hue sab extra ka jod hai aur
+    // `fare` mein shaamil hai; list isliye ki baad mein pata chale kab, kitna,
+    // kyun aur kya hua. Pura niyam: controllers/rideController.js (adjustFare).
     fareAdjustment: { type: Number, default: 0 },
     fareAdjustments: [{
       _id: false,
       amount:   Number,
       hours:    Number,
+      // config/fareAdjustmentTypes.js. `{ type: String }` likhna zaroori —
+      // seedha `type: String` Mongoose ko lagta hai poora object hi String hai.
+      type:     { type: String },
       reason:   String,
-      approved: Boolean,
+      approved: Boolean,  // purane records + reporting ke liye
+      // approved | declined | expired | withdrawn
+      status:   String,
+      requestedAt: Date,
       at:       { type: Date, default: Date.now },
     }],
+    // Ride ke baad customer ki tip — ek ride par ek hi. Pehle yahi pakka
+    // likha jaata hai (atomic), phir wallet se paisa — double-tap par do
+    // baar na kate.
+    tip: {
+      amount: Number,
+      at:     Date,
+    },
+
+    // Customer ke jawab ka intezaar karti request — ek waqt mein ek hi.
+    // expiresAt ke baad maanya nahi (driver dobara maang sakta hai).
+    pendingFareAdjustment: {
+      amount:      Number,
+      hours:       Number,
+      type:        { type: String },
+      reason:      String,
+      requestedAt: Date,
+      expiresAt:   Date,
+    },
 
     // Kaam se pehle aur baad ki photo (tractor / JCB / saamaan) — jhagde ke
     // waqt yahi saboot hota hai.

@@ -65,4 +65,42 @@ const creditPlatformCollection = async (rideId) => {
   });
 };
 
-module.exports = { adjustProviderWallet, creditPlatformCollection };
+/**
+ * Customer ka wallet top-up pakka karo — signature (app ka verify) ya Razorpay
+ * webhook se paisa aane ki pushti ho chuki ho, tabhi bulao.
+ *
+ * Pending → completed ka badlav atomic hai, aur paisa usi ke baad judta hai.
+ * Pehle status padh kar alag se jodte the: app ka verify aur doosra tap (ya
+ * webhook) ek saath aaye to dono "pending" dekh kar do baar paisa jod dete.
+ *
+ * Lautata hai { credited, txn, balance } — credited false matlab pehle hi ho chuka.
+ */
+const completeTopup = async ({ orderId, paymentId, userId }) => {
+  const User = require('../models/User');
+  const txn = await Transaction.findOneAndUpdate(
+    {
+      transactionId: orderId,
+      category:      'topup',
+      status:        { $in: ['pending', 'failed'] },
+      ...(userId ? { user: userId } : {}),
+    },
+    { $set: { status: 'completed', processedAt: new Date() }, $unset: { failureReason: 1 } },
+    { new: true },
+  );
+  if (!txn) return { credited: false, txn: null, balance: null };
+
+  const updated = await User.findByIdAndUpdate(
+    txn.user,
+    { $inc: { wallet: txn.amount } },
+    { new: true },
+  ).select('wallet');
+
+  await Transaction.updateOne(
+    { _id: txn._id },
+    { $set: { balanceAfter: updated?.wallet, ...(paymentId ? { description: `Wallet top-up (${paymentId})` } : {}) } },
+  );
+
+  return { credited: true, txn, balance: updated?.wallet ?? null };
+};
+
+module.exports = { adjustProviderWallet, creditPlatformCollection, completeTopup };

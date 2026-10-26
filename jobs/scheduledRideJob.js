@@ -11,6 +11,7 @@ const { notify } = require('../utils/notifications');
 const {
   dispatchDueRides, dispatchRideStage, markNextDispatch, activationLeadMs, scheduleLabel,
 } = require('../controllers/rideController');
+const { releasePromo } = require('../controllers/promoController');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pre-booking (Rapido jaisa):
@@ -160,21 +161,40 @@ const startScheduledRideJob = () => {
 
       const io = getIO();
       for (const ride of stale) {
-        ride.status             = 'cancelled';
-        ride.cancelledBy        = 'admin';
-        ride.cancellationReason = 'Koi driver available nahi mila (auto-cancel)';
-        ride.cancelledAt        = new Date();
-        await ride.save();
+        // Atomic — isi beech koi driver accept kar le to ride cancel na ho
+        const cancelled = await Ride.findOneAndUpdate(
+          { _id: ride._id, status: 'searching', provider: null },
+          {
+            $set: {
+              status:             'cancelled',
+              cancelledBy:        'admin',
+              cancellationReason: 'Koi driver available nahi mila (auto-cancel)',
+              cancelledAt:        new Date(),
+              nextDispatchAt:     null,
+            },
+          },
+          { new: true },
+        );
+        if (!cancelled) continue;
 
-        io.to(`user_${ride.customer}`).emit('rideCancelled', { rideId: ride._id, reason: 'Koi driver nahi mila. Dobara try karein.' });
-        console.log(`🚫 Auto-cancelled stale ride: ${ride._id}`);
+        // Ride hui hi nahi — promo wapas. Pehle "pehli ride par chhoot" wala
+        // code driver na milne par hi kharch ho jaata tha.
+        if (cancelled.promoCode) await releasePromo(cancelled.promoCode, cancelled.customer);
+
+        (cancelled.notifiedDrivers || []).forEach((driverId) => {
+          io.to(`driver_${driverId}`).emit('rideNoLongerAvailable', { rideId: String(cancelled._id) });
+        });
+        io.to(`user_${cancelled.customer}`).emit('rideCancelled', { rideId: cancelled._id, reason: 'Koi driver nahi mila. Dobara try karein.' });
+        console.log(`🚫 Auto-cancelled stale ride: ${cancelled._id}`);
       }
     } catch (err) {
       console.error('Auto-cancel cron error:', err.message);
     }
   });
 
-  // Roz midnight pe todayEarnings reset karo
+  // Roz IST aadhi raat pe todayEarnings reset karo. timezone ke bina server
+  // (UTC) ki aadhi raat lagti thi — yaani subah 5:30 IST, aur raat ki kamai
+  // agle din mein gin jaati.
   cron.schedule('0 0 * * *', async () => {
     try {
       await Provider.updateMany({}, { 'stats.todayEarnings': 0 });
@@ -182,7 +202,7 @@ const startScheduledRideJob = () => {
     } catch (err) {
       console.error('Earnings reset cron error:', err.message);
     }
-  });
+  }, { timezone: 'Asia/Kolkata' });
 };
 
 module.exports = { startScheduledRideJob };

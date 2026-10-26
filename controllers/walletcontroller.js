@@ -4,6 +4,14 @@ const Provider = require('../models/Provider');
 const Transaction = require('../models/Transaction');
 const Ride = require('../models/Ride');
 const User = require('../models/User');
+const { completeTopup } = require('../utils/walletOps');
+const { rideEarning, EARNING_FIELDS } = require('../utils/earning');
+const { istDayRange } = require('../utils/incentive');
+
+// Kaunsi app se aaya — token ka role, User.role nahi. Pehle customer raha
+// banda driver banne par bhi User.role 'customer' rehta hai (aur ulta), to
+// User.role dekhne par driver app mein customer ka wallet dikhta tha.
+const isDriverApp = (req) => req.activeRole === 'provider';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -24,7 +32,7 @@ const MAX_TOPUP = 10000;
  */
 exports.getWalletBalance = async (req, res) => {
   try {
-    if (req.user.role !== 'provider') {
+    if (!isDriverApp(req)) {
       const user = await User.findById(req.user.id).select('wallet');
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
@@ -44,34 +52,24 @@ exports.getWalletBalance = async (req, res) => {
       });
     }
 
-    // Calculate today's and week's earnings
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-
-    const todayRides = await Ride.find({
-      provider: provider._id,
-      status: 'completed',
-      completedAt: { $gte: today }
-    });
+    // Aaj (IST) aur pichhle 7 din ki kamai — driver ki asli kamai
+    // (driverEarning), poora kiraya nahi.
+    const todayStart = istDayRange().start;
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const weekRides = await Ride.find({
       provider: provider._id,
       status: 'completed',
       completedAt: { $gte: weekAgo }
-    });
+    }).select(EARNING_FIELDS).lean();
 
-    const todayEarnings = todayRides.reduce((sum, ride) => {
-      const commission = ride.fare * 0; // abhi 0% commission
-      return sum + (ride.fare - commission);
-    }, 0);
+    const todayEarnings = weekRides
+      .filter((ride) => ride.completedAt >= todayStart)
+      .reduce((sum, ride) => sum + rideEarning(ride), 0);
 
-    const weekEarnings = weekRides.reduce((sum, ride) => {
-      const commission = ride.fare * 0; // abhi 0% commission
-      return sum + (ride.fare - commission);
-    }, 0);
+    const weekEarnings = weekRides
+      .filter((ride) => ride.completedAt >= weekAgo)
+      .reduce((sum, ride) => sum + rideEarning(ride), 0);
 
     return res.status(200).json({
       success: true,
@@ -105,7 +103,7 @@ exports.getTransactionHistory = async (req, res) => {
     // Customers ke paas ab apni ledger hai (top-up, cancellation fee, tip),
     // isliye khaali list lautana galat hoga — unki transactions user field se
     // aati hain, provider field se nahi.
-    if (req.user.role !== 'provider') {
+    if (!isDriverApp(req)) {
       const custQuery = { user: req.user.id };
       if (type && ['credit', 'debit'].includes(type)) custQuery.type = type;
 
@@ -240,10 +238,14 @@ exports.requestWithdrawal = async (req, res) => {
     }
 
     // Create transaction
+    // category zaroori — iske bina 'adjustment' lagta tha aur admin ki
+    // withdrawal list customer ke baaki cancel charges se alag nahi ho paati thi.
     const transaction = await Transaction.create({
       provider: provider._id,
       type: 'debit',
+      category: 'withdrawal',
       amount,
+      balanceAfter: updatedProvider.wallet.balance,
       description: 'Withdrawal to bank account',
       status: 'pending',
       bankDetails: {
@@ -308,11 +310,13 @@ exports.getEarningsReport = async (req, res) => {
       provider: provider._id,
       status: 'completed',
       completedAt: { $gte: startDate }
-    });
+    }).select(`${EARNING_FIELDS} platformFee`).lean();
 
-    const totalEarnings = rides.reduce((sum, ride) => sum + ride.fare, 0);
-    const totalCommission = totalEarnings * 0; // abhi 0% commission
-    const netEarnings = totalEarnings - totalCommission;
+    // Commission ride par jam chuka hisaab hai (utils/settlement.js) — pehle
+    // yahan `* 0` likha tha, admin commission lagaye tab bhi report 0 dikhati.
+    const netEarnings = rides.reduce((sum, ride) => sum + rideEarning(ride), 0);
+    const totalCommission = rides.reduce((sum, ride) => sum + (Number(ride.platformFee) || 0), 0);
+    const totalEarnings = netEarnings + totalCommission;
 
     const avgFare = rides.length > 0 ? totalEarnings / rides.length : 0;
 
@@ -324,7 +328,7 @@ exports.getEarningsReport = async (req, res) => {
         earningsByDay[day] = { rides: 0, earnings: 0 };
       }
       earningsByDay[day].rides += 1;
-      earningsByDay[day].earnings += ride.fare;
+      earningsByDay[day].earnings += rideEarning(ride);
     });
 
     return res.status(200).json({
@@ -434,27 +438,32 @@ exports.verifyTopup = async (req, res) => {
       .digest('hex');
 
     if (expectedSignature !== razorpaySignature) {
-      txn.status        = 'failed';
-      txn.failureReason = 'Signature mismatch';
-      await txn.save();
+      // Sirf pending ko failed — beech mein webhook ne pakka kar diya ho to
+      // use bigaadna nahi.
+      await Transaction.updateOne(
+        { _id: txn._id, status: 'pending' },
+        { $set: { status: 'failed', failureReason: 'Signature mismatch' } },
+      );
       return res.status(400).json({ success: false, message: 'Payment verify nahi ho paya' });
     }
 
-    const updated = await User.findByIdAndUpdate(
-      req.user.id,
-      { $inc: { wallet: txn.amount } },
-      { new: true },
-    ).select('wallet');
+    // Atomic pending → completed, phir hi paisa — do request ek saath aayein
+    // (ya webhook bhi saath aaye) to bhi ek hi baar judta hai.
+    const { credited, balance } = await completeTopup({
+      orderId:   razorpayOrderId,
+      paymentId: razorpayPaymentId,
+      userId:    req.user.id,
+    });
 
-    txn.status       = 'completed';
-    txn.processedAt  = new Date();
-    txn.balanceAfter = updated?.wallet;
-    await txn.save();
+    if (!credited) {
+      const user = await User.findById(req.user.id).select('wallet');
+      return res.json({ success: true, message: 'Top-up pehle hi ho chuka hai', balance: user?.wallet || 0 });
+    }
 
     return res.json({
       success: true,
       message: `₹${txn.amount} wallet mein add ho gaye`,
-      balance: updated?.wallet || 0,
+      balance: balance || 0,
     });
   } catch (err) {
     console.error('verifyTopup Error:', err.message);
@@ -492,26 +501,36 @@ exports.tipDriver = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Is ride pe koi driver nahi tha' });
     }
 
-    // Ek ride pe ek hi tip — warna galti se dobara tap karne pe do baar kat jaata.
-    const already = await Transaction.findOne({ ride: ride._id, category: 'tip', user: req.user.id });
-    if (already) {
+    // Ek ride pe ek hi tip. Pehle "dekho phir likho" tha — double-tap par dono
+    // request "abhi tip nahi di" dekh kar do baar paisa kaat leti thin. Ab ride
+    // par atomic nishaan: jo pehle lagaye wahi aage badhe.
+    const claimed = await Ride.findOneAndUpdate(
+      { _id: ride._id, 'tip.amount': { $exists: false } },
+      { $set: { tip: { amount, at: new Date() } } },
+      { new: true },
+    );
+    const oldTip = claimed ? null : await Transaction.findOne({ ride: ride._id, category: 'tip', user: req.user.id });
+    if (!claimed || oldTip) {
       return res.status(400).json({ success: false, message: 'Is ride pe tip pehle hi de chuke hain' });
     }
 
-    const user = await User.findById(req.user.id).select('wallet');
-    if ((user?.wallet || 0) < amount) {
+    // Balance check aur katna ek hi atomic update mein — alag-alag karne par
+    // do tip ek saath aayein to dono check paar karke wallet minus kar dete.
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: req.user.id, wallet: { $gte: amount } },
+      { $inc: { wallet: -amount } },
+      { new: true },
+    ).select('wallet');
+
+    if (!updatedUser) {
+      // Paisa nahi kata — nishaan hatao, taaki top-up ke baad de sake
+      await Ride.updateOne({ _id: ride._id }, { $unset: { tip: 1 } });
       return res.status(400).json({
         success: false,
         message: 'Wallet mein itna balance nahi hai. Pehle top-up karein.',
         code:    'INSUFFICIENT_BALANCE',
       });
     }
-
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user.id,
-      { $inc: { wallet: -amount } },
-      { new: true },
-    ).select('wallet');
 
     const updatedProvider = await Provider.findByIdAndUpdate(
       ride.provider,

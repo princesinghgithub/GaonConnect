@@ -1,6 +1,13 @@
 const fs   = require('fs');
 const path = require('path');
 const { sendEmail } = require('./mailer');
+const FARE_ADJUST_TYPES = require('../config/fareAdjustmentTypes');
+
+// Driver ki likhi wajah receipt (HTML) mein jaati hai — seedha daalne par
+// koi <script> ya tag likh kar receipt bigaad sakta tha.
+const escapeHtml = (s) => String(s ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 // Embedded once at boot so the receipt renders identically everywhere (in-app
 // WebView, downloaded PDF, email) without depending on an external image URL.
@@ -20,13 +27,16 @@ const generateInvoiceHTML = (data) => {
     promoDiscount = 0,
     waitingCharge = 0,
     waitMinutes = 0,
+    extras = [],
   } = data;
 
   const finalFare = fare - (promoDiscount || 0);
-  // ride.fare mein waiting charge pehle se juda hua aata hai, isliye base
-  // nikalne ke liye ghata rahe hain — warna receipt poore total ko "Base Fare"
-  // likhti aur customer ko samajh hi nahi aata ki extra paisa kis cheez ka hai.
-  const baseFare = fare - (waitingCharge || 0);
+  // ride.fare mein waiting charge aur customer ke manzoor kiye extra (toll,
+  // parking…) pehle se jude hue aate hain, isliye base nikalne ke liye ghata
+  // rahe hain — warna receipt poore total ko "Base Fare" likhti aur customer
+  // ko samajh hi nahi aata ki extra paisa kis cheez ka hai.
+  const extrasTotal = extras.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const baseFare = fare - (waitingCharge || 0) - extrasTotal;
 
   return `
 <!DOCTYPE html>
@@ -127,6 +137,7 @@ const generateInvoiceHTML = (data) => {
     <div class="fare-box">
       <div class="row"><span class="label">Base Fare</span><span class="value">₹${baseFare}</span></div>
       ${waitingCharge > 0 ? `<div class="row"><span class="label">Waiting Charge (${waitMinutes} min)</span><span class="value">₹${waitingCharge}</span></div>` : ''}
+      ${extras.map((x) => `<div class="row"><span class="label">${escapeHtml(x.label)} <span style="color:#888;font-size:11px">(aapki manzoori se)</span></span><span class="value">₹${x.amount}</span></div>`).join('')}
       ${promoDiscount > 0 ? `<div class="row promo-line"><span class="label">🎉 Promo Discount</span><span class="value">- ₹${promoDiscount}</span></div>` : ''}
       <hr style="border:none;border-top:1px dashed #cfe8d6;margin:12px 0"/>
       <div class="row"><span class="label" style="font-size:15px;font-weight:700;color:#1f1f1f">Total Paid</span><span class="fare-total">₹${finalFare}</span></div>
@@ -202,6 +213,15 @@ const buildInvoiceHTML = async (ride) => {
       fare:          ride.fare             || 0,
       waitingCharge: ride.waitingCharge    || 0,
       waitMinutes:   ride.waitMinutes      || 0,
+      // Customer ke "Haan" se jude extra — har ek alag line
+      extras: (ride.fareAdjustments || [])
+        .filter((a) => a.approved && Number(a.amount) > 0)
+        .map((a) => ({
+          amount: Number(a.amount),
+          label:  a.type && a.type !== 'other'
+            ? (FARE_ADJUST_TYPES[a.type]?.label || 'Extra charge')
+            : (a.reason || 'Extra charge'),
+        })),
       commission,
       driverEarning,
       paymentMethod: ride.paymentMethod    || 'cash',
