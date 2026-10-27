@@ -18,6 +18,7 @@ router.use(protect);
 
 // Search har keystroke pe chalti hai (500ms debounce), toh limit thodi udaar
 // honi chahiye — par itni nahi ki ek client akela poora Nominatim budget kha jaye.
+const { userOrIpKey } = require('../middleware/rateLimiter');
 const isDev = process.env.NODE_ENV !== 'production';
 
 const searchLimiter = rateLimit({
@@ -25,7 +26,7 @@ const searchLimiter = rateLimit({
   max:             isDev ? 300 : 40,
   standardHeaders: true,
   legacyHeaders:   false,
-  keyGenerator:    (req) => `user:${req.user?.id || req.ip}`,
+  keyGenerator:    userOrIpKey,
   handler: (_req, res) =>
     res.status(429).json({
       success: false,
