@@ -1,3 +1,10 @@
+// Server ki ghadi India ki — kahin bhi chale (Render/Docker default UTC hai).
+// Raat ka charge (22–6 baje), surge aur dashboard ka "aaj" getHours()/
+// setHours(0) se bante hain; UTC par ye 5½ ghante khisak jaate — raat 10 se
+// 3:30 tak bina night charge, aur subah 5:30 tak "kal" ki ginti. Sabse
+// pehle set karna zaroori hai, kisi bhi Date ke banne se pehle.
+process.env.TZ = 'Asia/Kolkata';
+
 const dns        = require('dns');
 const express    = require('express');
 const dotenv     = require('dotenv');

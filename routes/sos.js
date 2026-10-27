@@ -1,12 +1,12 @@
 const express = require('express');
 const router  = express.Router();
 const { protect, admin } = require('../middleware/auth');
-const { strictLimiter }  = require('../middleware/rateLimiter');
+const { sosLimiter }  = require('../middleware/rateLimiter');
 const { triggerSOS, resolveSOSAlert, getActiveAlerts, getAlertHistory } = require('../controllers/sosController');
 
 // SOS trigger — logged-in user (customer ya driver)
-// strictLimiter — 5/hour (prevent spam)
-router.post('/trigger', protect, strictLimiter, triggerSOS);
+// sosLimiter — har user ke 20 / 10 min (spam rokne ke liye, asli SOS nahi)
+router.post('/trigger', protect, sosLimiter, triggerSOS);
 
 // Admin routes
 router.put('/:alertId/resolve', protect, admin, resolveSOSAlert);
