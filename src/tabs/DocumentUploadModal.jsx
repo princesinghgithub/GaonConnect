@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { providerAPI } from '../services/api';
 
 const DocumentUploadModal = ({ isOpen, onClose, onUploadSuccess }) => {
   const [selectedDoc, setSelectedDoc] = useState('');
@@ -64,16 +65,9 @@ const DocumentUploadModal = ({ isOpen, onClose, onUploadSuccess }) => {
       formData.append('documentType', selectedDoc);
       formData.append('document', file);
 
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/provider/documents/upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      const data = await response.json();
+      // Seedha localhost par fetch hota tha — live website par upload kabhi
+      // pahunchta hi nahi tha. api.js sahi server + token refresh sambhalta hai.
+      const { data } = await providerAPI.uploadDocument(formData);
 
       if (data.success) {
         alert('Document uploaded successfully! Waiting for admin verification.');
@@ -84,7 +78,7 @@ const DocumentUploadModal = ({ isOpen, onClose, onUploadSuccess }) => {
       }
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload document');
+      alert(error.response?.data?.message || 'Failed to upload document');
     } finally {
       setUploading(false);
     }
