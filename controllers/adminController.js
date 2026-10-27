@@ -5868,22 +5868,26 @@ const deleteComplaint = async (req, res) => {
   }
 };
 
+const SosAlert = require('../models/SosAlert');
+
 const getAlerts = async (req, res) => {
   try {
     const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
 
-    const [newDriversToday, newUsersToday, kycPending, withdrawalsPending, openComplaints] = await Promise.all([
+    const [newDriversToday, newUsersToday, kycPending, withdrawalsPending, openComplaints, sosActive] = await Promise.all([
       Driver.countDocuments({ createdAt: { $gte: todayStart } }),
       User.countDocuments({ createdAt: { $gte: todayStart }, role: 'customer' }),
       Driver.countDocuments({ isApproved: false, isRejected: false, isBlocked: false }),
       Transaction.countDocuments(WITHDRAWAL_FILTER),
       Complaint.countDocuments({ status: { $in: ['open', 'investigating'] } }),
+      SosAlert.countDocuments({ status: 'active' }),
     ]);
 
     res.json({
       success: true,
       data: {
-        total: newDriversToday + newUsersToday + kycPending + withdrawalsPending + openComplaints,
+        total: newDriversToday + newUsersToday + kycPending + withdrawalsPending + openComplaints + sosActive,
+        sosActive,
         newDriversToday,
         newUsersToday,
         kycPending,
